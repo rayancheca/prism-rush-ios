@@ -15,15 +15,23 @@ final class SolvabilityBotTests: XCTestCase {
     }
 
     func testGreedyBotSurvives200Seeds() async {
-        let targetDistance = 6_000.0
-        let seedCount = 200
-        let maxTicks = 200_000   // safety bound (~1700 s sim) — real runs finish far sooner
+        botSoak(seedCount: 200, targetDistance: 6_000, seedSalt: 0x1234_5678)
+    }
+
+    /// Deeper soak: fewer seeds, but to 12,000 m — split bars, chrono slow-mo pickups and moving
+    /// walls all run at full density (difficulty caps at 3,200 m) across several world loops.
+    func testGreedyBotSurvivesDeepRuns() async {
+        botSoak(seedCount: 10, targetDistance: 12_000, seedSalt: 0xDEE9_5EED)
+    }
+
+    private func botSoak(seedCount: Int, targetDistance: Double, seedSalt: UInt64) {
+        let maxTicks = 400_000   // safety bound (~3300 s sim) — real runs finish far sooner
 
         var failures: [Failure] = []
 
         for s in 0..<seedCount {
             // Spread the seeds widely so they exercise distinct pattern streams.
-            let seed = UInt64(s) &* 0x9E37_79B9_7F4A_7C15 &+ 0x1234_5678
+            let seed = UInt64(s) &* 0x9E37_79B9_7F4A_7C15 &+ seedSalt
             let core = GameCore(seed: 1)
             core.startRun(seed: seed)
 
@@ -66,7 +74,13 @@ final class SolvabilityBotTests: XCTestCase {
             .sorted { $0.0 < $1.0 }
         if near.isEmpty { return "    (no obstacles within ±12 — likely a moving-wall timing miss)" }
         return near.map { (arrival, e) in
-            let laneStr = e.kind == .bar ? "ALL" : (e.kind == .movingTall ? "mv(ph=\(String(format: "%.2f", e.phase)))" : "\(e.lane)")
+            let laneStr: String
+            switch e.kind {
+            case .bar: laneStr = "ALL"
+            case .splitBar: laneStr = "open=\(e.lane)"
+            case .movingTall: laneStr = "mv(ph=\(String(format: "%.2f", e.phase)))"
+            default: laneStr = "\(e.lane)"
+            }
             return String(format: "    %@ lane=%@ arrival=%+.2f", "\(e.kind)", laneStr, arrival)
         }.joined(separator: "\n")
     }

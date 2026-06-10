@@ -50,6 +50,8 @@ final class GameCore {
     @ObservationIgnored private(set) var shield: Bool = false
     @ObservationIgnored private(set) var invulnT: Double = 0   // post-shield-absorb grace window
     @ObservationIgnored private(set) var magnetT: Double = 0
+    @ObservationIgnored private(set) var doublerT: Double = 0  // gems pay double currency while > 0
+    @ObservationIgnored private(set) var chronoT: Double = 0   // slow-mo: distance integrates at × chronoFactor
     @ObservationIgnored private(set) var bonus: Int = 0
     @ObservationIgnored private(set) var score: Int = 0
     @ObservationIgnored private(set) var gemCount: Int = 0
@@ -107,6 +109,11 @@ final class GameCore {
     /// Distance actually travelled this run (excludes a checkpoint head-start).
     var traveledDistance: Double { distance - scoreOffset }
 
+    /// World speed the player actually experiences: chrono slow-mo scales the raw ramp `speed`
+    /// without touching it, so the difficulty curve resumes seamlessly when the timer ends.
+    /// Everything distance-domain (obstacle arrival, autopilot leads, renderer scroll) uses this.
+    var effectiveSpeed: Double { chronoT > 0 ? speed * Tuning.chronoFactor : speed }
+
     /// Reset to the fresh menu state. Reseeds if `seed` is given (else a new random stream).
     func reset(seed: UInt64?) {
         rng = SplitMix64(seed: seed ?? .random(in: .min ... .max))
@@ -116,7 +123,7 @@ final class GameCore {
         px = 0; laneIndex = 1; jumpY = 0; vy = 0; grounded = true; slideT = 0; sy = 1
         bankZ = 0; jumpBuf = 0
         world = 0; maxWorld = 0; worldFrom = 0; worldTo = 0; worldBlend = 1
-        shield = false; invulnT = 0; magnetT = 0
+        shield = false; invulnT = 0; magnetT = 0; doublerT = 0; chronoT = 0
         bonus = 0; score = 0; gemCount = 0; streak = 0; bestStreak = 0; mult = 1
         activeObstacles.removeAll(keepingCapacity: true)
         activeGems.removeAll(keepingCapacity: true)
@@ -149,6 +156,11 @@ final class GameCore {
         stepGems(dt)
         stepPickups(dt)
         if magnetT > 0 { magnetT = max(0, magnetT - dt) }
+        if doublerT > 0 { doublerT = max(0, doublerT - dt) }
+        if chronoT > 0 {
+            chronoT = max(0, chronoT - dt)
+            if chronoT == 0 { emit(.chronoEnded) }   // edge, not level — audio keys off it
+        }
         if invulnT > 0 { invulnT = max(0, invulnT - dt) }
         // Score freezes at death: the post-death decel keeps distance climbing, but the run's
         // score must not. `die()` captures the final value; here we only advance it while playing.
@@ -193,11 +205,11 @@ final class GameCore {
         case .menu:
             speed = lerp(speed, Tuning.menuSpeed, dt * Tuning.speedLerp)
         }
-        distance += speed * dt
+        distance += effectiveSpeed * dt   // chrono slows the world; the ramp above is untouched
     }
 
     private func stepWorld(_ dt: Double) {
-        if worldBlend < 1 { worldBlend = min(1, worldBlend + dt * 0.8) }
+        if worldBlend < 1 { worldBlend = min(1, worldBlend + dt * Tuning.worldBlendRate) }
         guard mode == .play else { return }
         let wn = Int((distance / Tuning.worldLength).rounded(.down))
         let wi = ((wn % 3) + 3) % 3
@@ -242,7 +254,7 @@ final class GameCore {
 
     private func obstacleX(_ e: CoreEntity) -> Double {
         switch e.kind {
-        case .bar: return 0
+        case .bar, .splitBar: return 0
         case .movingTall: return sin((distance - e.d) * Tuning.movingWallFreq + e.phase) * Tuning.movingWallAmplitude
         default: return Tuning.laneX[e.lane]
         }
@@ -265,6 +277,7 @@ final class GameCore {
                 let hit: Bool
                 switch e.kind {
                 case .bar: hit = Collisions.barHit(playerTop: pb.top, playerBottom: pb.bottom, z: z)
+                case .splitBar: hit = Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: px, openLane: e.lane, z: z)
                 case .low: hit = Collisions.lowHit(playerBottom: pb.bottom, playerX: px, obstacleX: ox, z: z)
                 case .tall, .movingTall: hit = Collisions.tallHit(playerX: px, obstacleX: ox, z: z)
                 default: hit = false
@@ -294,12 +307,12 @@ final class GameCore {
                         let dx = abs(px - ox)
                         if Collisions.closeNearMiss(dx: dx) {
                             bonus += Tuning.nearMissBonus * mult
-                            emit(.nearMiss(kind: "CLOSE", x: px))
+                            emit(.nearMiss(kind: .close, x: px))
                         }
                     case .bar:
                         if slideT > 0 {
                             bonus += Tuning.nearMissBonus * mult
-                            emit(.nearMiss(kind: "SLICK", x: px))
+                            emit(.nearMiss(kind: .slick, x: px))
                         }
                     default: break
                     }
@@ -315,12 +328,12 @@ final class GameCore {
         while i < activeGems.count {
             var g = activeGems[i]
             let z = distance - g.d
-            if magnetT > 0 && Collisions.magnetActive(z: z) {
+            // Magnet only pulls during live play; `fading` is sticky once set so the renderer
+            // never sees a grabbed gem pop back to full opacity when the pull window releases it.
+            if mode == .play && magnetT > 0 && Collisions.magnetActive(z: z) {
                 g.x = lerp(g.x, px, min(1, dt * Tuning.magnetGemXRate))
                 g.baseY = lerp(g.baseY, pcy, min(1, dt * Tuning.magnetGemYRate))
                 g.fading = true
-            } else {
-                g.fading = false
             }
             if z > Tuning.recycleCollectibleZ {
                 activeGems.swapAt(i, activeGems.count - 1)
@@ -330,7 +343,9 @@ final class GameCore {
             if mode == .play && Collisions.gemPickup(playerCenterY: pcy, playerX: px, gemX: g.x, gemBaseY: g.baseY, z: z) {
                 activeGems.swapAt(i, activeGems.count - 1)
                 activeGems.removeLast()
-                gemCount += 1
+                // Doubler doubles CURRENCY only (gemCount feeds the coin payout); streak/multiplier
+                // remain skill stats and always count single.
+                gemCount += doublerT > 0 ? 2 : 1
                 streak += 1
                 bestStreak = max(bestStreak, streak)
                 mult = clampI(1 + streak / Tuning.streakPerMult, 1, Tuning.multCap)
@@ -358,12 +373,21 @@ final class GameCore {
             if mode == .play && Collisions.pickupHit(playerCenterY: pcy, playerX: px, pickupX: pxw, pickupY: p.baseY, z: z) {
                 activePickups.swapAt(i, activePickups.count - 1)
                 activePickups.removeLast()
-                if p.kind == .shield {
+                switch p.kind {
+                case .shield:
                     shield = true
                     emit(.pickup(kind: .shield, x: pxw, y: p.baseY))
-                } else {
+                case .magnet:
                     magnetT = Tuning.magnetDuration
                     emit(.pickup(kind: .magnet, x: pxw, y: p.baseY))
+                case .doubler:
+                    doublerT = Tuning.doublerDuration
+                    emit(.pickup(kind: .doubler, x: pxw, y: p.baseY))
+                case .chrono:
+                    chronoT = Tuning.chronoDuration
+                    emit(.pickup(kind: .chrono, x: pxw, y: p.baseY))
+                default:
+                    break
                 }
                 continue
             }
@@ -407,6 +431,7 @@ final class GameCore {
         laneIndex = 1; px = Tuning.laneX[1]
         jumpY = 0; vy = 0; grounded = true; slideT = 0; sy = 1
         shield = true
+        speed = max(speed, Tuning.speedStart)   // paid continues resume instantly, not from the decel floor
         activeObstacles.removeAll()
         activeGems.removeAll()
         activePickups.removeAll()
@@ -418,9 +443,10 @@ final class GameCore {
 
     private func takeId() -> Int { nextId += 1; return nextId }
 
-    private func obstacleCount(_ kinds: Set<EntityKind>) -> Int {
+    /// Closure predicate (not a `Set`) so per-spawn cap checks never allocate.
+    private func obstacleCount(where matches: (EntityKind) -> Bool) -> Int {
         var n = 0
-        for o in activeObstacles where kinds.contains(o.kind) { n += 1 }
+        for o in activeObstacles where matches(o.kind) { n += 1 }
         return n
     }
 
@@ -433,17 +459,20 @@ final class GameCore {
     private func apply(_ cmd: SpawnCmd) {
         switch cmd {
         case let .low(d, lane):
-            guard obstacleCount([.low]) < Tuning.capLow else { return }
+            guard obstacleCount(where: { $0 == .low }) < Tuning.capLow else { return }
             activeObstacles.append(CoreEntity(id: takeId(), kind: .low, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 0.425, phase: 0, passed: false, fading: false))
         case let .tall(d, lane):
-            guard obstacleCount([.tall, .movingTall]) < Tuning.capTall else { return }
+            guard obstacleCount(where: { $0 == .tall || $0 == .movingTall }) < Tuning.capTall else { return }
             activeObstacles.append(CoreEntity(id: takeId(), kind: .tall, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 1.6, phase: 0, passed: false, fading: false))
         case let .movingTall(d, phase):
-            guard obstacleCount([.tall, .movingTall]) < Tuning.capTall else { return }
+            guard obstacleCount(where: { $0 == .tall || $0 == .movingTall }) < Tuning.capTall else { return }
             activeObstacles.append(CoreEntity(id: takeId(), kind: .movingTall, lane: 1, d: d, x: 0, baseY: 1.6, phase: phase, passed: false, fading: false))
         case let .bar(d):
-            guard obstacleCount([.bar]) < Tuning.capBar else { return }
-            activeObstacles.append(CoreEntity(id: takeId(), kind: .bar, lane: -1, d: d, x: 0, baseY: 0, phase: 0, passed: false, fading: false))
+            guard obstacleCount(where: { $0 == .bar }) < Tuning.capBar else { return }
+            activeObstacles.append(CoreEntity(id: takeId(), kind: .bar, lane: -1, d: d, x: 0, baseY: 1.3, phase: 0, passed: false, fading: false))
+        case let .splitBar(d, openLane):
+            guard obstacleCount(where: { $0 == .splitBar }) < Tuning.capSplitBar else { return }
+            activeObstacles.append(CoreEntity(id: takeId(), kind: .splitBar, lane: openLane, d: d, x: 0, baseY: 1.3, phase: 0, passed: false, fading: false))
         case let .gem(d, lane, y):
             guard activeGems.count < Tuning.capGem else { return }
             activeGems.append(CoreEntity(id: takeId(), kind: .gem, lane: lane, d: d, x: Tuning.laneX[lane], baseY: y, phase: 0, passed: false, fading: false))
@@ -453,6 +482,12 @@ final class GameCore {
         case let .magnet(d, lane):
             guard pickupCount(.magnet) < Tuning.capMagnet else { return }
             activePickups.append(CoreEntity(id: takeId(), kind: .magnet, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 1.0, phase: 0, passed: false, fading: false))
+        case let .doubler(d, lane):
+            guard pickupCount(.doubler) < Tuning.capDoubler else { return }
+            activePickups.append(CoreEntity(id: takeId(), kind: .doubler, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 1.0, phase: 0, passed: false, fading: false))
+        case let .chrono(d, lane):
+            guard pickupCount(.chrono) < Tuning.capChrono else { return }
+            activePickups.append(CoreEntity(id: takeId(), kind: .chrono, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 1.0, phase: 0, passed: false, fading: false))
         }
     }
 
@@ -467,8 +502,9 @@ final class GameCore {
         for e in activeObstacles {
             let z = distance - e.d
             let x = obstacleX(e)
-            let y: Double = (e.kind == .bar) ? 0 : (e.kind == .low ? 0.425 : 1.6)
-            entityScratch.append(EntityState(id: e.id, kind: e.kind, x: x, y: y, z: z, lane: e.lane, spin: 0, fading: false))
+            // `baseY` (set at spawn) is the authoritative render height for EVERY obstacle kind —
+            // bar/splitBar centre 1.3, low 0.425, tall 1.6. Renderers must never hardcode these.
+            entityScratch.append(EntityState(id: e.id, kind: e.kind, x: x, y: e.baseY, z: z, lane: e.lane, spin: 0, fading: false))
         }
         for g in activeGems {
             let z = distance - g.d
@@ -481,11 +517,13 @@ final class GameCore {
         }
 
         snapshot = GameSnapshot(
-            mode: mode, distance: distance, speed: speed,
+            mode: mode, distance: distance, speed: effectiveSpeed, rampSpeed: speed,
             playerX: px, playerY: jumpY, playerScaleY: sy, bankZ: bankZ,
             worldFrom: worldFrom, worldTo: worldTo, worldBlend: worldBlend,
-            shieldActive: shield, magnetRemaining: magnetT,
+            shieldActive: shield, magnetRemaining: magnetT, doublerRemaining: doublerT,
+            chronoRemaining: chronoT,
             sliding: slideT > 0, grounded: grounded,
+            usedCheckpoint: usedCheckpoint,
             entities: entityScratch,
             score: score, gems: gemCount, mult: mult, best: best
         )

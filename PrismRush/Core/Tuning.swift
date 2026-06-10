@@ -6,10 +6,11 @@ import Foundation
 enum Tuning {
     static let laneX: [Double] = [-2.2, 0, 2.2]
     static let worldLength: Double = 800
+    static let worldBlendRate: Double = 0.6   // crossfade speed → ~1.7 s cinematic world transition
     static let speedStart: Double = 17, speedRamp: Double = 0.0052, speedCap: Double = 33
     static let menuSpeed: Double = 7
     static let jumpV0: Double = 10.6, gravity: Double = 26
-    static let laneLerpRate: Double = 12
+    static let laneLerpRate: Double = 15   // lane settle ~0.30 s — snappier dodges, strictly easier
     static let slideDuration: Double = 0.55, slideScaleY: Double = 0.38, slamVy: Double = -14
     static let jumpBuffer: Double = 0.25   // widened for human reaction + iOS touch latency
 
@@ -23,11 +24,15 @@ enum Tuning {
     static let barKillBottom: Double = 0.95, barKillTop: Double = 1.65
     static let laneHitHalfWidth: Double = 1.25
     static let gemPickup = (dz: 1.0, dx: 1.0, dy: 1.15)
-    static let magnetDuration: Double = 6, magnetRange: Double = 13
+    static let magnetDuration: Double = 6, magnetRange: Double = 16
+    static let doublerDuration: Double = 10   // gems pay double CURRENCY (skill stats unaffected)
+    // Chrono slow-mo: distance integrates at speed × factor while the player ticks at real dt,
+    // stretching every dodge window ~1.5× — strictly easier. The raw `speed` ramp is untouched.
+    static let chronoDuration: Double = 5, chronoFactor: Double = 0.65
     // Post-absorb grace: patterns place twin talls at the same `d`, so a mid-lane-change shield hit
     // must not let the second wall kill on the same tick (or the next — it's still in the kill band).
     static let invulnDuration: Double = 0.4
-    static let streakPerMult: Int = 8, multCap: Int = 5
+    static let streakPerMult: Int = 6, multCap: Int = 5   // ×5 at 24 gems — mult surfaces early
     static let spawnHorizon: Double = 115
     static let gapMax: Double = 11, gapMin: Double = 5, diffFullAt: Double = 3200
     static let tickDt: Double = 1.0 / 120.0
@@ -45,7 +50,7 @@ enum Tuning {
     static let recycleObstacleZ: Double = 10      // obstacle behind camera → recycle
     static let recycleCollectibleZ: Double = 8    // gem / pickup behind camera → recycle
     static let pickupZHalf: Double = 1.1, pickupXHalf: Double = 1.1, pickupYHalf: Double = 1.3
-    static let magnetGemXRate: Double = 7, magnetGemYRate: Double = 5
+    static let magnetGemXRate: Double = 7, magnetGemYRate: Double = 7   // y fast enough to reel in arc gems
     static let nearMissBonus: Int = 40, gemBaseScore: Int = 10
 
     // Spawn / speed lerp factors.
@@ -55,4 +60,5 @@ enum Tuning {
 
     // Pool caps — bound the live entity count (renderer pools mirror these).
     static let capLow = 18, capTall = 14, capBar = 6, capGem = 72, capShield = 4, capMagnet = 4
+    static let capDoubler = 2, capChrono = 2, capSplitBar = 6
 }

@@ -15,13 +15,14 @@ struct Spawner {
         return lerp(Tuning.gapMax, Tuning.gapMin, diff)
     }
 
-    /// Highest selectable pattern index + 1, gated by distance (verbatim from the shipped code).
+    /// Highest selectable pattern index + 1, gated by distance (0–9 verbatim from the shipped
+    /// code; v1.2 appends split bars at mid difficulty, moving walls stay last/hardest).
     static func maxIndex(forDistance dist: Double) -> Int {
         let diff = min(1, dist / Tuning.diffFullAt)
         if dist < Tuning.earlyDistance { return 5 }
         if diff < Tuning.midDiff { return 9 }
-        if diff < Tuning.movingWallMinDiff { return 10 }  // patterns 1...10 — no moving walls yet
-        return Patterns.count                              // everything, incl. moving walls (index 10)
+        if diff < Tuning.movingWallMinDiff { return 11 }  // + gauntlet & split bars — no moving walls yet
+        return Patterns.count                              // everything, incl. moving walls (index 11)
     }
 
     /// Place patterns until the cursor reaches `horizon`. `emit` receives each spawn command.

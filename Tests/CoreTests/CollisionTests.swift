@@ -75,6 +75,35 @@ final class CollisionTests: XCTestCase {
         XCTAssertFalse(Collisions.barHit(playerTop: pb.top, playerBottom: pb.bottom, z: 0))
     }
 
+    // MARK: Split bars
+
+    func testSplitBarHitInCoveredLane() {
+        let pb = Collisions.playerBounds(jumpY: 0, scaleY: 1)
+        // Open lane 0: standing in covered lanes 1 / 2 is fatal, the gap is safe.
+        XCTAssertTrue(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: 0, openLane: 0, z: 0))
+        XCTAssertTrue(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: 2.2, openLane: 0, z: 0))
+        XCTAssertFalse(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: -2.2, openLane: 0, z: 0))
+    }
+
+    func testSplitBarLateralBoundary() {
+        let pb = Collisions.playerBounds(jumpY: 0, scaleY: 1)
+        // Open lane 2: covered lane at x=0 kills within |dx| < 1.25, exactly like a tall's width.
+        XCTAssertTrue(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: 1.24, openLane: 2, z: 0))
+        XCTAssertFalse(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: 2.2, openLane: 2, z: 0))
+    }
+
+    func testSplitBarClearedBySlide() {
+        let pb = Collisions.playerBounds(jumpY: 0, scaleY: Tuning.slideScaleY)
+        // Sliding clears the vertical kill band even directly under a covered lane.
+        XCTAssertFalse(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: 0, openLane: 2, z: 0))
+    }
+
+    func testSplitBarDepthBoundary() {
+        let pb = Collisions.playerBounds(jumpY: 0, scaleY: 1)
+        XCTAssertTrue(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: 0, openLane: 2, z: 0.94))
+        XCTAssertFalse(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: 0, openLane: 2, z: 0.96))
+    }
+
     // MARK: Gems
 
     func testGemPickupWindow() {
