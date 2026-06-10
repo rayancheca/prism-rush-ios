@@ -1,0 +1,19 @@
+name: Core tests (Linux)
+
+# The simulation core, economy, and synth DSP are pure Swift — the full deterministic
+# test suite (incl. the 200-seed solvability bot) runs on Linux via Package.swift.
+# iOS-only layers (RealityKit / SwiftUI / StoreKit) still need an Xcode runner.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    container: swift:6.0-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run deterministic core suite
+        run: swift test -c release
