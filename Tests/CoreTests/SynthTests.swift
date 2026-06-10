@@ -30,10 +30,67 @@ final class SynthTests: XCTestCase {
         assertSane(Synth.startChime(), 0.25, 0.29, "startChime")
     }
 
+    func testNewSFXAreSane() {
+        assertSane(Synth.shieldChime(), 0.40, 0.44, "shieldChime")
+        assertSane(Synth.magnetChime(), 0.40, 0.44, "magnetChime")
+        assertSane(Synth.laneTick(), 0.03, 0.05, "laneTick")
+        assertSane(Synth.landThud(), 0.12, 0.16, "landThud")
+        assertSane(Synth.purchaseChime(), 0.45, 0.55, "purchaseChime")
+        assertSane(Synth.equipClick(), 0.04, 0.08, "equipClick")
+        assertSane(Synth.uiTick(), 0.04, 0.07, "uiTick")
+        assertSane(Synth.newBestFanfare(), 0.70, 0.80, "newBestFanfare")
+        assertSane(Synth.deathSweep(), 0.88, 0.96, "deathSweep")
+        assertSane(Synth.doublerPickup(), 0.28, 0.32, "doublerPickup")
+        assertSane(Synth.frenzyStart(), 0.40, 0.44, "frenzyStart")
+        assertSane(Synth.frenzyEnd(), 0.40, 0.44, "frenzyEnd")
+    }
+
     func testGemPitchRisesWithStreak() {
         // Higher streak → higher fundamental → the zero-crossing rate should differ.
         let a = Synth.gem(streak: 0), b = Synth.gem(streak: 20)
         XCTAssertNotEqual(a, b)
+        // The ladder must be an audible step (≥ ~a semitone), even between adjacent streaks.
+        XCTAssertGreaterThanOrEqual(Synth.gemPitchStep, 1.07)
+        XCTAssertNotEqual(Synth.gem(streak: 1), Synth.gem(streak: 2))
+    }
+
+    func testPickupSoundsAreDistinct() {
+        XCTAssertNotEqual(Synth.shieldChime(), Synth.magnetChime())
+        XCTAssertNotEqual(Synth.doublerPickup(), Synth.shieldChime())
+        XCTAssertNotEqual(Synth.frenzyStart(), Synth.frenzyEnd())
+    }
+
+    func testDeathSweepNoiseSwells() {
+        // The noise layer swells instead of decaying — the tail must still be clearly audible.
+        let s = Synth.deathSweep()
+        XCTAssertGreaterThan(peak(Array(s.suffix(s.count / 6))), 0.015, "deathSweep dies too early")
+    }
+
+    func testSFXCatalogRendersAndClassifies() {
+        // Every cacheable case must render non-silent samples (this is what SynthEngine caches).
+        let all: [Synth.SFX] = [
+            .gem(streak: 5), .jump, .slide, .crash, .chime, .shieldPickup, .magnetPickup,
+            .doublerPickup, .worldSweep, .close, .startChime, .laneTick, .landThud,
+            .purchaseChime, .equipClick, .uiTick, .newBestFanfare, .deathSweep,
+            .frenzyStart, .frenzyEnd,
+        ]
+        for sfx in all {
+            let s = sfx.samples
+            XCTAssertFalse(s.isEmpty, "\(sfx) empty")
+            XCTAssertFalse(s.contains { $0.isNaN || $0.isInfinite }, "\(sfx) has NaN/Inf")
+            XCTAssertGreaterThan(peak(s), 0.005, "\(sfx) is effectively silent")
+        }
+        // Gem cache keys collapse modulo the 26-step ladder.
+        XCTAssertEqual(Synth.SFX.gem(streak: 29).normalized, Synth.SFX.gem(streak: 3).normalized)
+        XCTAssertEqual(Synth.SFX.gem(streak: -1).normalized, Synth.SFX.gem(streak: 25).normalized)
+        XCTAssertEqual(Synth.SFX.jump.normalized, .jump)
+        // Big moments duck the music bed; ticks don't.
+        XCTAssertTrue(Synth.SFX.crash.ducksMusic)
+        XCTAssertTrue(Synth.SFX.deathSweep.ducksMusic)
+        XCTAssertTrue(Synth.SFX.worldSweep.ducksMusic)
+        XCTAssertTrue(Synth.SFX.shieldPickup.ducksMusic)
+        XCTAssertFalse(Synth.SFX.laneTick.ducksMusic)
+        XCTAssertFalse(Synth.SFX.gem(streak: 3).ducksMusic)
     }
 
     func testMusicStepsAreSaneAcrossWorlds() {
