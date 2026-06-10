@@ -12,7 +12,7 @@ open -a Simulator
 
 ./Tools/build.sh
 
-APP=".dd/Build/Products/Debug-iphonesimulator/Prism Rush.app"
+APP=".dd/Build/Products/Debug-iphonesimulator/PrismRush.app"
 xcrun simctl install "$SIM_UDID" "$APP"
 xcrun simctl launch "$SIM_UDID" "$BUNDLE_ID"
 

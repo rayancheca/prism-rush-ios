@@ -1,0 +1,426 @@
+import Foundation
+import Observation
+
+/// One live spawned thing inside the simulation (pre-snapshot, mutable).
+struct CoreEntity {
+    var id: Int
+    var kind: EntityKind
+    var lane: Int          // -1 for bar
+    var d: Double          // absolute spawn distance; relative z = distance - d
+    var x: Double          // current world x (gems drift under magnet; moving wall is computed live)
+    var baseY: Double      // gem / pickup base height (collision uses this, before cosmetic bob)
+    var phase: Double      // moving-wall oscillation phase
+    var passed: Bool
+    var fading: Bool
+}
+
+/// The deterministic, renderer-agnostic game engine.
+///
+/// Fixed timestep of `Tuning.tickDt` (1/120 s) with an accumulator; rendering interpolates.
+/// All randomness flows through `rng`, so a seed fully determines a run. No imports of any
+/// renderer or UIKit — this is what makes the test suite possible.
+@Observable @MainActor
+final class GameCore {
+    /// The only observed property: SwiftUI re-renders when this changes (once per rendered frame).
+    private(set) var snapshot: GameSnapshot = .initial
+
+    /// Sink for one-shot effects (audio / haptics / renderer bursts). Set by the host.
+    @ObservationIgnored var onFX: ((FXEvent) -> Void)?
+
+    // MARK: simulation state (ObservationIgnored — mutates every tick; only `snapshot` drives UI)
+
+    @ObservationIgnored private(set) var mode: GameMode = .menu
+    @ObservationIgnored private(set) var distance: Double = 0
+    @ObservationIgnored private(set) var speed: Double = Tuning.menuSpeed
+    @ObservationIgnored private(set) var px: Double = 0
+    @ObservationIgnored private(set) var laneIndex: Int = 1
+    @ObservationIgnored private(set) var jumpY: Double = 0
+    @ObservationIgnored private(set) var vy: Double = 0
+    @ObservationIgnored private(set) var grounded: Bool = true
+    @ObservationIgnored private(set) var slideT: Double = 0
+    @ObservationIgnored private(set) var sy: Double = 1
+    @ObservationIgnored private(set) var bankZ: Double = 0
+    @ObservationIgnored private(set) var jumpBuf: Double = 0
+    @ObservationIgnored private(set) var world: Int = 0
+    @ObservationIgnored private(set) var maxWorld: Int = 0
+    @ObservationIgnored private(set) var worldFrom: Int = 0
+    @ObservationIgnored private(set) var worldTo: Int = 0
+    @ObservationIgnored private(set) var worldBlend: Double = 1
+    @ObservationIgnored private(set) var shield: Bool = false
+    @ObservationIgnored private(set) var magnetT: Double = 0
+    @ObservationIgnored private(set) var bonus: Int = 0
+    @ObservationIgnored private(set) var score: Int = 0
+    @ObservationIgnored private(set) var gemCount: Int = 0
+    @ObservationIgnored private(set) var streak: Int = 0
+    @ObservationIgnored private(set) var bestStreak: Int = 0
+    @ObservationIgnored private(set) var mult: Int = 1
+    @ObservationIgnored var best: Int = 0
+
+    @ObservationIgnored private(set) var activeObstacles: [CoreEntity] = []
+    @ObservationIgnored private(set) var activeGems: [CoreEntity] = []
+    @ObservationIgnored private(set) var activePickups: [CoreEntity] = []
+
+    @ObservationIgnored private var rng: SplitMix64
+    @ObservationIgnored private var spawner = Spawner()
+    @ObservationIgnored private var accumulator: Double = 0
+    @ObservationIgnored private var nextId: Int = 0
+
+    init(seed: UInt64 = .random(in: .min ... .max)) {
+        rng = SplitMix64(seed: seed)
+        activeObstacles.reserveCapacity(Tuning.capLow + Tuning.capTall + Tuning.capBar)
+        activeGems.reserveCapacity(Tuning.capGem)
+        activePickups.reserveCapacity(Tuning.capShield + Tuning.capMagnet)
+        rebuildSnapshot()
+    }
+
+    // MARK: - Lifecycle
+
+    /// Begin a run. `best` is preserved; provide a `seed` for deterministic runs (tests / replay).
+    func startRun(seed: UInt64? = nil) {
+        let keepBest = best
+        reset(seed: seed)
+        best = keepBest
+        mode = .play
+        speed = Tuning.menuSpeed   // ramps up immediately under the play target
+        rebuildSnapshot()
+    }
+
+    /// Reset to the fresh menu state. Reseeds if `seed` is given (else a new random stream).
+    func reset(seed: UInt64?) {
+        rng = SplitMix64(seed: seed ?? .random(in: .min ... .max))
+        spawner = Spawner()
+        mode = .menu; distance = 0; speed = Tuning.menuSpeed
+        px = 0; laneIndex = 1; jumpY = 0; vy = 0; grounded = true; slideT = 0; sy = 1
+        bankZ = 0; jumpBuf = 0
+        world = 0; maxWorld = 0; worldFrom = 0; worldTo = 0; worldBlend = 1
+        shield = false; magnetT = 0
+        bonus = 0; score = 0; gemCount = 0; streak = 0; bestStreak = 0; mult = 1
+        activeObstacles.removeAll(keepingCapacity: true)
+        activeGems.removeAll(keepingCapacity: true)
+        activePickups.removeAll(keepingCapacity: true)
+        accumulator = 0; nextId = 0
+    }
+
+    // MARK: - Driving
+
+    /// Real-time entry point for the renderer: consumes wall-clock dt in fixed steps.
+    func advance(realDt: Double) {
+        accumulator += min(realDt, 0.1)
+        while accumulator >= Tuning.tickDt {
+            tick(Tuning.tickDt)
+            accumulator -= Tuning.tickDt
+        }
+        rebuildSnapshot()
+    }
+
+    /// One fixed simulation step. Internal so tests can drive exact step counts deterministically.
+    func tick(_ dt: Double) {
+        stepSpeedAndDistance(dt)
+        stepWorld(dt)
+        if mode == .play { spawn() }
+        stepPlayer(dt)
+        stepObstacles(dt)
+        stepGems(dt)
+        stepPickups(dt)
+        if magnetT > 0 { magnetT = max(0, magnetT - dt) }
+        score = Int((distance * 2).rounded(.down)) + bonus
+    }
+
+    // MARK: - Input intents (called between ticks on the main actor)
+
+    func changeLane(_ dir: Int) {
+        guard mode == .play, dir != 0 else { return }
+        let n = clampI(laneIndex + dir, 0, 2)
+        if n != laneIndex { laneIndex = n; emit(.laneChanged(x: px)) }
+    }
+
+    func jump() {
+        guard mode == .play else { return }
+        if grounded {
+            grounded = false; vy = Tuning.jumpV0; slideT = 0; sy = Tuning.airStretchY
+            emit(.jumped(x: px))
+        } else {
+            jumpBuf = Tuning.jumpBuffer   // buffered: fires on landing
+        }
+    }
+
+    func slide() {
+        guard mode == .play else { return }
+        slideT = Tuning.slideDuration
+        if !grounded { vy = Tuning.slamVy }   // air slam
+        emit(.slid(x: px))
+    }
+
+    // MARK: - Steps
+
+    private func stepSpeedAndDistance(_ dt: Double) {
+        switch mode {
+        case .over:
+            speed = max(0, speed - dt * Tuning.overDecel)
+        case .play:
+            let target = min(Tuning.speedCap, Tuning.speedStart + distance * Tuning.speedRamp)
+            speed = lerp(speed, target, dt * Tuning.speedLerp)
+        case .menu:
+            speed = lerp(speed, Tuning.menuSpeed, dt * Tuning.speedLerp)
+        }
+        distance += speed * dt
+    }
+
+    private func stepWorld(_ dt: Double) {
+        if worldBlend < 1 { worldBlend = min(1, worldBlend + dt * 0.8) }
+        guard mode == .play else { return }
+        let wn = Int((distance / Tuning.worldLength).rounded(.down))
+        let wi = ((wn % 3) + 3) % 3
+        if wn > maxWorld {
+            maxWorld = wn
+            if wi != worldTo { worldFrom = worldTo; worldTo = wi; worldBlend = 0 }
+            emit(.worldChanged(index: wi, ordinal: wn))
+        }
+        world = wi
+    }
+
+    private func spawn() {
+        spawner.fill(to: distance + Tuning.spawnHorizon, dist: distance, rng: &rng) { [weak self] cmd in
+            self?.apply(cmd)
+        }
+    }
+
+    private func stepPlayer(_ dt: Double) {
+        let tx = Tuning.laneX[laneIndex]
+        px = lerp(px, tx, min(1, dt * Tuning.laneLerpRate))
+        bankZ = lerp(bankZ, (tx - px) * Tuning.bankRate, min(1, dt * Tuning.bankLerp))
+
+        if jumpBuf > 0 { jumpBuf -= dt }
+
+        if !grounded {
+            vy -= Tuning.gravity * dt
+            jumpY += vy * dt
+            if jumpY <= 0 {
+                jumpY = 0; grounded = true; vy = 0; sy = Tuning.landSquashY
+                emit(.landed(x: px))
+                if jumpBuf > 0 {
+                    jumpBuf = 0; grounded = false; vy = Tuning.jumpV0; sy = Tuning.airStretchY
+                    emit(.jumped(x: px))
+                }
+            }
+        }
+
+        if slideT > 0 { slideT -= dt }
+        let targetSy = slideT > 0 ? Tuning.slideScaleY : (grounded ? 1.0 : Tuning.airHoldY)
+        sy = lerp(sy, targetSy, min(1, dt * Tuning.slideLerp))
+    }
+
+    private func obstacleX(_ e: CoreEntity) -> Double {
+        switch e.kind {
+        case .bar: return 0
+        case .movingTall: return sin((distance - e.d) * 0.32 + e.phase) * 2.2
+        default: return Tuning.laneX[e.lane]
+        }
+    }
+
+    private func stepObstacles(_ dt: Double) {
+        let pb = Collisions.playerBounds(jumpY: jumpY, scaleY: sy)
+        var i = 0
+        while i < activeObstacles.count {
+            let e = activeObstacles[i]
+            let z = distance - e.d
+            if z > Tuning.recycleObstacleZ {
+                activeObstacles.swapAt(i, activeObstacles.count - 1)
+                activeObstacles.removeLast()
+                continue
+            }
+            let ox = obstacleX(e)
+
+            if mode == .play && abs(z) < Tuning.obstacleZHalf {
+                let hit: Bool
+                switch e.kind {
+                case .bar: hit = Collisions.barHit(playerTop: pb.top, playerBottom: pb.bottom, z: z)
+                case .low: hit = Collisions.lowHit(playerBottom: pb.bottom, playerX: px, obstacleX: ox, z: z)
+                case .tall, .movingTall: hit = Collisions.tallHit(playerX: px, obstacleX: ox, z: z)
+                default: hit = false
+                }
+                if hit {
+                    if shield {
+                        shield = false; streak = 0; mult = 1
+                        emit(.shieldAbsorbed(x: px))
+                        activeObstacles.swapAt(i, activeObstacles.count - 1)
+                        activeObstacles.removeLast()
+                        continue
+                    } else {
+                        die()
+                        // fall through: subsequent logic is mode-guarded; entity stays.
+                    }
+                }
+            }
+
+            // near-miss bonuses, scored exactly once as the obstacle crosses the player plane
+            if !activeObstacles[i].passed && z >= Tuning.obstacleZHalf {
+                activeObstacles[i].passed = true
+                if mode == .play {
+                    switch e.kind {
+                    case .tall, .movingTall:
+                        let dx = abs(px - ox)
+                        if dx >= Tuning.nearMissInner && dx < Tuning.nearMissOuter {
+                            bonus += Tuning.nearMissBonus * mult
+                            emit(.nearMiss(kind: "CLOSE", x: px))
+                        }
+                    case .bar:
+                        if slideT > 0 {
+                            bonus += Tuning.nearMissBonus * mult
+                            emit(.nearMiss(kind: "SLICK", x: px))
+                        }
+                    default: break
+                    }
+                }
+            }
+            i += 1
+        }
+    }
+
+    private func stepGems(_ dt: Double) {
+        let pcy = Collisions.playerCenterY(jumpY: jumpY, scaleY: sy)
+        var i = 0
+        while i < activeGems.count {
+            var g = activeGems[i]
+            let z = distance - g.d
+            if magnetT > 0 && Collisions.magnetActive(z: z) {
+                g.x = lerp(g.x, px, min(1, dt * Tuning.magnetGemXRate))
+                g.baseY = lerp(g.baseY, pcy, min(1, dt * Tuning.magnetGemYRate))
+                g.fading = true
+            } else {
+                g.fading = false
+            }
+            if z > Tuning.recycleCollectibleZ {
+                activeGems.swapAt(i, activeGems.count - 1)
+                activeGems.removeLast()
+                continue
+            }
+            if mode == .play && Collisions.gemPickup(playerCenterY: pcy, playerX: px, gemX: g.x, gemBaseY: g.baseY, z: z) {
+                activeGems.swapAt(i, activeGems.count - 1)
+                activeGems.removeLast()
+                gemCount += 1
+                streak += 1
+                bestStreak = max(bestStreak, streak)
+                mult = clampI(1 + streak / Tuning.streakPerMult, 1, Tuning.multCap)
+                bonus += Tuning.gemBaseScore * mult
+                emit(.gemCollected(x: g.x, y: g.baseY, streak: streak))
+                continue
+            }
+            activeGems[i] = g
+            i += 1
+        }
+    }
+
+    private func stepPickups(_ dt: Double) {
+        let pcy = Collisions.playerCenterY(jumpY: jumpY, scaleY: sy)
+        var i = 0
+        while i < activePickups.count {
+            let p = activePickups[i]
+            let z = distance - p.d
+            if z > Tuning.recycleCollectibleZ {
+                activePickups.swapAt(i, activePickups.count - 1)
+                activePickups.removeLast()
+                continue
+            }
+            let pxw = Tuning.laneX[p.lane]
+            if mode == .play && Collisions.pickupHit(playerCenterY: pcy, playerX: px, pickupX: pxw, pickupY: p.baseY, z: z) {
+                activePickups.swapAt(i, activePickups.count - 1)
+                activePickups.removeLast()
+                if p.kind == .shield {
+                    shield = true
+                    emit(.pickup(kind: .shield, x: pxw, y: p.baseY))
+                } else {
+                    magnetT = Tuning.magnetDuration
+                    emit(.pickup(kind: .magnet, x: pxw, y: p.baseY))
+                }
+                continue
+            }
+            i += 1
+        }
+    }
+
+    private func die() {
+        mode = .over
+        streak = 0; mult = 1
+        if score > best { best = score }
+        emit(.died(x: px))
+    }
+
+    // MARK: - Spawning
+
+    private func takeId() -> Int { nextId += 1; return nextId }
+
+    private func obstacleCount(_ kinds: Set<EntityKind>) -> Int {
+        var n = 0
+        for o in activeObstacles where kinds.contains(o.kind) { n += 1 }
+        return n
+    }
+
+    private func pickupCount(_ kind: EntityKind) -> Int {
+        var n = 0
+        for p in activePickups where p.kind == kind { n += 1 }
+        return n
+    }
+
+    private func apply(_ cmd: SpawnCmd) {
+        switch cmd {
+        case let .low(d, lane):
+            guard obstacleCount([.low]) < Tuning.capLow else { return }
+            activeObstacles.append(CoreEntity(id: takeId(), kind: .low, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 0.425, phase: 0, passed: false, fading: false))
+        case let .tall(d, lane):
+            guard obstacleCount([.tall, .movingTall]) < Tuning.capTall else { return }
+            activeObstacles.append(CoreEntity(id: takeId(), kind: .tall, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 1.6, phase: 0, passed: false, fading: false))
+        case let .movingTall(d, phase):
+            guard obstacleCount([.tall, .movingTall]) < Tuning.capTall else { return }
+            activeObstacles.append(CoreEntity(id: takeId(), kind: .movingTall, lane: 1, d: d, x: 0, baseY: 1.6, phase: phase, passed: false, fading: false))
+        case let .bar(d):
+            guard obstacleCount([.bar]) < Tuning.capBar else { return }
+            activeObstacles.append(CoreEntity(id: takeId(), kind: .bar, lane: -1, d: d, x: 0, baseY: 0, phase: 0, passed: false, fading: false))
+        case let .gem(d, lane, y):
+            guard activeGems.count < Tuning.capGem else { return }
+            activeGems.append(CoreEntity(id: takeId(), kind: .gem, lane: lane, d: d, x: Tuning.laneX[lane], baseY: y, phase: 0, passed: false, fading: false))
+        case let .shield(d, lane):
+            guard pickupCount(.shield) < Tuning.capShield else { return }
+            activePickups.append(CoreEntity(id: takeId(), kind: .shield, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 1.0, phase: 0, passed: false, fading: false))
+        case let .magnet(d, lane):
+            guard pickupCount(.magnet) < Tuning.capMagnet else { return }
+            activePickups.append(CoreEntity(id: takeId(), kind: .magnet, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 1.0, phase: 0, passed: false, fading: false))
+        }
+    }
+
+    // MARK: - Snapshot
+
+    @ObservationIgnored private var entityScratch: [EntityState] = []
+
+    private func rebuildSnapshot() {
+        entityScratch.removeAll(keepingCapacity: true)
+        entityScratch.reserveCapacity(activeObstacles.count + activeGems.count + activePickups.count)
+
+        for e in activeObstacles {
+            let z = distance - e.d
+            let x = obstacleX(e)
+            let y: Double = (e.kind == .bar) ? 0 : (e.kind == .low ? 0.425 : 1.6)
+            entityScratch.append(EntityState(id: e.id, kind: e.kind, x: x, y: y, z: z, lane: e.lane, spin: 0, fading: false))
+        }
+        for g in activeGems {
+            let z = distance - g.d
+            let bob = sin((distance + g.d) * 0.6) * 0.07
+            entityScratch.append(EntityState(id: g.id, kind: .gem, x: g.x, y: g.baseY + bob, z: z, lane: g.lane, spin: distance - g.d, fading: g.fading))
+        }
+        for p in activePickups {
+            let z = distance - p.d
+            entityScratch.append(EntityState(id: p.id, kind: p.kind, x: Tuning.laneX[p.lane], y: p.baseY, z: z, lane: p.lane, spin: distance - p.d, fading: false))
+        }
+
+        snapshot = GameSnapshot(
+            mode: mode, distance: distance, speed: speed,
+            playerX: px, playerY: jumpY, playerScaleY: sy, bankZ: bankZ,
+            worldFrom: worldFrom, worldTo: worldTo, worldBlend: worldBlend,
+            shieldActive: shield, magnetRemaining: magnetT,
+            entities: entityScratch,
+            score: score, gems: gemCount, mult: mult, best: best
+        )
+    }
+
+    private func emit(_ fx: FXEvent) { onFX?(fx) }
+}

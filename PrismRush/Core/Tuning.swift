@@ -25,7 +25,24 @@ enum Tuning {
 
     // Near-miss windows (tall passed in this |dx| band → CLOSE bonus).
     static let nearMissInner: Double = 1.25, nearMissOuter: Double = 2.4
-    // Difficulty gating thresholds for the pattern catalogue.
-    static let earlyDistance: Double = 260   // first 260m: patterns 1...6 only
-    static let midDiff: Double = 0.45        // diff < 0.45: patterns 1...10
+    // Difficulty gating thresholds for the pattern catalogue (verbatim from the shipped code:
+    // `dist<260 ? 5 : (diff<0.45 ? 9 : 11)` patterns selectable; see Spawner).
+    static let earlyDistance: Double = 260
+    static let midDiff: Double = 0.45
+
+    // Collision / lifecycle (derived from the reference; named to avoid magic numbers).
+    static let obstacleZHalf: Double = 0.95       // |z| < this → obstacle is at the player plane
+    static let recycleObstacleZ: Double = 10      // obstacle behind camera → recycle
+    static let recycleCollectibleZ: Double = 8    // gem / pickup behind camera → recycle
+    static let pickupZHalf: Double = 1.1, pickupXHalf: Double = 1.1, pickupYHalf: Double = 1.3
+    static let magnetGemXRate: Double = 7, magnetGemYRate: Double = 5
+    static let nearMissBonus: Int = 25, gemBaseScore: Int = 10
+
+    // Spawn / speed lerp factors.
+    static let speedLerp: Double = 1.5, overDecel: Double = 22
+    static let bankRate: Double = 0.32, bankLerp: Double = 10, slideLerp: Double = 14
+    static let landSquashY: Double = 0.68, airStretchY: Double = 1.18, airHoldY: Double = 1.12
+
+    // Pool caps — bound the live entity count (renderer pools mirror these).
+    static let capLow = 18, capTall = 14, capBar = 6, capGem = 72, capShield = 4, capMagnet = 4
 }
