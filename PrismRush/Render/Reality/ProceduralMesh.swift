@@ -19,6 +19,25 @@ enum ProceduralMesh {
         return build(p, idx, fallback: r)
     }
 
+    /// Two octahedra side by side in one mesh (the coin-doubler pickup): the gem vertex set
+    /// duplicated at ±`offset` on x, indices rebased for the second copy. One MeshDescriptor.
+    static func twinOctahedron(_ r: Float, offset: Float = 0.34) -> MeshResource {
+        let base: [SIMD3<Float>] = [
+            [r, 0, 0], [-r, 0, 0], [0, r, 0], [0, -r, 0], [0, 0, r], [0, 0, -r],
+        ]
+        let faces: [UInt32] = [
+            2, 4, 0,  2, 0, 5,  2, 5, 1,  2, 1, 4,   // top fan
+            3, 0, 4,  3, 5, 0,  3, 1, 5,  3, 4, 1,   // bottom fan
+        ]
+        var p: [SIMD3<Float>] = []
+        var idx: [UInt32] = []
+        for (k, dx) in [-offset, offset].enumerated() {
+            p.append(contentsOf: base.map { $0 + SIMD3<Float>(dx, 0, 0) })
+            idx.append(contentsOf: faces.map { $0 + UInt32(k * base.count) })
+        }
+        return build(p, idx, fallback: r + offset)
+    }
+
     /// Four-sided pyramid for the Solar Sands decor.
     static func pyramid(halfBase b: Float, height h: Float) -> MeshResource {
         let p: [SIMD3<Float>] = [
