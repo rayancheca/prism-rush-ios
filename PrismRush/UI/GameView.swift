@@ -14,6 +14,10 @@ final class GameModel {
     @ObservationIgnored let synth = SynthEngine()
     @ObservationIgnored private var sub: EventSubscription?
     private(set) var muted = false
+
+    /// Which meta screen is open over the menu (nil = the menu hub itself).
+    enum MetaScreen { case characters, shop, levels, stats }
+    var activeSheet: MetaScreen?
     @ObservationIgnored private var overTime: Double = 0
     @ObservationIgnored private var demoElapsed: Double = 0
     @ObservationIgnored private var demoDied = false
@@ -53,6 +57,14 @@ final class GameModel {
         applyCurrentSkin()
         core.onFX = { [weak self] fx in self?.handleFX(fx) }
         if autoplay || demo { core.startRun(seed: 7) }
+        // Debug: jump straight to a meta screen for screenshots.
+        switch ProcessInfo.processInfo.environment["PR_SCREEN"] {
+        case "characters": activeSheet = .characters
+        case "shop": activeSheet = .shop
+        case "levels": activeSheet = .levels
+        case "stats": activeSheet = .stats
+        default: break
+        }
 
         sub = content.subscribe(to: SceneEvents.Update.self) { [weak self] event in
             MainActor.assumeIsolated {
@@ -143,6 +155,21 @@ final class GameModel {
         renderer.applySkin(bodyHex: skin.bodyHex, antennaHex: skin.antennaHex, followsWorld: skin.followsWorld)
     }
 
+    func open(_ screen: MetaScreen) { activeSheet = screen }
+    func closeSheet() { activeSheet = nil }
+
+    /// Equip an owned skin, or buy it with coins (premium skins require IAP — handled in the shop).
+    @discardableResult
+    func buyOrEquipSkin(_ skin: Skin) -> Bool {
+        let store = ProfileStore.shared
+        if store.owns(skin: skin.id) {
+            store.select(skin: skin.id); applyCurrentSkin(); return true
+        }
+        guard !skin.premium, store.spendCoins(skin.cost) else { return false }
+        store.unlock(skin: skin.id); store.select(skin: skin.id); applyCurrentSkin()
+        return true
+    }
+
     /// Fold the just-finished run into the profile and award coins (gems + a distance bonus).
     private func recordRunResults() {
         let store = ProfileStore.shared
@@ -170,7 +197,7 @@ final class GameModel {
         let adx = abs(t.width), ady = abs(t.height)
         if max(adx, ady) < 22 {
             switch core.mode {
-            case .menu: startRun()
+            case .menu: break                       // the menu PLAY button starts a run
             case .over: if canRestart { startRun() }
             case .play: core.jump()
             }
@@ -189,6 +216,23 @@ final class GameModel {
 
 struct GameView: View {
     @State private var model = GameModel()
+
+    @ViewBuilder
+    private func metaSheet(_ sheet: GameModel.MetaScreen) -> some View {
+        switch sheet {
+        case .characters:
+            CharacterSelectView(model: model)
+        case .shop, .levels, .stats:
+            let title = sheet == .shop ? "Shop" : (sheet == .levels ? "Worlds" : "Stats")
+            MetaScreenScaffold(title: title, coins: ProfileStore.shared.profile.coins, onClose: { model.closeSheet() }) {
+                VStack(spacing: 12) {
+                    Image(systemName: "hammer.fill").font(.system(size: 42)).foregroundStyle(.white.opacity(0.4))
+                    Text("Coming soon").font(.system(size: 16, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.6))
+                }
+                .padding(.top, 120)
+            }
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -222,11 +266,22 @@ struct GameView: View {
 
             switch model.core.snapshot.mode {
             case .menu:
-                MenuView(best: model.core.snapshot.best)
+                if model.activeSheet == nil {
+                    MenuView(best: model.core.snapshot.best,
+                             coins: ProfileStore.shared.profile.coins,
+                             onPlay: { model.startRun() },
+                             onCharacters: { model.open(.characters) },
+                             onShop: { model.open(.shop) },
+                             onLevels: { model.open(.levels) })
+                }
             case .over:
                 GameOverView(snapshot: model.core.snapshot, coinsEarned: model.lastCoinsEarned) { model.startRun() }
             case .play:
                 EmptyView()
+            }
+
+            if model.core.snapshot.mode == .menu, let sheet = model.activeSheet {
+                metaSheet(sheet).transition(.move(edge: .bottom))
             }
 
             EffectsOverlay(model: model)

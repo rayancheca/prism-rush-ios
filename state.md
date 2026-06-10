@@ -13,7 +13,9 @@
       `ProfileStore` (@Observable, UserDefaults + iCloud KVS sync), `SkinCatalog` (7 procedural skins).
       Coins earned at run end (gems + distance/50, ×2 if doubleCoins), shown on game-over + menu, persisted
       across launches (verified). Best score migrated into the profile. Renderer applies the selected skin.
-- [ ] **E3** — menu hub + Character-select (buy/equip skins with coins).
+- [x] **E3** — menu hub (PLAY + Characters/Shop/Worlds nav) + Character-select grid (procedural skin
+      previews, buy/equip with coins, equipped state). `MetaScreenScaffold`/`CoinBadge`/`CharacterSwatch`
+      shared chrome. `PR_SCREEN` debug flag opens a sheet for screenshots. Both screenshot-verified.
 - [ ] **E4** — Shop + StoreKit 2 IAP (coin packs, double-coins, bundles) + a `.storekit` test config.
 - [ ] **E5** — Level select / checkpoint start (start from a reached world) + more power-ups + double-coins.
 - [ ] **E6** — Accounts: Sign in with Apple + Game Center friends/leaderboards.
