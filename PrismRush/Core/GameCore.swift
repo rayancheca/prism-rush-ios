@@ -123,7 +123,9 @@ final class GameCore {
         stepGems(dt)
         stepPickups(dt)
         if magnetT > 0 { magnetT = max(0, magnetT - dt) }
-        score = Int((distance * 2).rounded(.down)) + bonus
+        // Score freezes at death: the post-death decel keeps distance climbing, but the run's
+        // score must not. `die()` captures the final value; here we only advance it while playing.
+        if mode == .play { score = Int((distance * 2).rounded(.down)) + bonus }
     }
 
     // MARK: - Input intents (called between ticks on the main actor)
@@ -340,11 +342,15 @@ final class GameCore {
     }
 
     private func die() {
+        score = Int((distance * 2).rounded(.down)) + bonus   // final, frozen score
         mode = .over
         streak = 0; mult = 1
         if score > best { best = score }
         emit(.died(x: px))
     }
+
+    /// Debug-only: force an immediate death (used by the `PR_DEMO` screenshot flow).
+    func debugForceDie() { if mode == .play { die() } }
 
     // MARK: - Spawning
 

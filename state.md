@@ -1,10 +1,10 @@
 # PRISM RUSH — Build State
 
 > Single source of truth for session resumability. On any fresh session: read this first, then continue.
-> Last updated: end of Phase 2.
+> Last updated: end of Phase 3.
 
 ## Current phase
-**Phase 2 COMPLETE → entering Phase 3 (gray-box playable).**
+**Phase 3 COMPLETE → entering Phase 4 (art pass).**
 
 ## Environment (probed Phase 0)
 | Fact | Value |
@@ -31,17 +31,26 @@ exist here. Override via `PR_SIM_NAME`/`PR_SIM_OS`/`PR_SIM_UDID`.
       `xcodebuild test` → **26 tests, 0 failures**.
 - [x] Parallel deliverables: `Store/metadata.md` (within all char limits), `Store/icon_1024.png`
       (verified 1024×1024 opaque neon prism-slime), `Tools/{gen_icon.swift,screenshots.sh,ci.sh}`.
+- [x] **Phase 3** — `RealityRenderer: RendererPort` + `EntityPools`, virtual camera follow + speed-FOV,
+      player rig (squash/stretch + bank), scrolling neon grid/ground/backdrop. SwiftUI `GameView` drives the
+      loop via `SceneEvents.Update` → `core.advance` → `renderer.sync`. HUD/Menu/GameOver overlays,
+      DragGesture swipe/tap input. `PR_AUTOPLAY`/`PR_DEMO` env flags drive the Autopilot for deterministic
+      screenshots. BUILD SUCCEEDED; all 26 tests green; menu/play/game-over screenshot-verified
+      (`reports/shots/phase3_{menu,play,over2}.png`). Score-freeze bug found-by-screenshot and fixed.
 
-## Next 3 actions (Phase 3 — gray-box playable)
-1. **Render/Reality/** — `RealityRenderer: RendererPort` + `EntityPools` (pool ModelEntity primitives per
-    kind, track by snapshot id), virtual camera follow, player rig (body + squash/stretch + bank), scrolling
-    grid/ground/backdrop. Drive loop from `content.subscribe(to: SceneEvents.Update.self)` →
-    `core.advance(realDt:)` → `renderer.sync(snapshot)`. (Probe the subscribe/retention pattern first.)
-2. **UI/** — `GameView` (hosts RealityView + overlays + DragGesture swipe/tap input, 22pt threshold),
-    `HUDView` (live score/gems/mult), `MenuView`, `GameOverView`, `Theme` (world palettes).
-    Wire `RootView` → `GameView`; delete the Phase-1 placeholder.
-3. **QA gate** — add a `PR_AUTOPLAY` env flag (reuses `Autopilot`) so gameplay can be screenshotted
-    deterministically on the sim without manual gestures. Screenshot menu + play + game-over; READ them.
+## Next 3 actions (Phase 4 — art pass)
+1. **World crossfade** — drive shared obstacle/player/grid materials + backdrop + clear color from the
+    snapshot's `worldFrom/worldTo/worldBlend`. Distance-based opacity fade-in over the last ~20m (RealityKit
+    has no fog). World banner "WORLD N · NAME" + rising synth sweep hook (audio in P6).
+2. **Decor pools with horizon-swap** — per-world decor (city boxes / bobbing crystals / pyramids) recycled at
+    the horizon so a new world visibly "arrives". Proper gem **octahedron** + **torus** magnet + icosahedron
+    shield via `MeshResource(from: MeshDescriptor)` (PROBE this API first).
+3. **Character** — eyes + pupils, blink (2.2–4.2s), antenna with glowing tip on the player rig. Gate: 3
+    screenshots (one per world) judged against the palette table.
+
+## Known polish backlog (non-blocking)
+- Menu shows the player orb overlapping "TAP TO RUN" — reposition/animate as an attract pose in Phase 4.
+- Gems/pickups are gray-box spheres (real octahedron/torus in Phase 4).
 
 ## Decision log
 - **Renderer = RealityKit** (Plan B / SceneKit NOT triggered; RealityView surface verified in Phase 1).
@@ -59,6 +68,11 @@ exist here. Override via `PR_SIM_NAME`/`PR_SIM_OS`/`PR_SIM_UDID`.
   5. Stay-unless-forced: only leave the current lane when a tall bears down within 15 units — don't chase a
      far-future-optimal lane into a nearer low.
 - **Audio** stays Phase 6 (keeps each commit's app build green; audio is not yet in the `sources` glob).
+- **RealityView content type = `RealityViewCameraContent`** (module `_RealityKit_SwiftUI`), make closure is
+  `@MainActor @Sendable (inout RealityViewCameraContent) async`. The loop's `SceneEvents.Update` handler runs
+  on the main thread but isn't statically isolated → wrap its body in `MainActor.assumeIsolated`. Verified.
+- **Score freezes at death** (`die()` captures it; `tick()` only advances it while `.play`) — post-death
+  decel keeps `distance` climbing and was otherwise inflating the score past the locked best.
 
 ## Blockers
 - None.
@@ -72,3 +86,4 @@ exist here. Override via `PR_SIM_NAME`/`PR_SIM_OS`/`PR_SIM_UDID`.
 ## Commit log (every commit builds)
 - `phase1`: scaffold + contracts + verified placeholder RealityView.
 - `phase2`: deterministic Core + full test suite green (26 tests; 200-seed solvability bot).
+- `phase3`: RealityKit renderer + SwiftUI shell, gray-box playable. menu/play/over screenshot-verified.
