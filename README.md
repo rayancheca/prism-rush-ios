@@ -77,6 +77,29 @@ checkpoints, secure accounts, and friends competition — driven by an `@Observa
 
 ---
 
+## v1.1 — critique-driven overhaul
+
+A multi-agent "hater-critic" review ([`reports/CRITIQUE.md`](reports/CRITIQUE.md)) audited every layer,
+confirmed bugs from the actual code, and drove four gameplay-first rounds — each fix **proven by a real
+XCUITest that taps the buttons**, not just a screenshot (the gap that let the original bugs ship).
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/15_rewards.png" width="210"><br><sub><b>Retention rewards</b><br>Streak-tiered daily bonus + free chest every 30 min (live countdown)</sub></td>
+<td align="center"><img src="docs/screenshots/16_continue.png" width="210"><br><sub><b>Continue &amp; exits</b><br>Revive-for-coins, RUN AGAIN, and the BACK TO MENU that was missing</sub></td>
+</tr>
+</table>
+
+**Fixed &amp; verified:** back-to-menu after death · live character equip · Sign in with Apple (entitlement +
+observation + error surfacing) · a dramatically more visible slide · **World 2 no longer has the unfair
+moving walls** (now deterministic, slower, and gated until you've acclimated) · no checkpoint speed-cliff ·
+wider jump buffer.
+**Added:** pause (+ auto-pause on backgrounding) · daily rewards · login streaks · timed chests ·
+revive-for-coins · much bigger particles/shake/flash · a ~6,000-allocs/sec render fix.
+**Tested:** 38 unit + 6 XCUITest interaction tests, all green.
+
+---
+
 ## Architecture
 
 ```
