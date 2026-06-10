@@ -1,0 +1,68 @@
+import RealityKit
+import simd
+
+/// Code-generated meshes RealityKit doesn't provide as primitives. Built from a `MeshDescriptor`
+/// (positions + triangle indices). No normals: every material here is `UnlitMaterial`, so lighting
+/// — and therefore normals — is ignored. Winding is CCW-outward (back faces are culled).
+@MainActor
+enum ProceduralMesh {
+
+    /// Diamond/gem shape: 6 vertices, 8 faces.
+    static func octahedron(_ r: Float) -> MeshResource {
+        let p: [SIMD3<Float>] = [
+            [r, 0, 0], [-r, 0, 0], [0, r, 0], [0, -r, 0], [0, 0, r], [0, 0, -r],
+        ]
+        let idx: [UInt32] = [
+            2, 4, 0,  2, 0, 5,  2, 5, 1,  2, 1, 4,   // top fan
+            3, 0, 4,  3, 5, 0,  3, 1, 5,  3, 4, 1,   // bottom fan
+        ]
+        return build(p, idx, fallback: r)
+    }
+
+    /// Four-sided pyramid for the Solar Sands decor.
+    static func pyramid(halfBase b: Float, height h: Float) -> MeshResource {
+        let p: [SIMD3<Float>] = [
+            [-b, 0, -b], [b, 0, -b], [b, 0, b], [-b, 0, b],  // base 0..3 (CCW from above)
+            [0, h, 0],                                         // apex 4
+        ]
+        let idx: [UInt32] = [
+            1, 0, 4,  2, 1, 4,  3, 2, 4,  0, 3, 4,   // sides (outward)
+            0, 2, 1,  0, 3, 2,                         // base (downward)
+        ]
+        return build(p, idx, fallback: b)
+    }
+
+    /// Ring for the magnet pickup. Lies in the XY plane (hole faces the camera, along +Z).
+    static func torus(major R: Float, minor r: Float, majorSeg: Int = 20, minorSeg: Int = 9) -> MeshResource {
+        var pos: [SIMD3<Float>] = []
+        pos.reserveCapacity(majorSeg * minorSeg)
+        for i in 0..<majorSeg {
+            let u = Float(i) / Float(majorSeg) * 2 * .pi
+            let (cu, su) = (cos(u), sin(u))
+            for j in 0..<minorSeg {
+                let v = Float(j) / Float(minorSeg) * 2 * .pi
+                let (cv, sv) = (cos(v), sin(v))
+                pos.append([(R + r * cv) * cu, (R + r * cv) * su, r * sv])
+            }
+        }
+        var idx: [UInt32] = []
+        idx.reserveCapacity(majorSeg * minorSeg * 6)
+        for i in 0..<majorSeg {
+            for j in 0..<minorSeg {
+                let a = UInt32(i * minorSeg + j)
+                let b = UInt32(((i + 1) % majorSeg) * minorSeg + j)
+                let c = UInt32(((i + 1) % majorSeg) * minorSeg + (j + 1) % minorSeg)
+                let d = UInt32(i * minorSeg + (j + 1) % minorSeg)
+                idx.append(contentsOf: [a, b, c, a, c, d])
+            }
+        }
+        return build(pos, idx, fallback: R + r)
+    }
+
+    private static func build(_ positions: [SIMD3<Float>], _ indices: [UInt32], fallback: Float) -> MeshResource {
+        var d = MeshDescriptor(name: "procedural")
+        d.positions = MeshBuffers.Positions(positions)
+        d.primitives = .triangles(indices)
+        return (try? MeshResource.generate(from: [d])) ?? .generateSphere(radius: fallback)
+    }
+}

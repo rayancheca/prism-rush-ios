@@ -27,7 +27,13 @@ final class RealityRenderer: RendererPort {
     private let rungSpacing: Float = 4
     private let rungCount = 36
 
+    // Code-generated meshes, built once and shared across all instances of their kind.
+    private let gemMesh: MeshResource
+    private let magnetMesh: MeshResource
+
     init() {
+        gemMesh = ProceduralMesh.octahedron(0.34)
+        magnetMesh = ProceduralMesh.torus(major: 0.30, minor: 0.12)
         buildScene()
         pools = EntityPools(root: root) { [weak self] kind in
             self?.makeEntity(kind) ?? ModelEntity()
@@ -129,9 +135,9 @@ final class RealityRenderer: RendererPort {
             crossbar.position = SIMD3<Float>(0, 1.3, 0)
             g.addChild(crossbar)
             return g
-        case .gem:    return sphereEntity(0.32, cGold)
+        case .gem:    return ModelEntity(mesh: gemMesh, materials: [UnlitMaterial(color: cGold)])
         case .shield: return sphereEntity(0.42, cWhite)
-        case .magnet: return sphereEntity(0.34, cAccent)
+        case .magnet: return ModelEntity(mesh: magnetMesh, materials: [UnlitMaterial(color: cAccent)])
         }
     }
 

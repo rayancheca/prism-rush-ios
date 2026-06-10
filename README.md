@@ -1,57 +1,166 @@
-# PRISM RUSH — Native iOS ⚡
+<div align="center">
 
-A neon, three-world, three-lane hyperspeed endless runner for iPhone. Swipe lanes, jump, slide.
-Gem streak multipliers, near-miss bonuses, shield & magnet pickups, worlds that crossfade around
-the player, fully synthesized music & SFX, haptics, and a Game Center leaderboard.
+<img src="docs/screenshots/00_icon.png" width="120" alt="Prism Rush icon">
 
-**Zero binary assets.** Every mesh, particle, sound, and the app icon is generated in code.
+# PRISM RUSH ⚡ — Native iOS
 
-> Native port of a shipped Three.js web prototype. The web build's tuned gameplay numbers are
-> treated as ground truth. Full design spec lives in `PROMPT.md`.
+**A neon, three-world, three-lane hyperspeed endless runner for iPhone.**
+Swipe lanes, jump, slide. Chain gem streaks, thread near-misses, dodge moving walls.
+Every mesh, every sound, and even the app icon is **generated in code** — zero binary assets.
 
-## Stack
+Built with **Swift 6 · SwiftUI · RealityKit**, ground-up by [Claude Code](https://claude.com/claude-code).
 
-- **Swift 6** (strict concurrency `complete`), **SwiftUI** app shell, **iOS 18.0+**
-- **RealityKit** (`RealityView`, non-AR virtual camera, programmatic `ModelEntity` primitives,
-  `UnlitMaterial`-dominant neon look, `ParticleEmitterComponent`)
-- **AVAudioEngine** for fully synthesized music + SFX (no audio files)
-- **CoreHaptics**, **GameKit** (leaderboard), **UserDefaults** (best score, mute)
-- No third-party SPM dependencies.
+</div>
+
+---
+
+## What it is
+
+Prism Rush is a native port of a shipped Three.js web prototype, rebuilt as a real iOS game. A tiny
+glowing slime rides a three-lane track that accelerates the longer you survive. Collect gems to build a
+streak multiplier (×1 → ×5), squeeze past tall blocks for **CLOSE** bonuses, slide under bars for
+**SLICK** ones, and grab Shield / Magnet pickups. Three worlds — Neon Metropolis, Crystal Caverns,
+Solar Sands — crossfade around you every 800 m, then loop back harder.
+
+The interesting part isn't the game; it's how it's built. The entire simulation is a **pure,
+deterministic, renderer-agnostic Swift core** driven by a fixed 1/120 s timestep. Because a single seed
+fully determines a run, the spawner is **provably fair**: an automated bot clears 6,000 m on 200 distinct
+seeds with **zero unavoidable deaths**, enforced as a unit test.
+
+---
+
+## Walkthrough
+
+Every screenshot below is the **actual app running on an iPhone 17 Pro simulator**, driven end-to-end by
+the in-engine autopilot (the same bot used in the solvability tests) — real frames, real score, real
+collisions.
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/01_menu.png" width="210"><br><sub><b>1 · Title</b><br>Neon perspective grid + world select</sub></td>
+<td align="center"><img src="docs/screenshots/02_gems_streak.png" width="210"><br><sub><b>2 · Collect</b><br>Gem arc → 12 gems, ×2 streak</sub></td>
+<td align="center"><img src="docs/screenshots/03_slide_under_bar.png" width="210"><br><sub><b>3 · Slide</b><br>Duck under a full-span bar, ×4</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/04_max_streak_weave.png" width="210"><br><sub><b>4 · Weave</b><br>Tall blocks at the ×5 max streak (2,205)</sub></td>
+<td align="center"><img src="docs/screenshots/05_game_over.png" width="210"><br><sub><b>5 · Shatter</b><br>Score freezes, new best</sub></td>
+<td align="center"><img src="docs/screenshots/00_icon.png" width="210"><br><sub><b>Icon</b><br>1024² rendered in Core Graphics, no text</sub></td>
+</tr>
+</table>
+
+---
 
 ## Architecture
 
-`Core/` is pure, deterministic, renderer-agnostic Swift (Foundation only) driven by a fixed
-**1/120 s** timestep with an accumulator; rendering interpolates. A seeded RNG makes every run
-reproducible — which is what makes the test suite (including a 200-seed solvability bot) possible.
-The renderer talks to the core through a single `RendererPort` seam, so the RealityKit adapter can
-be swapped for a SceneKit fallback without touching gameplay.
+```
+                input (swipe / tap)            SceneEvents.Update (per frame, wall-clock dt)
+                       │                                     │
+                       ▼                                     ▼
+   ┌──────────────────────────────┐   snapshot   ┌────────────────────────────┐
+   │  Core/  (pure Swift)          │ ───────────▶ │  Render/  RealityKit        │
+   │  • GameCore  (1/120 s tick)   │              │  • RealityRenderer          │
+   │  • Spawner + 11 patterns      │   FXEvent    │  • EntityPools (by kind)    │
+   │  • Collisions (pure preds)    │ ───────────▶ │  • ProceduralMesh           │
+   │  • SplitMix64 RNG (seeded)    │              │  + UI/ SwiftUI HUD/overlays │
+   │  • Autopilot (greedy bot)     │              │                            │
+   └──────────────────────────────┘              └────────────────────────────┘
+        no UIKit / RealityKit imports        RendererPort is the only seam between them
+```
+
+- **`Core/`** never imports a renderer; the renderer never owns game state. They meet at one protocol,
+  `RendererPort { sync(GameSnapshot); fire(FXEvent) }`. The core hands the renderer an immutable
+  per-frame `GameSnapshot` (pooled entity ids, player pose, world-blend, score) and emits one-shot
+  `FXEvent`s for juice.
+- **Fixed timestep, interpolated render.** `advance(realDt:)` accumulates wall-clock time and steps the
+  sim in exact 1/120 s ticks, so physics is identical at 60 Hz or 120 Hz and fully reproducible.
+- **Pooling everywhere.** The core caps live entities; the renderer maps stable ids to recycled
+  `ModelEntity`s — no per-frame spawn/despawn churn.
 
 ```
 PrismRush/
-  App/      SwiftUI entry + root view
-  Core/     GameCore, Spawner, Patterns, Tuning, RNG, Models   (no renderer imports)
-  Render/   RendererPort + RealityKit adapter, entity pools, world decor
-  UI/       HUD, menu, game-over, score popups, theme
-  Audio/    SynthEngine, Music
-  Services/ Persistence, GameCenter, Haptics
-  Support/  entitlements, privacy manifest
-Tests/      Core unit tests (RNG, collisions, difficulty, solvability bot)
-Tools/      build / qa / screenshots / icon generation
+  App/      SwiftUI entry + root            Render/Reality/  RealityRenderer, EntityPools, ProceduralMesh
+  Core/     GameCore, Spawner, Patterns,    UI/              GameView, HUD, Menu, GameOver, Theme
+            Tuning, RNG, Collisions,        Services/        (Persistence, GameCenter, Haptics — WIP)
+            Autopilot, Models               Support/         entitlements, PrivacyInfo.xcprivacy
+Tests/      RNG · Collision · Difficulty · SolvabilityBot     Tools/  build / qa / screenshots / gen_icon
 ```
+
+---
+
+## Technical deep-dive
+
+**The hardest decision was making the spawner provably solvable instead of hoping it was.** An endless
+runner that occasionally spawns an unavoidable wall feels broken, but you can't manually test infinite
+procedural content. The fix falls out of the architecture: because the core is deterministic and seed-
+driven, "is every pattern survivable?" becomes a *testable* question. A greedy `Autopilot` plays the game
+from the core's public state — steer toward the emptiest lane, jump lows, slide/air-slam bars, predict
+moving-wall arrival positions — and a unit test runs it across 200 seeds to 6,000 m and asserts **zero
+deaths**. Getting there took five trace-driven autopilot fixes, each found by dumping the last ~44 ticks
+before a death: a jump's arc spans ~27 units at top speed (so the bot air-slams to recover), a tall still
+inside `|z| < 0.95` after passing still blocks its lane (don't drift into a just-passed wall), never cross
+*through* a lane whose tall is in its kill band, and stay put unless a threat is actually bearing down.
+
+The alternative — hand-authoring "safe" patterns and eyeballing them — was rejected because it doesn't
+scale to the looping difficulty curve and can't catch the emergent cases where two independently-fair
+patterns abut at the minimum gap and become a trap. The bot finds those.
+
+Two more details worth calling out: collision logic is extracted into **pure predicates**
+(`lowHit`, `barHit`, `gemPickup`, …) so exact boundary thresholds are unit-tested in isolation from the
+running sim; and the renderer uses **`UnlitMaterial` exclusively**, which means custom meshes
+(octahedron gems, torus magnets, pyramids) need only positions + triangle indices — no normals, no
+lighting setup — built at runtime via `MeshDescriptor`.
+
+Everything compiles under **Swift 6 strict concurrency (`complete`)**, including the RealityKit update
+loop (the `SceneEvents.Update` handler runs on the main thread but isn't statically isolated, so its body
+is wrapped in `MainActor.assumeIsolated`).
+
+---
 
 ## Build & run
 
+Requires Xcode 26+, an iOS 18+ simulator, and [`xcodegen`](https://github.com/yonsm/XcodeGen).
+
 ```bash
-brew install xcodegen          # one-time
-./Tools/build.sh               # xcodegen generate + xcodebuild (Simulator)
-./Tools/qa.sh                  # build → install → launch → screenshot
+brew install xcodegen
+git clone https://github.com/rayancheca/prism-rush-ios
+cd prism-rush-ios
+
+./Tools/build.sh        # xcodegen generate + xcodebuild (Simulator)
+./Tools/qa.sh           # build → install → launch → screenshot
 ```
 
-Default Simulator target is **iPhone 17 Pro (iOS 26.5)**; override with `PR_SIM_NAME` / `PR_SIM_OS` /
-`PR_SIM_UDID`. A real Apple Developer **Team ID** is required only for device builds and App Store
-archiving (Phase 8 — see `state.md`).
+Watch the engine play itself (used for the screenshots above):
+
+```bash
+SIMCTL_CHILD_PR_AUTOPLAY=1 xcrun simctl launch booted com.rayancheca.prismrush
+```
+
+Run the test suite (26 tests incl. the 200-seed solvability bot):
+
+```bash
+xcodebuild test -project PrismRush.xcodeproj -scheme PrismRush \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' CODE_SIGNING_ALLOWED=NO
+```
+
+Device builds / App Store archiving need an Apple Developer **Team ID** in `project.yml`
+(`DEVELOPMENT_TEAM`); simulator builds need nothing.
+
+---
 
 ## Status
 
-Under active construction by Claude Code. Current state, phase gates, and the decision log live in
-`state.md`. _(Live workflow screenshots and the technical deep-dive land in the Phase 8 docs pass.)_
+Built phase-by-phase, each gate verified by a real build + on-device screenshot (see `state.md`).
+
+| Phase | | |
+|---|---|---|
+| 0–1 | Scaffold, contracts, RealityView | ✅ |
+| 2 | Deterministic core + tests (26 green, 200-seed bot) | ✅ |
+| 3 | Gray-box playable (renderer, input, HUD, menu, game-over) | ✅ |
+| 4 | Art pass — world crossfade, decor, character face, procedural meshes | 🔨 in progress |
+| 5–6 | Juice (particles/shake/haptics) · synthesized audio | ⏳ |
+| 7–8 | Soak hardening · ship prep (icon ✅, metadata ✅, archive) | ⏳ |
+
+> The gameplay screenshots are gray-box (Phase 3) with the first procedural meshes wired in; the
+> three-world crossfade and decor land in the Phase 4 art pass.
+
+<div align="center"><sub>Built with Claude Code. No third-party runtime dependencies.</sub></div>

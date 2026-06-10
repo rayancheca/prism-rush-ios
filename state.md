@@ -87,3 +87,6 @@ exist here. Override via `PR_SIM_NAME`/`PR_SIM_OS`/`PR_SIM_UDID`.
 - `phase1`: scaffold + contracts + verified placeholder RealityView.
 - `phase2`: deterministic Core + full test suite green (26 tests; 200-seed solvability bot).
 - `phase3`: RealityKit renderer + SwiftUI shell, gray-box playable. menu/play/over screenshot-verified.
+- `phase4-wip`: procedural meshes (octahedron gem, torus magnet, pyramid) via MeshDescriptor — verified
+  rendering; walkthrough README + `docs/screenshots/` (real autoplay frames); pushed to GitHub
+  (rayancheca/prism-rush-ios, public). Remaining Phase 4: world crossfade, decor, character face.
