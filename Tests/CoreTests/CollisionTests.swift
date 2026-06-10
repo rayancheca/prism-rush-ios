@@ -94,9 +94,21 @@ final class CollisionTests: XCTestCase {
     // MARK: Magnet window
 
     func testMagnetWindow() {
-        XCTAssertTrue(Collisions.magnetActive(z: -12.9))
-        XCTAssertFalse(Collisions.magnetActive(z: -13.0))
+        XCTAssertTrue(Collisions.magnetActive(z: -(Tuning.magnetRange - 0.1)))
+        XCTAssertFalse(Collisions.magnetActive(z: -Tuning.magnetRange))
         XCTAssertTrue(Collisions.magnetActive(z: 1.9))
         XCTAssertFalse(Collisions.magnetActive(z: 2.0))
+    }
+
+    // MARK: CLOSE near-miss band
+
+    func testCloseNearMissBand() {
+        XCTAssertFalse(Collisions.closeNearMiss(dx: 1.24), "inside the kill width is not a near-miss")
+        XCTAssertTrue(Collisions.closeNearMiss(dx: 1.25))
+        XCTAssertTrue(Collisions.closeNearMiss(dx: 1.6))
+        XCTAssertFalse(Collisions.closeNearMiss(dx: 1.95))
+        XCTAssertFalse(Collisions.closeNearMiss(dx: 2.2), "a full lane away must NOT award CLOSE")
+        XCTAssertLessThan(Tuning.nearMissOuter, Tuning.laneX[2] - Tuning.laneX[1],
+                          "outer band must stay below the lane pitch")
     }
 }

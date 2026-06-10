@@ -51,4 +51,10 @@ enum Collisions {
 
     /// Whether a gem at relative `z` is inside the magnet's pull window.
     static func magnetActive(z: Double) -> Bool { z > -Tuning.magnetRange && z < 2 }
+
+    /// CLOSE near-miss band for a passed tall: a genuine squeeze, never a full lane (pitch 2.2) away.
+    static func closeNearMiss(dx: Double) -> Bool {
+        dx >= Tuning.nearMissInner && dx < Tuning.nearMissOuter
+    }
+
 }

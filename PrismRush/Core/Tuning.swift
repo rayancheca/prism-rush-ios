@@ -24,13 +24,17 @@ enum Tuning {
     static let laneHitHalfWidth: Double = 1.25
     static let gemPickup = (dz: 1.0, dx: 1.0, dy: 1.15)
     static let magnetDuration: Double = 6, magnetRange: Double = 13
+    // Post-absorb grace: patterns place twin talls at the same `d`, so a mid-lane-change shield hit
+    // must not let the second wall kill on the same tick (or the next — it's still in the kill band).
+    static let invulnDuration: Double = 0.4
     static let streakPerMult: Int = 8, multCap: Int = 5
     static let spawnHorizon: Double = 115
     static let gapMax: Double = 11, gapMin: Double = 5, diffFullAt: Double = 3200
     static let tickDt: Double = 1.0 / 120.0
 
-    // Near-miss windows (tall passed in this |dx| band → CLOSE bonus).
-    static let nearMissInner: Double = 1.25, nearMissOuter: Double = 2.4
+    // Near-miss windows (tall passed in this |dx| band → CLOSE bonus). The outer edge must stay
+    // below the lane pitch (2.2) or simply standing one lane away auto-awards CLOSE.
+    static let nearMissInner: Double = 1.25, nearMissOuter: Double = 1.95
     // Difficulty gating thresholds for the pattern catalogue (verbatim from the shipped code:
     // `dist<260 ? 5 : (diff<0.45 ? 9 : 11)` patterns selectable; see Spawner).
     static let earlyDistance: Double = 260
@@ -42,7 +46,7 @@ enum Tuning {
     static let recycleCollectibleZ: Double = 8    // gem / pickup behind camera → recycle
     static let pickupZHalf: Double = 1.1, pickupXHalf: Double = 1.1, pickupYHalf: Double = 1.3
     static let magnetGemXRate: Double = 7, magnetGemYRate: Double = 5
-    static let nearMissBonus: Int = 25, gemBaseScore: Int = 10
+    static let nearMissBonus: Int = 40, gemBaseScore: Int = 10
 
     // Spawn / speed lerp factors.
     static let speedLerp: Double = 1.5, overDecel: Double = 22

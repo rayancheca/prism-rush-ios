@@ -48,6 +48,7 @@ final class GameCore {
     @ObservationIgnored private(set) var worldTo: Int = 0
     @ObservationIgnored private(set) var worldBlend: Double = 1
     @ObservationIgnored private(set) var shield: Bool = false
+    @ObservationIgnored private(set) var invulnT: Double = 0   // post-shield-absorb grace window
     @ObservationIgnored private(set) var magnetT: Double = 0
     @ObservationIgnored private(set) var bonus: Int = 0
     @ObservationIgnored private(set) var score: Int = 0
@@ -57,6 +58,8 @@ final class GameCore {
     @ObservationIgnored private(set) var mult: Int = 1
     @ObservationIgnored var best: Int = 0
     @ObservationIgnored private(set) var revivesUsed = 0   // continues taken this run (escalating cost)
+    @ObservationIgnored private var deathDistance: Double = 0   // where the run died (revive scrubs the decel drift)
+    @ObservationIgnored private(set) var usedCheckpoint = false // run began mid-track (not leaderboard-eligible)
 
     @ObservationIgnored private(set) var activeObstacles: [CoreEntity] = []
     @ObservationIgnored private(set) var activeGems: [CoreEntity] = []
@@ -79,22 +82,24 @@ final class GameCore {
 
     /// Begin a run. `best` is preserved; provide a `seed` for deterministic runs (tests / replay).
     /// Begin a run. `startDistance > 0` starts at a reached checkpoint (its world + difficulty), but
-    /// score & coins still count from zero (`scoreOffset`) so leaderboards stay fair.
+    /// score & coins still count from zero (`scoreOffset`). Checkpoint runs still ramp toward the
+    /// end-game speed (66 pts/s) far sooner than a fresh run ever could, so they're strictly better
+    /// for best-score chasing: `usedCheckpoint` flags them and the meta layer MUST skip Game Center
+    /// submission for such runs (local best is fine).
     func startRun(seed: UInt64? = nil, startDistance: Double = 0) {
         let keepBest = best
         reset(seed: seed)
         best = keepBest
         mode = .play
+        speed = Tuning.speedStart   // launch at the base play speed — no sluggish crawl off the line
         if startDistance > 0 {
+            usedCheckpoint = true
             distance = startDistance
             scoreOffset = startDistance
             spawner.cursor = startDistance + 60
             let wn = Int((startDistance / Tuning.worldLength).rounded(.down))
             let wi = ((wn % 3) + 3) % 3
             maxWorld = wn; world = wi; worldFrom = wi; worldTo = wi; worldBlend = 1
-            speed = Tuning.speedStart   // start at base speed and ramp up — no instant high-speed cliff
-        } else {
-            speed = Tuning.menuSpeed   // ramps up immediately under the play target
         }
         rebuildSnapshot()
     }
@@ -107,10 +112,11 @@ final class GameCore {
         rng = SplitMix64(seed: seed ?? .random(in: .min ... .max))
         spawner = Spawner()
         mode = .menu; distance = 0; scoreOffset = 0; speed = Tuning.menuSpeed; revivesUsed = 0
+        deathDistance = 0; usedCheckpoint = false
         px = 0; laneIndex = 1; jumpY = 0; vy = 0; grounded = true; slideT = 0; sy = 1
         bankZ = 0; jumpBuf = 0
         world = 0; maxWorld = 0; worldFrom = 0; worldTo = 0; worldBlend = 1
-        shield = false; magnetT = 0
+        shield = false; invulnT = 0; magnetT = 0
         bonus = 0; score = 0; gemCount = 0; streak = 0; bestStreak = 0; mult = 1
         activeObstacles.removeAll(keepingCapacity: true)
         activeGems.removeAll(keepingCapacity: true)
@@ -122,6 +128,9 @@ final class GameCore {
 
     /// Real-time entry point for the renderer: consumes wall-clock dt in fixed steps.
     func advance(realDt: Double) {
+        // A NaN/inf/negative dt (suspend hiccups, clock jumps) must never reach the accumulator:
+        // `min(NaN, 0.1)` is NaN, which then sticks and bricks the run.
+        guard realDt.isFinite, realDt > 0 else { return }
         accumulator += min(realDt, 0.1)
         while accumulator >= Tuning.tickDt {
             tick(Tuning.tickDt)
@@ -140,6 +149,7 @@ final class GameCore {
         stepGems(dt)
         stepPickups(dt)
         if magnetT > 0 { magnetT = max(0, magnetT - dt) }
+        if invulnT > 0 { invulnT = max(0, invulnT - dt) }
         // Score freezes at death: the post-death decel keeps distance climbing, but the run's
         // score must not. `die()` captures the final value; here we only advance it while playing.
         if mode == .play { score = Int(((distance - scoreOffset) * 2).rounded(.down)) + bonus }
@@ -251,7 +261,7 @@ final class GameCore {
             }
             let ox = obstacleX(e)
 
-            if mode == .play && abs(z) < Tuning.obstacleZHalf {
+            if mode == .play && invulnT <= 0 && abs(z) < Tuning.obstacleZHalf {
                 let hit: Bool
                 switch e.kind {
                 case .bar: hit = Collisions.barHit(playerTop: pb.top, playerBottom: pb.bottom, z: z)
@@ -261,7 +271,9 @@ final class GameCore {
                 }
                 if hit {
                     if shield {
-                        shield = false; streak = 0; mult = 1
+                        // The grace window outlives the kill band: patterns 3/7/9 pair talls at the
+                        // same `d`, and the partner wall stays lethal for several more ticks.
+                        shield = false; invulnT = Tuning.invulnDuration; streak = 0; mult = 1
                         emit(.shieldAbsorbed(x: px))
                         activeObstacles.swapAt(i, activeObstacles.count - 1)
                         activeObstacles.removeLast()
@@ -280,7 +292,7 @@ final class GameCore {
                     switch e.kind {
                     case .tall, .movingTall:
                         let dx = abs(px - ox)
-                        if dx >= Tuning.nearMissInner && dx < Tuning.nearMissOuter {
+                        if Collisions.closeNearMiss(dx: dx) {
                             bonus += Tuning.nearMissBonus * mult
                             emit(.nearMiss(kind: "CLOSE", x: px))
                         }
@@ -361,6 +373,7 @@ final class GameCore {
 
     private func die() {
         score = Int(((distance - scoreOffset) * 2).rounded(.down)) + bonus   // final, frozen score
+        deathDistance = distance
         mode = .over
         streak = 0; mult = 1
         if score > best { best = score }
@@ -370,12 +383,27 @@ final class GameCore {
     /// Debug-only: force an immediate death (used by the `PR_DEMO` screenshot flow).
     func debugForceDie() { if mode == .play { die() } }
 
+    /// Test/diagnostic hook: wipe every live entity and park the spawner so hand-built scenarios
+    /// (`debugSpawn`) run with zero procedural interference.
+    func debugClearTrack() {
+        activeObstacles.removeAll(keepingCapacity: true)
+        activeGems.removeAll(keepingCapacity: true)
+        activePickups.removeAll(keepingCapacity: true)
+        spawner.cursor = .greatestFiniteMagnitude
+    }
+
+    /// Test/diagnostic hook: place a single spawn command directly (same path as the spawner).
+    func debugSpawn(_ cmd: SpawnCmd) { apply(cmd) }
+
     /// Continue after death (the UI charges coins). Clears the field, re-centres the player, grants a
     /// one-hit shield, and respawns well ahead so the continue isn't an instant re-death.
     func revive() {
         guard mode == .over else { return }
         revivesUsed += 1
         mode = .play
+        // Distance kept integrating during the death decel; fold that drift into the offset so the
+        // score (and coin payout) resumes exactly where it froze — no free post-death points.
+        scoreOffset += distance - deathDistance
         laneIndex = 1; px = Tuning.laneX[1]
         jumpY = 0; vy = 0; grounded = true; slideT = 0; sy = 1
         shield = true
