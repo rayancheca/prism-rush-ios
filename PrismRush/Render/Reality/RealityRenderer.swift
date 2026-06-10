@@ -99,16 +99,16 @@ final class RealityRenderer: RendererPort {
         playerRig.position = SIMD3<Float>(px, Float(snap.playerY), 0)
         let sy = Float(snap.playerScaleY)
         var sx = 1 + (1 - sy) * 0.45
-        if snap.sliding { sx *= 1.35 }                       // flatten wider into a pancake
+        if snap.sliding { sx *= 1.55 }                       // flatten dramatically into a pancake
         playerRig.scale = SIMD3<Float>(sx, sy, sx)
         let bankQ = simd_quatf(angle: Float(snap.bankZ), axis: SIMD3<Float>(0, 0, 1))
-        let leanQ = simd_quatf(angle: snap.sliding ? -0.6 : 0, axis: SIMD3<Float>(1, 0, 0))
+        let leanQ = simd_quatf(angle: snap.sliding ? -0.85 : 0, axis: SIMD3<Float>(1, 0, 0))
         playerRig.orientation = bankQ * leanQ
 
-        // Ground dust kicked up during a slide so it's unmistakable.
-        if snap.mode == .play, snap.sliding, snap.grounded {
-            particles.burst(x: px + Float.random(in: -0.35...0.35), y: 0.12, z: 0.45,
-                            color: tintAccent, count: 3, power: 1.6, spread: 0.12, life: 0.32)
+        // Dust kicked up during a slide — grounded OR mid air-slam — so it's unmistakable.
+        if snap.mode == .play, snap.sliding {
+            particles.burst(x: px + Float.random(in: -0.4...0.4), y: 0.12, z: 0.5,
+                            color: tintAccent, count: 6, power: 1.8, spread: 0.18, life: 0.45)
         }
 
         // Grid scroll.

@@ -19,6 +19,7 @@ struct MetaScreenScaffold<Content: View>: View {
                         .background(.ultraThinMaterial, in: Circle())
                         .overlay(Circle().strokeBorder(.white.opacity(0.14)))
                 }
+                .accessibilityIdentifier("closeSheetButton")
                 Spacer()
                 Text(title)
                     .font(.system(size: 20, weight: .heavy, design: .rounded))

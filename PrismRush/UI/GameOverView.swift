@@ -4,7 +4,9 @@ import SwiftUI
 struct GameOverView: View {
     let snapshot: GameSnapshot
     let coinsEarned: Int
+    let canRestart: Bool
     let onRestart: () -> Void
+    let onHome: () -> Void
 
     private var isNewBest: Bool { snapshot.score >= snapshot.best && snapshot.score > 0 }
     private var worldReached: String {
@@ -48,7 +50,7 @@ struct GameOverView: View {
             .padding(.top, 14)
 
             Button(action: onRestart) {
-                Text("RUN AGAIN")
+                Text(canRestart ? "RUN AGAIN" : "READY…")
                     .font(.system(size: 17, weight: .heavy, design: .rounded))
                     .tracking(2)
                     .foregroundStyle(.black)
@@ -61,7 +63,23 @@ struct GameOverView: View {
                     )
                     .shadow(color: Theme.color(0x00F5FF).opacity(0.35), radius: 20)
             }
+            .disabled(!canRestart)
+            .opacity(canRestart ? 1 : 0.55)
+            .accessibilityIdentifier("runAgainButton")
             .padding(.top, 22)
+
+            Button(action: onHome) {
+                Text("BACK TO MENU")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .tracking(1)
+                    .foregroundStyle(.white.opacity(0.85))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.14)))
+            }
+            .accessibilityIdentifier("backToMenuButton")
+            .padding(.top, 10)
         }
         .foregroundStyle(.white)
         .padding(30)

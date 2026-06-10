@@ -5,8 +5,10 @@ import AuthenticationServices
 /// and Restore Purchases.
 struct ProfileView: View {
     let model: GameModel
-    @State private var account = AccountService.shared
-    @State private var gc = GameCenterService.shared
+    // @Observable singletons are read directly in `body` so observation tracks them. (Wrapping them
+    // in @State snapshots the reference and breaks re-render on change — the sign-in/equip bugs.)
+    private let account = AccountService.shared
+    private let gc = GameCenterService.shared
     @State private var restoring = false
 
     var body: some View {
@@ -44,6 +46,12 @@ struct ProfileView: View {
                     .signInWithAppleButtonStyle(.white)
                     .frame(height: 50)
                     .clipShape(RoundedRectangle(cornerRadius: 14))
+                if let error = account.lastError {
+                    Text(error)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color(red: 1, green: 0.4, blue: 0.4))
+                        .multilineTextAlignment(.center)
+                }
             }
         }
         .padding(16)

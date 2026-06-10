@@ -32,9 +32,9 @@ enum Autopilot {
             case .tall:
                 lanes = [o.lane]
             case .movingTall:
-                // At the collision plane (dist ≈ d) the wall sits at sin(phase)*2.2; widen the
+                // At the collision plane (dist ≈ d) the wall sits at sin(phase)*amplitude; widen the
                 // blocked band to cover its sweep across the ~1.9-unit kill depth.
-                let ax = sin(o.phase) * 2.2
+                let ax = sin(o.phase) * Tuning.movingWallAmplitude
                 lanes = (0..<3).filter { abs(laneX[$0] - ax) < Tuning.laneHitHalfWidth + 0.7 }
             default:
                 continue

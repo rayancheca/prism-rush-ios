@@ -86,9 +86,11 @@ enum Patterns {
             out.append(.low(d: b + 24, lane: 0)); out.append(.low(d: b + 24, lane: 1)); out.append(.low(d: b + 24, lane: 2))
             gemArc(b + 20, free, &out); gemLine(b + 27, free, 4, &out); return 34
 
-        case 10: // moving walls x2, gem lines between
-            out.append(.movingTall(d: b + 9, phase: rng.range(0, 6.28))); gemLine(b + 1, 0, 3, &out)
-            out.append(.movingTall(d: b + 22, phase: rng.range(0, 6.28))); gemLine(b + 14, 2, 3, &out); return 32
+        case 10: // moving walls x2 — phase 0 puts each wall at CENTER on its collision plane, so the
+                 // gem-lined outer lanes (0 and 2) are always the safe, readable escape. The wall still
+                 // oscillates visually on approach; amplitude 1.6 guarantees a clear lane.
+            out.append(.movingTall(d: b + 9, phase: 0)); gemLine(b + 1, 0, 3, &out)
+            out.append(.movingTall(d: b + 22, phase: 0)); gemLine(b + 14, 2, 3, &out); return 32
 
         default:
             return 14

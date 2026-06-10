@@ -20,6 +20,7 @@ struct CharacterSelectView: View {
                     }
                 }
             }
+            .id(profile.selectedSkin)   // re-render the grid the instant the equipped skin changes
         }
     }
 }
@@ -51,6 +52,8 @@ private struct SkinCard: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("skin_\(skin.id)")
+        .accessibilityValue(equipped ? "equipped" : (owned ? "owned" : "locked"))
     }
 
     @ViewBuilder private var status: some View {

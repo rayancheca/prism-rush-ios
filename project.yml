@@ -29,6 +29,9 @@ targets:
       path: PrismRush/Support/PrismRush.entitlements
       properties:
         com.apple.developer.game-center: true
+        com.apple.developer.applesignin:
+          - Default
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.rayancheca.prismrush
@@ -46,6 +49,17 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.rayancheca.prismrush.tests
+  PrismRushUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: PrismRush
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rayancheca.prismrush.uitests
+        CODE_SIGNING_ALLOWED: NO
 schemes:
   PrismRush:
     build:
@@ -58,4 +72,5 @@ schemes:
     test:
       targets:
         - PrismRushTests
+        - PrismRushUITests
       gatherCoverageData: true

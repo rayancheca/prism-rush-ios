@@ -91,7 +91,7 @@ final class GameCore {
             let wn = Int((startDistance / Tuning.worldLength).rounded(.down))
             let wi = ((wn % 3) + 3) % 3
             maxWorld = wn; world = wi; worldFrom = wi; worldTo = wi; worldBlend = 1
-            speed = min(Tuning.speedCap, Tuning.speedStart + startDistance * Tuning.speedRamp)
+            speed = Tuning.speedStart   // start at base speed and ramp up — no instant high-speed cliff
         } else {
             speed = Tuning.menuSpeed   // ramps up immediately under the play target
         }
@@ -165,7 +165,8 @@ final class GameCore {
     func slide() {
         guard mode == .play else { return }
         slideT = Tuning.slideDuration
-        if !grounded { vy = Tuning.slamVy }   // air slam
+        sy = Tuning.slideScaleY               // snap to the low slide profile immediately (responsive +
+        if !grounded { vy = Tuning.slamVy }   // avoids the mid-lerp window where a bar still clips you)
         emit(.slid(x: px))
     }
 
@@ -231,7 +232,7 @@ final class GameCore {
     private func obstacleX(_ e: CoreEntity) -> Double {
         switch e.kind {
         case .bar: return 0
-        case .movingTall: return sin((distance - e.d) * 0.32 + e.phase) * 2.2
+        case .movingTall: return sin((distance - e.d) * Tuning.movingWallFreq + e.phase) * Tuning.movingWallAmplitude
         default: return Tuning.laneX[e.lane]
         }
     }

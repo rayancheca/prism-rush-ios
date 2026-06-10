@@ -10,8 +10,14 @@ enum Tuning {
     static let menuSpeed: Double = 7
     static let jumpV0: Double = 10.6, gravity: Double = 26
     static let laneLerpRate: Double = 12
-    static let slideDuration: Double = 0.55, slideScaleY: Double = 0.45, slamVy: Double = -14
-    static let jumpBuffer: Double = 0.14
+    static let slideDuration: Double = 0.55, slideScaleY: Double = 0.38, slamVy: Double = -14
+    static let jumpBuffer: Double = 0.25   // widened for human reaction + iOS touch latency
+
+    // Moving wall (pattern 10): deterministic phase + smaller amplitude + slower sweep so a human can
+    // read it and a safe lane always exists; only spawns once the player has acclimated (diff >= 0.6).
+    static let movingWallAmplitude: Double = 1.6
+    static let movingWallFreq: Double = 0.22
+    static let movingWallMinDiff: Double = 0.6
     static let bodyRadius: Double = 0.62, groundedCenterY: Double = 0.66
     static let lowKillTop: Double = 0.85
     static let barKillBottom: Double = 0.95, barKillTop: Double = 1.65
@@ -40,7 +46,7 @@ enum Tuning {
 
     // Spawn / speed lerp factors.
     static let speedLerp: Double = 1.5, overDecel: Double = 22
-    static let bankRate: Double = 0.32, bankLerp: Double = 10, slideLerp: Double = 14
+    static let bankRate: Double = 0.32, bankLerp: Double = 10, slideLerp: Double = 20
     static let landSquashY: Double = 0.68, airStretchY: Double = 1.18, airHoldY: Double = 1.12
 
     // Pool caps — bound the live entity count (renderer pools mirror these).

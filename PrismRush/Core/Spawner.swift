@@ -19,7 +19,9 @@ struct Spawner {
     static func maxIndex(forDistance dist: Double) -> Int {
         let diff = min(1, dist / Tuning.diffFullAt)
         if dist < Tuning.earlyDistance { return 5 }
-        return diff < Tuning.midDiff ? 9 : Patterns.count
+        if diff < Tuning.midDiff { return 9 }
+        if diff < Tuning.movingWallMinDiff { return 10 }  // patterns 1...10 — no moving walls yet
+        return Patterns.count                              // everything, incl. moving walls (index 10)
     }
 
     /// Place patterns until the cursor reaches `horizon`. `emit` receives each spawn command.

@@ -9,6 +9,7 @@ final class AccountService {
 
     private(set) var userID: String?
     private(set) var displayName: String?
+    private(set) var lastError: String?
 
     private enum Key { static let id = "pr.appleUserID"; static let name = "pr.appleName" }
 
@@ -24,13 +25,24 @@ final class AccountService {
     }
 
     func handle(_ result: Result<ASAuthorization, Error>) {
-        guard case .success(let auth) = result,
-              let credential = auth.credential as? ASAuthorizationAppleIDCredential else { return }
-        userID = credential.user
-        UserDefaults.standard.set(credential.user, forKey: Key.id)
-        if let given = credential.fullName?.givenName {
-            displayName = given
-            UserDefaults.standard.set(given, forKey: Key.name)
+        lastError = nil
+        switch result {
+        case .failure(let error):
+            // A user cancellation is not an error worth showing.
+            if let authError = error as? ASAuthorizationError, authError.code == .canceled { return }
+            lastError = error.localizedDescription
+        case .success(let auth):
+            guard let credential = auth.credential as? ASAuthorizationAppleIDCredential,
+                  !credential.user.isEmpty else {
+                lastError = "Sign in didn't return an account."
+                return
+            }
+            userID = credential.user
+            UserDefaults.standard.set(credential.user, forKey: Key.id)
+            if let given = credential.fullName?.givenName {
+                displayName = given
+                UserDefaults.standard.set(given, forKey: Key.name)
+            }
         }
     }
 

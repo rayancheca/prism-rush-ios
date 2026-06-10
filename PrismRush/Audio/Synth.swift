@@ -69,7 +69,10 @@ enum Synth {
     }
 
     static func slide() -> [Float] {
-        var b = blank(0.14); noise(&b, dur: 0.12, vol: 0.13, cutoff: 900); return b
+        var b = blank(0.16)
+        noise(&b, dur: 0.13, vol: 0.20, cutoff: 600)        // louder, deeper whoosh
+        tone(&b, 180, 120, dur: 0.12, .sine, vol: 0.10)     // percussive low "thud" anchor
+        return b
     }
 
     static func crash() -> [Float] {

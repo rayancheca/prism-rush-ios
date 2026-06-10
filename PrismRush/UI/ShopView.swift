@@ -4,7 +4,7 @@ import SwiftUI
 /// Prices come from StoreKit when loaded, else the catalog fallback. Purchases grant via IAPManager.
 struct ShopView: View {
     let model: GameModel
-    @State private var iap = IAPManager.shared
+    private let iap = IAPManager.shared    // read directly so @Observable product loads re-render
     @State private var busy: String?
 
     var body: some View {

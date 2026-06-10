@@ -43,8 +43,8 @@ final class GameModel {
     private(set) var bannerOrdinal = 0
     private(set) var lastCoinsEarned = 0
 
-    /// Restart is allowed a short beat after death (avoids the death tap instantly restarting).
-    var canRestart: Bool { overTime > 0.5 }
+    /// Restart is allowed a beat after death (lets the death moment land; avoids accidental restart).
+    var canRestart: Bool { overTime > 1.0 }
 
     func install(_ content: RealityViewCameraContent) {
         renderer.install(into: content)
@@ -57,6 +57,7 @@ final class GameModel {
                 $0.coins = max($0.coins, 8000)
                 $0.maxWorldReached = max($0.maxWorldReached, 6)
                 $0.ownedSkins.formUnion(["ember", "void"])
+                $0.selectedSkin = "default"   // deterministic start state for UI tests/screenshots
             }
         }
         let profile = ProfileStore.shared.profile
@@ -112,6 +113,15 @@ final class GameModel {
         activeSheet = nil
         synth.musicStart()
         synth.playSFX(Synth.startChime())
+    }
+
+    /// Abandon the current run/over state and return to the menu hub (the "BACK TO MENU" path).
+    func returnToMenu() {
+        core.reset(seed: nil)
+        renderer.resetEntities()
+        synth.musicStop()
+        activeSheet = nil
+        overTime = 0
     }
 
     // MARK: effects
@@ -284,7 +294,11 @@ struct GameView: View {
                              onProfile: { model.open(.stats) })
                 }
             case .over:
-                GameOverView(snapshot: model.core.snapshot, coinsEarned: model.lastCoinsEarned) { model.startRun() }
+                GameOverView(snapshot: model.core.snapshot,
+                             coinsEarned: model.lastCoinsEarned,
+                             canRestart: model.canRestart,
+                             onRestart: { model.startRun() },
+                             onHome: { model.returnToMenu() })
             case .play:
                 EmptyView()
             }

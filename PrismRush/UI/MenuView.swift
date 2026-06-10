@@ -29,6 +29,7 @@ struct MenuView: View {
                         .overlay(Circle().strokeBorder(.white.opacity(0.14)))
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("profileButton")
                 Spacer()
                 CoinBadge(amount: coins)
                     .font(.system(size: 15, weight: .bold, design: .rounded))
@@ -73,6 +74,7 @@ struct MenuView: View {
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 8)
+            .accessibilityIdentifier("playButton")
 
             HStack(spacing: 12) {
                 hubButton("person.fill", "Characters", action: onCharacters)
@@ -119,5 +121,6 @@ struct MenuView: View {
             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.14)))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("\(title.lowercased())Button")
     }
 }
