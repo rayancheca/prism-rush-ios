@@ -31,10 +31,10 @@ final class Music {
         beat = 0
         scheduledFrames = 0
         playing = true
-        vol = 0.0001
+        vol = 0.08                     // start just audible so the run-start beat lands
         targetVol = 0.85
-        fadeRate = 0.85 / 1.2          // fade in over 1.2 s
-        mixer.outputVolume = 0
+        fadeRate = 0.85 / 0.5          // fade in over ~0.5 s
+        mixer.outputVolume = vol
         player.play()
     }
 

@@ -31,6 +31,7 @@ struct MenuView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("profileButton")
+                .accessibilityLabel("Profile")
                 Spacer()
                 CoinBadge(amount: coins)
                     .font(.system(size: 15, weight: .bold, design: .rounded))

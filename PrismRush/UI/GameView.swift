@@ -278,8 +278,8 @@ final class GameModel {
         let adx = abs(t.width), ady = abs(t.height)
         if max(adx, ady) < 22 {
             switch core.mode {
-            case .menu: break                       // the menu PLAY button starts a run
-            case .over: if canRestart { startRun() }
+            case .menu: break    // the menu PLAY button starts a run
+            case .over: break    // game-over uses explicit CONTINUE / RUN AGAIN / MENU buttons
             case .play: core.jump()
             }
             return
@@ -340,6 +340,7 @@ struct GameView: View {
                             .background(.ultraThinMaterial, in: Circle())
                             .overlay(Circle().strokeBorder(.white.opacity(0.14)))
                     }
+                    .accessibilityLabel(model.muted ? "Unmute" : "Mute")
                     if model.core.snapshot.mode == .play {
                         Button { model.togglePause() } label: {
                             Image(systemName: "pause.fill")
@@ -350,6 +351,7 @@ struct GameView: View {
                                 .overlay(Circle().strokeBorder(.white.opacity(0.14)))
                         }
                         .accessibilityIdentifier("pauseButton")
+                        .accessibilityLabel("Pause")
                     }
                 }
                 Spacer()

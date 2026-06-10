@@ -1,4 +1,5 @@
 import AVFoundation
+import os
 
 /// AVAudioEngine graph for fully-synthesized audio (no asset files). A pool of player nodes plays
 /// one-shot SFX buffers through `sfxMixer`; `Music` streams step buffers through `musicMixer`
@@ -14,11 +15,14 @@ final class SynthEngine {
     private let format: AVAudioFormat
     private let music: Music
     private var started = false
+    private let log = Logger(subsystem: "com.rayancheca.prismrush", category: "audio")
 
     var muted = false { didSet { engine.mainMixerNode.outputVolume = muted ? 0 : 1 } }
 
     init() {
-        format = AVAudioFormat(standardFormatWithSampleRate: Double(Synth.sampleRate), channels: 1)!
+        // Prefer the synth rate; fall back to a universally-supported 44.1 kHz mono rather than crash.
+        format = AVAudioFormat(standardFormatWithSampleRate: Double(Synth.sampleRate), channels: 1)
+            ?? AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
 
         engine.attach(sfxMixer)
         engine.attach(musicMixer)
@@ -52,6 +56,7 @@ final class SynthEngine {
             started = true
         } catch {
             started = false
+            log.error("Audio engine failed to start: \(error.localizedDescription, privacy: .public)")
         }
     }
 
