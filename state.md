@@ -1,10 +1,10 @@
 # PRISM RUSH — Build State
 
 > Single source of truth for session resumability. On any fresh session: read this first, then continue.
-> Last updated: end of Phase 5.
+> Last updated: end of Phase 6.
 
 ## Current phase
-**Phase 5 COMPLETE → entering Phase 6 (synthesized audio).**
+**Phase 6 COMPLETE → entering Phase 7 (QA soak hardening).**
 
 ## Environment (probed Phase 0)
 | Fact | Value |
@@ -50,15 +50,20 @@ exist here. Override via `PR_SIM_NAME`/`PR_SIM_OS`/`PR_SIM_UDID`.
       white flash frames); `Haptics` service (UIFeedbackGenerator map). All screenshot-verified (trail +
       shatter + banner + CLOSE all captured). 26 tests green.
 
-## Next 3 actions (Phase 6 — synthesized audio)
-1. **SynthEngine** (`Audio/`) — AVAudioEngine graph: `sfxGain` + `musicGain` (ducked under SFX) → master.
-    SFX: gem blip (square 560Hz×1.045^streak), jump sine sweep, slide noise LP, crash, shield/magnet chime,
-    world-change saw sweep. Route from `GameModel.handleFX`.
-2. **Music** — 132 BPM synthwave on 8th notes (kick/hat/saw bass on `[0,0,2,1,0,0,3,2]`, arp from World 2),
-    per-world root shift `[0,+2,-2]` + LP open `500+world*250`. Schedule sample-accurately against
-    `AVAudioTime` (NOT wall-clock). Fade in 1.2s on run start, out 0.8s on death.
-3. **Mute persistence** (`UserDefaults pr.muted`) + sound button; CLI harness rendering 2s of each SFX to
-    `reports/audio/*.wav` for review. Gate: 5-min soak with audio, no engine stalls.
+- [x] **Phase 6** — `Synth` (pure-Foundation DSP, unit-tested), `SynthEngine` (AVAudioEngine: 10-node SFX
+      pool + ducked music mixer, `.ambient` session), `Music` (contiguous 8th-note step buffers → sample-
+      accurate, no wall-clock drift; refilled + faded from the game loop), `Persistence` (best + mute).
+      SFX/music routed from `GameModel.handleFX`; mute button + persisted best score wired. `SynthTests`
+      green; all SFX/music rendered to `reports/audio/*.wav` and verified (correct durations + non-silent).
+
+## Next 3 actions (Phase 7 — QA soak / Phase 8 — ship)
+1. **Soak** — 15-min autoplay run; assert bounded live entity count each minute (no leaks/growth trend) and
+    no AVAudioEngine stalls in logs. Write `reports/SOAK.md`.
+2. **Ship — icon/screenshots** — wire `Store/icon_1024.png` into an `AppIcon.appiconset`; capture App Store
+    screenshots at 6.9" (17 Pro Max) via `Tools/screenshots.sh` (6.5" sim absent — flag).
+3. **Ship — archive** — `xcodebuild archive` + `-exportArchive` (method app-store-connect) with an export
+    options plist. HUMAN GATES: Team ID, ASC app record + Game Center leaderboard `prismrush.best`, name
+    availability, signed upload. (GameCenterService still TODO — lazy auth on first game-over.)
 
 ## Resolved polish backlog
 - Gems are now octahedrons, magnet a torus (procedural meshes). ✓
@@ -106,6 +111,8 @@ exist here. Override via `PR_SIM_NAME`/`PR_SIM_OS`/`PR_SIM_UDID`.
   README updated with 3-world walkthrough.
 - `phase5`: juice — pooled particles, screen shake, score popups, world banner, flash, haptics.
   Banner+near-miss+crossfade hero shot captured; README refreshed.
+- `phase6`: synthesized audio (Synth/SynthEngine/Music) + Persistence (best/mute) + mute button. SFX/music
+  rendered to reports/audio/*.wav and verified; SynthTests green (29 tests total).
 
 ## Note on running tests
 NEVER drive screenshots / `simctl launch` on the dev sim (10C15FE0) while `xcodebuild test` runs on it —

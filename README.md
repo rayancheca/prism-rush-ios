@@ -161,10 +161,11 @@ Built phase-by-phase, each gate verified by a real build + on-device screenshot 
 | 3 | Gray-box playable (renderer, input, HUD, menu, game-over) | ✅ |
 | 4 | Art pass — 3-world crossfade, per-world decor, character, procedural meshes | ✅ |
 | 5 | Juice — pooled particles, screen shake, score popups, world banner, haptics | ✅ |
-| 6 | Synthesized 132 bpm synthwave soundtrack + SFX (AVAudioEngine) | 🔨 next |
-| 7–8 | Soak hardening · ship prep (icon ✅, metadata ✅, archive) | ⏳ |
+| 6 | Synthesized 132 bpm synthwave + SFX (AVAudioEngine), best-score/mute persistence | ✅ |
+| 7–8 | Soak hardening · ship prep (icon ✅, metadata ✅, archive) | 🔨 next |
 
-> Next up: a fully synthesized 132 bpm synthwave soundtrack with per-world layers and full SFX,
-> generated at runtime with AVAudioEngine — still zero asset files.
+> Everything you hear is synthesized at runtime with AVAudioEngine — a 132 bpm synthwave bed
+> (kick / hi-hat / saw bass / per-world arp) plus every SFX, still zero asset files. Next: soak
+> hardening and the App Store archive (icon and metadata are already generated).
 
 <div align="center"><sub>Built with Claude Code. No third-party runtime dependencies.</sub></div>

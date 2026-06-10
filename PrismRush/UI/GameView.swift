@@ -11,7 +11,9 @@ final class GameModel {
     let core = GameCore()
     @ObservationIgnored let renderer = RealityRenderer()
     @ObservationIgnored let haptics = Haptics()
+    @ObservationIgnored let synth = SynthEngine()
     @ObservationIgnored private var sub: EventSubscription?
+    private(set) var muted = false
     @ObservationIgnored private var overTime: Double = 0
     @ObservationIgnored private var demoElapsed: Double = 0
     @ObservationIgnored private var demoDied = false
@@ -42,6 +44,10 @@ final class GameModel {
     func install(_ content: RealityViewCameraContent) {
         renderer.install(into: content)
         haptics.prepare()
+        synth.start()
+        synth.muted = Persistence.muted
+        muted = synth.muted
+        core.best = Persistence.bestScore
         core.onFX = { [weak self] fx in self?.handleFX(fx) }
         if autoplay || demo { core.startRun(seed: 7) }
 
@@ -66,6 +72,7 @@ final class GameModel {
                 self.core.advance(realDt: dt)
                 self.renderer.advanceVisuals(dt)
                 self.renderer.sync(self.core.snapshot)
+                self.synth.musicPump(dt: dt, world: self.core.snapshot.worldTo)
                 self.overTime = self.core.mode == .over ? self.overTime + dt : 0
                 self.ageEffects()
             }
@@ -77,6 +84,8 @@ final class GameModel {
         renderer.resetEntities()
         overTime = 0
         popups.removeAll()
+        synth.musicStart()
+        synth.playSFX(Synth.startChime())
     }
 
     // MARK: effects
@@ -88,23 +97,41 @@ final class GameModel {
         case let .gemCollected(x, _, streak):
             let mult = min(5, 1 + streak / 8)
             addPopup("+\(10 * mult)", color: Theme.color(0xFFD23D), worldX: x)
+            synth.playSFX(Synth.gem(streak: streak))
         case let .nearMiss(kind, x):
             addPopup(kind, color: kind == "CLOSE" ? Theme.color(0x00F5FF) : Theme.color(0xFFD23D), worldX: x)
+            synth.playSFX(Synth.close())
         case let .pickup(kind, x, _):
             addPopup(kind == .shield ? "SHIELD" : "MAGNET", color: .white, worldX: x)
             flash(kind == .shield ? 0.18 : 0.15)
+            synth.playSFX(Synth.chime())
         case let .shieldAbsorbed(x):
             addPopup("SHIELDED", color: .white, worldX: x)
             flash(0.25)
+            synth.playSFX(Synth.chime())
         case .died:
             flash(0.5)
+            synth.playSFX(Synth.crash())
+            synth.musicStop()
+            Persistence.bestScore = core.best
         case let .worldChanged(index, ordinal):
             bannerName = Theme.worlds[index % 3].name
             bannerOrdinal = ordinal
             bannerID += 1
-        case .jumped, .slid, .landed, .laneChanged:
+            synth.playSFX(Synth.worldSweep())
+        case .jumped:
+            synth.playSFX(Synth.jump())
+        case .slid:
+            synth.playSFX(Synth.slide())
+        case .landed, .laneChanged:
             break
         }
+    }
+
+    func toggleMute() {
+        muted.toggle()
+        synth.muted = muted
+        Persistence.muted = muted
     }
 
     private func addPopup(_ text: String, color: Color, worldX: Double) {
@@ -160,6 +187,19 @@ struct GameView: View {
                 .ignoresSafeArea()
 
             HUDView(core: model.core)
+
+            VStack {
+                Button { model.toggleMute() } label: {
+                    Image(systemName: model.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .frame(width: 38, height: 38)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(Circle().strokeBorder(.white.opacity(0.14)))
+                }
+                Spacer()
+            }
+            .padding(.top, 14)
 
             switch model.core.snapshot.mode {
             case .menu:
