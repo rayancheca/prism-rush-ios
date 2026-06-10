@@ -1,0 +1,70 @@
+{
+  "identifier" : "B1A2C3D4",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "1001",
+      "localizations" : [
+        { "description" : "1,200 coins", "displayName" : "Pouch of Coins", "locale" : "en_US" }
+      ],
+      "productID" : "com.rayancheca.prismrush.coins.small",
+      "referenceName" : "Pouch of Coins",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "1002",
+      "localizations" : [
+        { "description" : "7,000 coins", "displayName" : "Bag of Coins", "locale" : "en_US" }
+      ],
+      "productID" : "com.rayancheca.prismrush.coins.medium",
+      "referenceName" : "Bag of Coins",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "internalID" : "1003",
+      "localizations" : [
+        { "description" : "16,000 coins", "displayName" : "Vault of Coins", "locale" : "en_US" }
+      ],
+      "productID" : "com.rayancheca.prismrush.coins.large",
+      "referenceName" : "Vault of Coins",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "2.99",
+      "familyShareable" : false,
+      "internalID" : "1004",
+      "localizations" : [
+        { "description" : "Earn 2x coins, forever", "displayName" : "Double Coins", "locale" : "en_US" }
+      ],
+      "productID" : "com.rayancheca.prismrush.doublecoins",
+      "referenceName" : "Double Coins",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "1.99",
+      "familyShareable" : false,
+      "internalID" : "1005",
+      "localizations" : [
+        { "description" : "Exclusive Aurora character", "displayName" : "Aurora Skin", "locale" : "en_US" }
+      ],
+      "productID" : "com.rayancheca.prismrush.skin.aurora",
+      "referenceName" : "Aurora Skin",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

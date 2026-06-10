@@ -52,6 +52,9 @@ schemes:
       targets:
         PrismRush: all
         PrismRushTests: [test]
+    run:
+      config: Debug
+      storeKitConfiguration: Products.storekit
     test:
       targets:
         - PrismRushTests

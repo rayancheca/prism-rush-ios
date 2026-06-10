@@ -50,6 +50,7 @@ final class GameModel {
         renderer.install(into: content)
         haptics.prepare()
         synth.start()
+        IAPManager.shared.start()
         if ProcessInfo.processInfo.environment["PR_DEMOPROFILE"] == "1" {
             ProfileStore.shared.mutate {
                 $0.coins = max($0.coins, 8000)
@@ -232,9 +233,10 @@ struct GameView: View {
             CharacterSelectView(model: model)
         case .levels:
             LevelSelectView(model: model)
-        case .shop, .stats:
-            let title = sheet == .shop ? "Shop" : "Stats"
-            MetaScreenScaffold(title: title, coins: ProfileStore.shared.profile.coins, onClose: { model.closeSheet() }) {
+        case .shop:
+            ShopView(model: model)
+        case .stats:
+            MetaScreenScaffold(title: "Stats", coins: ProfileStore.shared.profile.coins, onClose: { model.closeSheet() }) {
                 VStack(spacing: 12) {
                     Image(systemName: "hammer.fill").font(.system(size: 42)).foregroundStyle(.white.opacity(0.4))
                     Text("Coming soon").font(.system(size: 16, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.6))

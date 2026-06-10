@@ -16,7 +16,11 @@
 - [x] **E3** — menu hub (PLAY + Characters/Shop/Worlds nav) + Character-select grid (procedural skin
       previews, buy/equip with coins, equipped state). `MetaScreenScaffold`/`CoinBadge`/`CharacterSwatch`
       shared chrome. `PR_SCREEN` debug flag opens a sheet for screenshots. Both screenshot-verified.
-- [ ] **E4** — Shop + StoreKit 2 IAP (coin packs, double-coins, bundles) + a `.storekit` test config.
+- [x] **E4** — Shop + StoreKit 2 IAP. `IAP/`: `IAPCatalog` (5 products → coins/doubleCoins/skin grants),
+      `IAPManager` (@Observable: load products, verified purchase, grant→ProfileStore, restore entitlements,
+      `Transaction.updates` listener). `ShopView` grid (real `displayPrice` when loaded, else fallback).
+      `Products.storekit` local config wired into the scheme (`storeKitConfiguration`) so purchases work
+      from Xcode/sim. Screenshot-verified. REAL purchases need ASC products + IAP capability (human gate).
 - [x] **E5a** — Level select / checkpoint start: `GameCore.startRun(startDistance:)` begins at a reached
       world's difficulty/palette while `scoreOffset` keeps score & coins counting from zero. `LevelSelectView`
       grid (per-world color, "Nm in", furthest highlighted). `PR_DEMOPROFILE` debug seeds progression for
