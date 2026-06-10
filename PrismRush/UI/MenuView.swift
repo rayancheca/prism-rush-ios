@@ -8,6 +8,7 @@ struct MenuView: View {
     let onCharacters: () -> Void
     let onShop: () -> Void
     let onLevels: () -> Void
+    let onProfile: () -> Void
 
     @State private var pulse = false
 
@@ -19,6 +20,15 @@ struct MenuView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
+                Button(action: onProfile) {
+                    Image(systemName: "person.crop.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .frame(width: 40, height: 40)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(Circle().strokeBorder(.white.opacity(0.14)))
+                }
+                .buttonStyle(.plain)
                 Spacer()
                 CoinBadge(amount: coins)
                     .font(.system(size: 15, weight: .bold, design: .rounded))

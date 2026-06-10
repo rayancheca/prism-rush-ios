@@ -51,6 +51,7 @@ final class GameModel {
         haptics.prepare()
         synth.start()
         IAPManager.shared.start()
+        GameCenterService.shared.authenticate()
         if ProcessInfo.processInfo.environment["PR_DEMOPROFILE"] == "1" {
             ProfileStore.shared.mutate {
                 $0.coins = max($0.coins, 8000)
@@ -187,6 +188,7 @@ final class GameModel {
         lastCoinsEarned = coins
         store.recordRun(score: core.score, distance: core.distance, gems: core.gemCount,
                         bestStreak: core.bestStreak, maxWorld: core.maxWorld, coinsEarned: coins)
+        GameCenterService.shared.submit(store.profile.bestScore)
     }
 
     private func addPopup(_ text: String, color: Color, worldX: Double) {
@@ -236,13 +238,7 @@ struct GameView: View {
         case .shop:
             ShopView(model: model)
         case .stats:
-            MetaScreenScaffold(title: "Stats", coins: ProfileStore.shared.profile.coins, onClose: { model.closeSheet() }) {
-                VStack(spacing: 12) {
-                    Image(systemName: "hammer.fill").font(.system(size: 42)).foregroundStyle(.white.opacity(0.4))
-                    Text("Coming soon").font(.system(size: 16, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.6))
-                }
-                .padding(.top, 120)
-            }
+            ProfileView(model: model)
         }
     }
 
@@ -284,7 +280,8 @@ struct GameView: View {
                              onPlay: { model.startRun() },
                              onCharacters: { model.open(.characters) },
                              onShop: { model.open(.shop) },
-                             onLevels: { model.open(.levels) })
+                             onLevels: { model.open(.levels) },
+                             onProfile: { model.open(.stats) })
                 }
             case .over:
                 GameOverView(snapshot: model.core.snapshot, coinsEarned: model.lastCoinsEarned) { model.startRun() }

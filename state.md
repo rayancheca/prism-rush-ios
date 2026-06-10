@@ -26,8 +26,12 @@
       grid (per-world color, "Nm in", furthest highlighted). `PR_DEMOPROFILE` debug seeds progression for
       screenshots. Verified (7 worlds shown).
 - [ ] **E5b** — more in-run power-ups (2× coins pickup) + wire permanent double-coins.
-- [ ] **E6** — Accounts: Sign in with Apple + Game Center friends/leaderboards.
-- [ ] **E7** — Profile/stats screen + polish; privacy manifest update; ship prep.
+- [x] **E6** — Accounts. `GameCenterService` (lazy auth, submit best to `prismrush.best`, present friends
+      leaderboard). `AccountService` (Sign in with Apple → stable user id, stored locally). `ProfileView`:
+      Sign in with Apple button + lifetime stats grid + Friends Leaderboard + Restore Purchases. Profile
+      button added to the menu. GC auth on launch; best submitted on death. Screenshot-verified.
+      HUMAN GATES: enable Sign in with Apple + Game Center capabilities; create leaderboard `prismrush.best`.
+- [ ] **E7** — privacy manifest update (iCloud/GC/IAP), one more in-run power-up, final ship prep.
 
 > NEW HUMAN GATES (Apple Developer account): enable capabilities **iCloud (KV)**, **Sign in with Apple**,
 > **Game Center**, **In-App Purchase**; create IAP products in App Store Connect; sign + upload.
