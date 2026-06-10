@@ -11,7 +11,7 @@ final class EconomyTests: XCTestCase {
 
     // MARK: daily reward + streak (F1/F2)
 
-    func testDailyRewardFirstClaim() {
+    func testDailyRewardFirstClaim() async {
         let store = ProfileStore(testing: Profile())
         XCTAssertTrue(store.dailyRewardAvailable(now: date(2026, 6, 10)))
         let r = store.claimDailyReward(now: date(2026, 6, 10))
@@ -21,7 +21,7 @@ final class EconomyTests: XCTestCase {
         XCTAssertNil(store.claimDailyReward(now: date(2026, 6, 10, 18)), "can't claim twice in one day")
     }
 
-    func testDailyStreakIncrementsNextDay() {
+    func testDailyStreakIncrementsNextDay() async {
         let store = ProfileStore(testing: Profile())
         _ = store.claimDailyReward(now: date(2026, 6, 10))           // day 1 → 100
         let r2 = store.claimDailyReward(now: date(2026, 6, 11))      // day 2 → 150
@@ -29,7 +29,7 @@ final class EconomyTests: XCTestCase {
         XCTAssertEqual(r2?.coins, 150)
     }
 
-    func testDailyStreakResetsAfterGap() {
+    func testDailyStreakResetsAfterGap() async {
         let store = ProfileStore(testing: Profile())
         _ = store.claimDailyReward(now: date(2026, 6, 10))
         _ = store.claimDailyReward(now: date(2026, 6, 11))
@@ -38,7 +38,7 @@ final class EconomyTests: XCTestCase {
         XCTAssertEqual(r?.coins, 100)
     }
 
-    func testDailyRewardCapsAtMaxTier() {
+    func testDailyRewardCapsAtMaxTier() async {
         let store = ProfileStore(testing: Profile())
         XCTAssertEqual(store.dailyReward(forStreak: 7), 1000)
         XCTAssertEqual(store.dailyReward(forStreak: 99), 1000)
@@ -46,7 +46,7 @@ final class EconomyTests: XCTestCase {
 
     // MARK: free timed chest (F1)
 
-    func testFreeChestTiming() {
+    func testFreeChestTiming() async {
         let store = ProfileStore(testing: Profile())
         let t0 = date(2026, 6, 10, 12)
         XCTAssertTrue(store.chestReady(now: t0), "never opened → ready")
@@ -61,7 +61,7 @@ final class EconomyTests: XCTestCase {
         XCTAssertTrue(store.chestReady(now: t0.addingTimeInterval(30 * 60)), "ready again after 30 min")
     }
 
-    func testSpendAndAddCoins() {
+    func testSpendAndAddCoins() async {
         let store = ProfileStore(testing: Profile())
         store.addCoins(500)
         XCTAssertTrue(store.spendCoins(200))
@@ -72,7 +72,7 @@ final class EconomyTests: XCTestCase {
 
     // MARK: revive (F3)
 
-    func testReviveResumesPlayWithGrace() {
+    func testReviveResumesPlayWithGrace() async {
         let core = GameCore(seed: 1)
         core.startRun(seed: 1)
         core.debugForceDie()
@@ -86,7 +86,7 @@ final class EconomyTests: XCTestCase {
 
     // MARK: profile schema resilience (G5 + decoder)
 
-    func testProfileDecodesLegacyJSONWithoutWiping() throws {
+    func testProfileDecodesLegacyJSONWithoutWiping() async throws {
         // An old save: has the removed `powerUpLevels`, lacks the new daily/chest fields.
         let legacy = #"{"coins":1234,"selectedSkin":"ember","ownedSkins":["default","ember"],"powerUpLevels":{"shield":2},"maxWorldReached":4}"#
         let data = legacy.data(using: .utf8)!

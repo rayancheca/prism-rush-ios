@@ -14,7 +14,7 @@ final class SolvabilityBotTests: XCTestCase {
         let window: String
     }
 
-    func testGreedyBotSurvives200Seeds() {
+    func testGreedyBotSurvives200Seeds() async {
         let targetDistance = 6_000.0
         let seedCount = 200
         let maxTicks = 200_000   // safety bound (~1700 s sim) — real runs finish far sooner

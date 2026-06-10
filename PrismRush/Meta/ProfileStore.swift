@@ -12,7 +12,9 @@ final class ProfileStore {
     private(set) var profile: Profile
 
     @ObservationIgnored private let localKey = "pr.profile.v1"
+    #if canImport(Darwin)
     @ObservationIgnored private let cloud = NSUbiquitousKeyValueStore.default
+    #endif
     @ObservationIgnored private let persisting: Bool
 
     /// Test-only: start from a known profile with persistence + cloud disabled.
@@ -23,6 +25,7 @@ final class ProfileStore {
 
     init() {
         persisting = true
+        #if canImport(Darwin)
         profile = ProfileStore.load(localKey: "pr.profile.v1", cloud: NSUbiquitousKeyValueStore.default)
         // Pull any newer cloud value when it changes (other device).
         NotificationCenter.default.addObserver(
@@ -32,6 +35,9 @@ final class ProfileStore {
             MainActor.assumeIsolated { self?.mergeFromCloud() }
         }
         cloud.synchronize()
+        #else
+        profile = ProfileStore.loadLocal(localKey: localKey)
+        #endif
     }
 
     // MARK: mutation
@@ -130,10 +136,21 @@ final class ProfileStore {
     private func save() {
         guard persisting, let data = try? JSONEncoder().encode(profile) else { return }
         UserDefaults.standard.set(data, forKey: localKey)
+        #if canImport(Darwin)
         cloud.set(data, forKey: localKey)
         cloud.synchronize()
+        #endif
     }
 
+    private static func loadLocal(localKey: String) -> Profile {
+        if let data = UserDefaults.standard.data(forKey: localKey),
+           let p = try? JSONDecoder().decode(Profile.self, from: data) {
+            return p
+        }
+        return Profile()
+    }
+
+    #if canImport(Darwin)
     private func mergeFromCloud() {
         guard let data = cloud.data(forKey: localKey),
               let remote = try? JSONDecoder().decode(Profile.self, from: data) else { return }
@@ -157,4 +174,5 @@ final class ProfileStore {
         }
         return Profile()
     }
+    #endif
 }

@@ -5,7 +5,7 @@ import XCTest
 final class RNGTests: XCTestCase {
 
     /// SplitMix64 is a pure function of its seed.
-    func testSplitMixDeterministicSequence() {
+    func testSplitMixDeterministicSequence() async {
         var a = SplitMix64(seed: 0xDEAD_BEEF)
         var b = SplitMix64(seed: 0xDEAD_BEEF)
         for _ in 0..<10_000 {
@@ -13,7 +13,7 @@ final class RNGTests: XCTestCase {
         }
     }
 
-    func testSplitMixDifferentSeedsDiverge() {
+    func testSplitMixDifferentSeedsDiverge() async {
         var a = SplitMix64(seed: 1)
         var b = SplitMix64(seed: 2)
         var differ = false
@@ -21,7 +21,7 @@ final class RNGTests: XCTestCase {
         XCTAssertTrue(differ, "distinct seeds should produce distinct streams quickly")
     }
 
-    func testUnitInRange() {
+    func testUnitInRange() async {
         var r = SplitMix64(seed: 99)
         for _ in 0..<100_000 {
             let u = r.unit()
@@ -31,13 +31,13 @@ final class RNGTests: XCTestCase {
     }
 
     /// Same seed → identical 10k-tick run. This is the property the whole test suite relies on.
-    func testRunIsReproducible() {
+    func testRunIsReproducible() async {
         let h1 = Self.runHash(seed: 0xABCD_1234, ticks: 10_000)
         let h2 = Self.runHash(seed: 0xABCD_1234, ticks: 10_000)
         XCTAssertEqual(h1, h2, "identical seed must yield an identical run")
     }
 
-    func testDifferentSeedsProduceDifferentRuns() {
+    func testDifferentSeedsProduceDifferentRuns() async {
         let h1 = Self.runHash(seed: 11, ticks: 6_000)
         let h2 = Self.runHash(seed: 22, ticks: 6_000)
         XCTAssertNotEqual(h1, h2, "different seeds should diverge")
