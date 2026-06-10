@@ -9,6 +9,7 @@ struct MenuView: View {
     let onShop: () -> Void
     let onLevels: () -> Void
     let onProfile: () -> Void
+    var rewards: AnyView = AnyView(EmptyView())
 
     @State private var pulse = false
 
@@ -60,6 +61,10 @@ struct MenuView: View {
                 worldChip("03", "Sands", 0xFFB13D)
             }
             .padding(.top, 22)
+
+            rewards
+                .padding(.top, 18)
+                .padding(.horizontal, 4)
 
             Spacer()
 

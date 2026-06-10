@@ -5,6 +5,9 @@ struct GameOverView: View {
     let snapshot: GameSnapshot
     let coinsEarned: Int
     let canRestart: Bool
+    let canRevive: Bool
+    let reviveCost: Int
+    let onRevive: () -> Void
     let onRestart: () -> Void
     let onHome: () -> Void
 
@@ -48,6 +51,29 @@ struct GameOverView: View {
                 statRow("Best", "\(snapshot.best)")
             }
             .padding(.top, 14)
+
+            if canRevive {
+                Button(action: onRevive) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "bolt.heart.fill")
+                        Text("CONTINUE").tracking(2)
+                        Spacer()
+                        Text("\(reviveCost)")
+                        CoinGlyph(size: 16)
+                    }
+                    .font(.system(size: 16, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 18).padding(.vertical, 14)
+                    .background(
+                        LinearGradient(colors: [Theme.color(0xFFD23D), Theme.color(0xFF9F1C)],
+                                       startPoint: .leading, endPoint: .trailing),
+                        in: RoundedRectangle(cornerRadius: 16)
+                    )
+                    .shadow(color: Theme.color(0xFFD23D).opacity(0.4), radius: 18)
+                }
+                .accessibilityIdentifier("continueButton")
+                .padding(.top, 18)
+            }
 
             Button(action: onRestart) {
                 Text(canRestart ? "RUN AGAIN" : "READY…")

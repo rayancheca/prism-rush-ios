@@ -20,8 +20,10 @@ struct Profile: Codable, Equatable, Sendable {
     var ownedSkins: Set<String> = ["default"]
     var selectedSkin: String = "default"
 
-    // Power-up upgrade levels (0 = base). Keyed by power-up id.
-    var powerUpLevels: [String: Int] = [:]
+    // Retention / live-ops.
+    var lastDailyClaim: Date? = nil   // when the daily bonus was last claimed
+    var loginStreak: Int = 0          // consecutive days the daily bonus was claimed
+    var lastChestOpen: Date? = nil    // when the free timed chest was last opened
 
     // Monetization flags (set by StoreKit purchases).
     var doubleCoins: Bool = false
@@ -32,4 +34,37 @@ struct Profile: Codable, Equatable, Sendable {
     var reduceFlash: Bool = false
 
     var coinMultiplier: Int { doubleCoins ? 2 : 1 }
+}
+
+// Resilient decoding: every field is optional-with-default, so adding or removing fields never fails
+// to decode (and never silently wipes a saved profile). The memberwise + synthesized `encode` remain.
+extension Profile {
+    enum CodingKeys: String, CodingKey {
+        case coins, bestScore, totalRuns, totalDistance, totalGems, totalCoinsEarned, bestStreak
+        case maxWorldReached, ownedSkins, selectedSkin
+        case lastDailyClaim, loginStreak, lastChestOpen
+        case doubleCoins, ownedProducts, muted, reduceFlash
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = Profile()   // defaults
+        coins = try c.decodeIfPresent(Int.self, forKey: .coins) ?? d.coins
+        bestScore = try c.decodeIfPresent(Int.self, forKey: .bestScore) ?? d.bestScore
+        totalRuns = try c.decodeIfPresent(Int.self, forKey: .totalRuns) ?? d.totalRuns
+        totalDistance = try c.decodeIfPresent(Double.self, forKey: .totalDistance) ?? d.totalDistance
+        totalGems = try c.decodeIfPresent(Int.self, forKey: .totalGems) ?? d.totalGems
+        totalCoinsEarned = try c.decodeIfPresent(Int.self, forKey: .totalCoinsEarned) ?? d.totalCoinsEarned
+        bestStreak = try c.decodeIfPresent(Int.self, forKey: .bestStreak) ?? d.bestStreak
+        maxWorldReached = try c.decodeIfPresent(Int.self, forKey: .maxWorldReached) ?? d.maxWorldReached
+        ownedSkins = try c.decodeIfPresent(Set<String>.self, forKey: .ownedSkins) ?? d.ownedSkins
+        selectedSkin = try c.decodeIfPresent(String.self, forKey: .selectedSkin) ?? d.selectedSkin
+        lastDailyClaim = try c.decodeIfPresent(Date.self, forKey: .lastDailyClaim) ?? d.lastDailyClaim
+        loginStreak = try c.decodeIfPresent(Int.self, forKey: .loginStreak) ?? d.loginStreak
+        lastChestOpen = try c.decodeIfPresent(Date.self, forKey: .lastChestOpen) ?? d.lastChestOpen
+        doubleCoins = try c.decodeIfPresent(Bool.self, forKey: .doubleCoins) ?? d.doubleCoins
+        ownedProducts = try c.decodeIfPresent(Set<String>.self, forKey: .ownedProducts) ?? d.ownedProducts
+        muted = try c.decodeIfPresent(Bool.self, forKey: .muted) ?? d.muted
+        reduceFlash = try c.decodeIfPresent(Bool.self, forKey: .reduceFlash) ?? d.reduceFlash
+    }
 }

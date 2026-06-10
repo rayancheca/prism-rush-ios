@@ -13,8 +13,16 @@ final class ProfileStore {
 
     @ObservationIgnored private let localKey = "pr.profile.v1"
     @ObservationIgnored private let cloud = NSUbiquitousKeyValueStore.default
+    @ObservationIgnored private let persisting: Bool
+
+    /// Test-only: start from a known profile with persistence + cloud disabled.
+    init(testing profile: Profile) {
+        self.profile = profile
+        self.persisting = false
+    }
 
     init() {
+        persisting = true
         profile = ProfileStore.load(localKey: "pr.profile.v1", cloud: NSUbiquitousKeyValueStore.default)
         // Pull any newer cloud value when it changes (other device).
         NotificationCenter.default.addObserver(
@@ -61,16 +69,66 @@ final class ProfileStore {
     func owns(skin id: String) -> Bool { profile.ownedSkins.contains(id) }
     func unlock(skin id: String) { mutate { $0.ownedSkins.insert(id) } }
     func select(skin id: String) { mutate { $0.selectedSkin = id } }
-    func powerUpLevel(_ id: String) -> Int { profile.powerUpLevels[id] ?? 0 }
-    func upgradePowerUp(_ id: String) { mutate { $0.powerUpLevels[id, default: 0] += 1 } }
 
     /// Highest selectable starting world (0-based), capped to one past what's been reached.
     var unlockedWorldCount: Int { max(1, min(99, profile.maxWorldReached + 1)) }
 
+    // MARK: retention — daily reward, login streak, timed free chest (all `now`-injectable for tests)
+
+    static let dailyTiers = [100, 150, 200, 300, 400, 500, 1000]
+    static let chestInterval: TimeInterval = 30 * 60   // a free chest every 30 minutes
+
+    func dailyRewardAvailable(now: Date = Date()) -> Bool {
+        guard let last = profile.lastDailyClaim else { return true }
+        return !Calendar.current.isDate(last, inSameDayAs: now)
+    }
+
+    /// The streak the player would have by claiming now (yesterday → +1, gap → reset to 1).
+    func pendingDailyStreak(now: Date = Date()) -> Int {
+        guard let last = profile.lastDailyClaim else { return 1 }
+        if Calendar.current.isDate(last, inSameDayAs: now) { return profile.loginStreak }
+        if let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now),
+           Calendar.current.isDate(last, inSameDayAs: yesterday) {
+            return profile.loginStreak + 1
+        }
+        return 1
+    }
+
+    func dailyReward(forStreak streak: Int) -> Int {
+        Self.dailyTiers[min(max(streak, 1) - 1, Self.dailyTiers.count - 1)]
+    }
+
+    @discardableResult
+    func claimDailyReward(now: Date = Date()) -> (coins: Int, streak: Int)? {
+        guard dailyRewardAvailable(now: now) else { return nil }
+        let streak = pendingDailyStreak(now: now)
+        let coins = dailyReward(forStreak: streak)
+        mutate { $0.lastDailyClaim = now; $0.loginStreak = streak; $0.coins += coins; $0.totalCoinsEarned += coins }
+        return (coins, streak)
+    }
+
+    func chestReady(now: Date = Date()) -> Bool {
+        guard let last = profile.lastChestOpen else { return true }
+        return now.timeIntervalSince(last) >= Self.chestInterval
+    }
+
+    func secondsUntilChest(now: Date = Date()) -> TimeInterval {
+        guard let last = profile.lastChestOpen else { return 0 }
+        return max(0, Self.chestInterval - now.timeIntervalSince(last))
+    }
+
+    @discardableResult
+    func openFreeChest(now: Date = Date(), reward: Int? = nil) -> Int? {
+        guard chestReady(now: now) else { return nil }
+        let amount = reward ?? Int.random(in: 60...220)
+        mutate { $0.lastChestOpen = now; $0.coins += amount; $0.totalCoinsEarned += amount }
+        return amount
+    }
+
     // MARK: persistence
 
     private func save() {
-        guard let data = try? JSONEncoder().encode(profile) else { return }
+        guard persisting, let data = try? JSONEncoder().encode(profile) else { return }
         UserDefaults.standard.set(data, forKey: localKey)
         cloud.set(data, forKey: localKey)
         cloud.synchronize()

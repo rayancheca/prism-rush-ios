@@ -56,6 +56,7 @@ final class GameCore {
     @ObservationIgnored private(set) var bestStreak: Int = 0
     @ObservationIgnored private(set) var mult: Int = 1
     @ObservationIgnored var best: Int = 0
+    @ObservationIgnored private(set) var revivesUsed = 0   // continues taken this run (escalating cost)
 
     @ObservationIgnored private(set) var activeObstacles: [CoreEntity] = []
     @ObservationIgnored private(set) var activeGems: [CoreEntity] = []
@@ -105,7 +106,7 @@ final class GameCore {
     func reset(seed: UInt64?) {
         rng = SplitMix64(seed: seed ?? .random(in: .min ... .max))
         spawner = Spawner()
-        mode = .menu; distance = 0; scoreOffset = 0; speed = Tuning.menuSpeed
+        mode = .menu; distance = 0; scoreOffset = 0; speed = Tuning.menuSpeed; revivesUsed = 0
         px = 0; laneIndex = 1; jumpY = 0; vy = 0; grounded = true; slideT = 0; sy = 1
         bankZ = 0; jumpBuf = 0
         world = 0; maxWorld = 0; worldFrom = 0; worldTo = 0; worldBlend = 1
@@ -368,6 +369,22 @@ final class GameCore {
 
     /// Debug-only: force an immediate death (used by the `PR_DEMO` screenshot flow).
     func debugForceDie() { if mode == .play { die() } }
+
+    /// Continue after death (the UI charges coins). Clears the field, re-centres the player, grants a
+    /// one-hit shield, and respawns well ahead so the continue isn't an instant re-death.
+    func revive() {
+        guard mode == .over else { return }
+        revivesUsed += 1
+        mode = .play
+        laneIndex = 1; px = Tuning.laneX[1]
+        jumpY = 0; vy = 0; grounded = true; slideT = 0; sy = 1
+        shield = true
+        activeObstacles.removeAll()
+        activeGems.removeAll()
+        activePickups.removeAll()
+        spawner.cursor = distance + 70
+        rebuildSnapshot()
+    }
 
     // MARK: - Spawning
 

@@ -57,6 +57,35 @@ final class InteractionUITests: XCTestCase {
         XCTAssertTrue(app.buttons["playButton"].waitForExistence(timeout: 5), "quit should return to the menu")
     }
 
+    /// F3 — CONTINUE (revive for coins) must put the player back into the run.
+    func testReviveContinuesRun() {
+        let app = launch(["PR_DEMO": "1", "PR_DEMOPROFILE": "1"])   // dies ~6s, has coins to revive
+        let cont = app.buttons["continueButton"]
+        XCTAssertTrue(cont.waitForExistence(timeout: 25), "CONTINUE should appear on game over with coins")
+        cont.tap()
+        XCTAssertTrue(app.buttons["pauseButton"].waitForExistence(timeout: 6), "should be back in play after continue")
+        XCTAssertFalse(app.buttons["continueButton"].exists, "game over should be dismissed")
+    }
+
+    /// F1/F2 — daily reward claims (and disappears) and the free chest opens then goes on cooldown.
+    func testDailyAndChestRewards() {
+        let app = launch(["PR_DEMOPROFILE": "1"])
+        let daily = app.buttons["dailyRewardButton"]
+        XCTAssertTrue(daily.waitForExistence(timeout: 6), "daily reward should be claimable")
+        daily.tap()
+        XCTAssertTrue(daily.waitForNonExistence(timeout: 4), "daily button disappears once claimed")
+
+        let chest = app.buttons["chestButton"]
+        XCTAssertTrue(chest.waitForExistence(timeout: 4) && chest.isEnabled, "free chest should be ready")
+        chest.tap()
+        var onCooldown = false
+        for _ in 0..<15 {
+            if !app.buttons["chestButton"].isEnabled { onCooldown = true; break }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        XCTAssertTrue(onCooldown, "chest should be on cooldown after opening")
+    }
+
     /// Navigation — every hub button opens its screen, and back returns to the menu (covers B8/Worlds).
     func testHubNavigation() {
         let app = launch(["PR_DEMOPROFILE": "1"])

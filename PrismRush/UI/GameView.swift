@@ -15,6 +15,8 @@ final class GameModel {
     @ObservationIgnored private var sub: EventSubscription?
     private(set) var muted = false
     private(set) var paused = false
+    private(set) var rewardToast: String?
+    @ObservationIgnored private var toastClearAt: Double = 0
 
     /// Which meta screen is open over the menu (nil = the menu hub itself).
     enum MetaScreen { case characters, shop, levels, stats }
@@ -59,6 +61,8 @@ final class GameModel {
                 $0.maxWorldReached = max($0.maxWorldReached, 6)
                 $0.ownedSkins.formUnion(["ember", "void"])
                 $0.selectedSkin = "default"   // deterministic start state for UI tests/screenshots
+                $0.lastDailyClaim = nil       // daily + chest always claimable in the demo profile
+                $0.lastChestOpen = nil
             }
         }
         let profile = ProfileStore.shared.profile
@@ -133,6 +137,40 @@ final class GameModel {
     }
 
     func resume() { paused = false }
+
+    // Continue-after-death, paid with coins (no ads). Escalating cost, capped at 2 continues per run.
+    var reviveCost: Int { 150 * (core.revivesUsed + 1) }
+    var canRevive: Bool {
+        core.mode == .over && core.revivesUsed < 2 && ProfileStore.shared.profile.coins >= reviveCost
+    }
+
+    @discardableResult
+    func reviveForCoins() -> Bool {
+        guard canRevive, ProfileStore.shared.spendCoins(reviveCost) else { return false }
+        core.revive()
+        overTime = 0
+        synth.musicStart()
+        synth.playSFX(Synth.shieldChime())
+        return true
+    }
+
+    // Retention rewards (menu).
+    func claimDailyReward() {
+        guard let r = ProfileStore.shared.claimDailyReward() else { return }
+        showToast("DAY \(r.streak)  ·  +\(r.coins)")
+        synth.playSFX(Synth.chime())
+    }
+
+    func openChest() {
+        guard let amount = ProfileStore.shared.openFreeChest() else { return }
+        showToast("CHEST  ·  +\(amount)")
+        synth.playSFX(Synth.shieldChime())
+    }
+
+    private func showToast(_ text: String) {
+        rewardToast = text
+        toastClearAt = uiClock + 2.4
+    }
 
     /// Abandon the current run/over state and return to the menu hub (the "BACK TO MENU" path).
     func returnToMenu() {
@@ -213,7 +251,8 @@ final class GameModel {
     /// Fold the just-finished run into the profile and award coins (gems + a distance bonus).
     private func recordRunResults() {
         let store = ProfileStore.shared
-        let base = core.gemCount + Int(core.traveledDistance / 50)
+        // Earn = gems + distance/35 + a small per-world bonus, then the Double-Coins multiplier.
+        let base = core.gemCount + Int(core.traveledDistance / 35) + core.maxWorld * 5
         let coins = base * store.profile.coinMultiplier
         lastCoinsEarned = coins
         store.recordRun(score: core.score, distance: core.distance, gems: core.gemCount,
@@ -231,6 +270,7 @@ final class GameModel {
 
     private func ageEffects() {
         if !popups.isEmpty { popups.removeAll { uiClock - $0.born > 0.9 } }
+        if rewardToast != nil, uiClock > toastClearAt { rewardToast = nil }
     }
 
     /// Translate a finished drag/tap into game input. 22pt threshold separates tap from swipe.
@@ -325,12 +365,16 @@ struct GameView: View {
                              onCharacters: { model.open(.characters) },
                              onShop: { model.open(.shop) },
                              onLevels: { model.open(.levels) },
-                             onProfile: { model.open(.stats) })
+                             onProfile: { model.open(.stats) },
+                             rewards: AnyView(RewardsBar(model: model)))
                 }
             case .over:
                 GameOverView(snapshot: model.core.snapshot,
                              coinsEarned: model.lastCoinsEarned,
                              canRestart: model.canRestart,
+                             canRevive: model.canRevive,
+                             reviveCost: model.reviveCost,
+                             onRevive: { model.reviveForCoins() },
                              onRestart: { model.startRun() },
                              onHome: { model.returnToMenu() })
             case .play:
@@ -347,8 +391,25 @@ struct GameView: View {
                 PauseOverlay(onResume: { model.resume() }, onQuit: { model.returnToMenu() })
                     .transition(.opacity)
             }
+
+            if let toast = model.rewardToast {
+                VStack {
+                    Text(toast)
+                        .font(.system(size: 16, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 22).padding(.vertical, 12)
+                        .background(LinearGradient(colors: [Theme.color(0xFFD23D), Theme.color(0xFF9F1C)],
+                                                   startPoint: .leading, endPoint: .trailing), in: Capsule())
+                        .shadow(color: Theme.color(0xFFD23D).opacity(0.5), radius: 16)
+                        .padding(.top, 80)
+                    Spacer()
+                }
+                .allowsHitTesting(false)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
         .statusBarHidden(true)
+        .animation(.spring(duration: 0.3), value: model.rewardToast)
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.pauseForBackground() }
         }

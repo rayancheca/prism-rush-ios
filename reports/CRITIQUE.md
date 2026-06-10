@@ -1,5 +1,10 @@
 # Prism Rush — Master Critique & Build Plan
 
+> **ROUND 3 DONE (monetization):** F1 daily reward + timed free chest (30 min, live countdown) ·
+> F2 login-streak tiers · F3 revive-for-coins (no ads; escalating cost) · F4 better earn rate ·
+> G5 dead power-up code removed · resilient `Profile` decoder (schema changes never wipe a save).
+> 38 unit (8 economy) + 6 UI tests green. Remaining: E2/E4/E5 audio polish, C5 misc juice, G6/B7.
+
 > **ROUND 1 DONE (commit):** A1 (back-to-menu) · A2+G4 (sign-in: `let`-not-`@State`, applesignin
 > entitlement, error surfacing) · A3/D5 (live equip) · A4 (dramatic slide) · A5+B1 (deterministic,
 > gated, slower moving walls — World 2 now has none) · B2 (no checkpoint speed cliff) · B3 (jump
