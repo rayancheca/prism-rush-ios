@@ -4,32 +4,40 @@ import simd
 import UIKit
 
 /// RealityKit adapter implementing `RendererPort`. Owns the whole virtual scene under `root`
-/// (camera, backdrop, ground, scrolling grid, player rig) and maps each snapshot to entities via
-/// `EntityPools`. Phase 3 is gray-box: untextured `UnlitMaterial` primitives in the World-1 palette.
-/// (World crossfade, decor, character face and particles arrive in Phases 4–5.)
+/// (camera, backdrop, ground, scrolling grid, character rig, per-world decor) and maps each snapshot
+/// to entities via `EntityPools`. Untextured `UnlitMaterial` throughout — neon, no lighting setup.
+/// World palettes crossfade from the snapshot's `worldFrom/worldTo/worldBlend`.
 @MainActor
 final class RealityRenderer: RendererPort {
     let root = Entity()
 
     private let camera = PerspectiveCamera()
     private let playerRig = Entity()
-    private var rungs: [Entity] = []
+    private var playerBody: ModelEntity!
+    private var eyes: [ModelEntity] = []
+    private var antenna: ModelEntity!
+    private var antennaTip: ModelEntity!
+    private var backdrop: ModelEntity!
+    private var rungs: [ModelEntity] = []
+    private var laneLines: [ModelEntity] = []
     private var pools: EntityPools!
+    private var decor: WorldDecor!
 
-    // Fixed World-1 palette colors (Phase 3).
-    private let cAccent  = UIColor(red: 0,        green: 245/255.0, blue: 1,         alpha: 1) // #00F5FF
-    private let cAccent2 = UIColor(red: 1,        green: 43/255.0,  blue: 214/255.0, alpha: 1) // #FF2BD6
-    private let cGrid    = UIColor(red: 1,        green: 43/255.0,  blue: 214/255.0, alpha: 1)
-    private let cGold    = UIColor(red: 1,        green: 210/255.0, blue: 61/255.0,  alpha: 1) // #FFD23D
-    private let cWhite   = UIColor.white
-    private let cBg      = UIColor(red: 7/255.0,  green: 2/255.0,   blue: 26/255.0,  alpha: 1) // #07021A
+    private let cGold = UIColor(red: 1, green: 210/255.0, blue: 61/255.0, alpha: 1) // #FFD23D
+    private let cWhite = UIColor.white
 
     private let rungSpacing: Float = 4
     private let rungCount = 36
 
-    // Code-generated meshes, built once and shared across all instances of their kind.
     private let gemMesh: MeshResource
     private let magnetMesh: MeshResource
+
+    private var elapsed: Double = 0
+    private var blinkT: Double = 3
+
+    // Latest blended obstacle tints, captured each frame for the pools' place closure.
+    private var tintAccent = UIColor.cyan
+    private var tintAccent2 = UIColor.magenta
 
     init() {
         gemMesh = ProceduralMesh.octahedron(0.34)
@@ -38,6 +46,7 @@ final class RealityRenderer: RendererPort {
         pools = EntityPools(root: root) { [weak self] kind in
             self?.makeEntity(kind) ?? ModelEntity()
         }
+        decor = WorldDecor(root: root)
     }
 
     func install(into content: RealityViewCameraContent) {
@@ -47,9 +56,20 @@ final class RealityRenderer: RendererPort {
     // MARK: RendererPort
 
     func sync(_ snap: GameSnapshot) {
-        let px = Float(snap.playerX)
+        let pal = Palette(snap)
+        tintAccent = pal.accent
+        tintAccent2 = pal.accent2
 
-        // Camera: follow with a touch of look-ahead, FOV opens with speed.
+        // Backdrop + grid + character recolor (crossfade).
+        setColor(backdrop, pal.bg)
+        for r in rungs { setColor(r, pal.grid) }
+        for l in laneLines { setColor(l, pal.grid) }
+        setColor(playerBody, pal.accent)
+        setColor(antenna, pal.accent)
+        setColor(antennaTip, pal.accent2)
+
+        // Camera follow + speed FOV.
+        let px = Float(snap.playerX)
         camera.camera.fieldOfViewInDegrees = 62 + Float(clampD((snap.speed - 7) / 27, 0, 1)) * 9
         var cp = camera.position
         cp.x += (px * 0.42 - cp.x) * 0.15
@@ -58,7 +78,7 @@ final class RealityRenderer: RendererPort {
         camera.position = cp
         camera.look(at: SIMD3<Float>(px * 0.3, 1.3, -5), from: cp, relativeTo: nil)
 
-        // Player rig: lane/jump position, squash-&-stretch, lane bank. Hidden on death.
+        // Player rig: lane/jump pose, squash-&-stretch, bank. Hidden on death.
         playerRig.isEnabled = snap.mode != .over
         playerRig.position = SIMD3<Float>(px, Float(snap.playerY), 0)
         let sy = Float(snap.playerScaleY)
@@ -66,26 +86,42 @@ final class RealityRenderer: RendererPort {
         playerRig.scale = SIMD3<Float>(sx, sy, sx)
         playerRig.orientation = simd_quatf(angle: Float(snap.bankZ), axis: SIMD3<Float>(0, 0, 1))
 
-        // Scroll the grid rungs toward the camera.
+        // Grid scroll.
         let off = Float(snap.distance.truncatingRemainder(dividingBy: Double(rungSpacing)))
-        for (i, r) in rungs.enumerated() {
-            r.position.z = off + 10 - Float(i) * rungSpacing
-        }
+        for (i, r) in rungs.enumerated() { r.position.z = off + 10 - Float(i) * rungSpacing }
 
         // Spawned entities.
+        let accent = tintAccent, accent2 = tintAccent2
         pools.sync(snap.entities) { entity, s in
-            entity.position = SIMD3<Float>(Float(s.x), Float(s.y), Float(s.z))
-            if s.kind == .gem || s.kind == .shield || s.kind == .magnet {
+            let y: Float = (s.kind == .bar) ? 1.3 : Float(s.y)
+            entity.position = SIMD3<Float>(Float(s.x), y, Float(s.z))
+            switch s.kind {
+            case .tall:
+                (entity as? ModelEntity).map { $0.model?.materials = [UnlitMaterial(color: accent)] }
+            case .low, .bar, .movingTall:
+                (entity as? ModelEntity).map { $0.model?.materials = [UnlitMaterial(color: accent2)] }
+            case .gem, .shield, .magnet:
                 entity.orientation = simd_quatf(angle: Float(s.spin) * 0.9, axis: SIMD3<Float>(0, 1, 0))
             }
         }
+
+        // Per-world decor.
+        decor.update(distance: snap.distance, world: snap.worldTo, elapsed: elapsed)
     }
 
     func fire(_ event: FXEvent) {
         // Particles, screen shake, popups and haptics arrive in Phase 5.
     }
 
-    /// Clear all pooled entities (called when a run restarts).
+    /// Time-based animation (blink) — driven by the loop's wall-clock dt.
+    func advanceVisuals(_ dt: Double) {
+        elapsed += dt
+        blinkT -= dt
+        if blinkT < -0.12 { blinkT = Double.random(in: 2.2...4.2) }
+        let blink: Float = blinkT < 0 ? 0.1 : 1
+        for eye in eyes { eye.scale = SIMD3<Float>(1, blink, 1) }
+    }
+
     func resetEntities() { pools.releaseAll() }
 
     // MARK: scene construction
@@ -96,7 +132,7 @@ final class RealityRenderer: RendererPort {
         camera.look(at: SIMD3<Float>(0, 1.3, -5), from: camera.position, relativeTo: nil)
         root.addChild(camera)
 
-        let backdrop = ModelEntity(mesh: .generatePlane(width: 140, height: 90), materials: [UnlitMaterial(color: cBg)])
+        backdrop = ModelEntity(mesh: .generatePlane(width: 140, height: 90), materials: [UnlitMaterial(color: .black)])
         backdrop.position = SIMD3<Float>(0, 12, -65)
         root.addChild(backdrop)
 
@@ -104,40 +140,57 @@ final class RealityRenderer: RendererPort {
         ground.position = SIMD3<Float>(0, -0.02, -110)
         root.addChild(ground)
 
-        // Lane edges (±3.3) and dividers (±1.1).
         for x in [Float(-3.3), -1.1, 1.1, 3.3] {
-            let line = ModelEntity(mesh: .generateBox(width: 0.06, height: 0.02, depth: 260), materials: [UnlitMaterial(color: cGrid)])
+            let line = ModelEntity(mesh: .generateBox(width: 0.06, height: 0.02, depth: 260), materials: [UnlitMaterial(color: .magenta)])
             line.position = SIMD3<Float>(x, 0, -110)
             root.addChild(line)
+            laneLines.append(line)
         }
 
-        // Scrolling rungs (motion read).
         for _ in 0..<rungCount {
-            let r = ModelEntity(mesh: .generateBox(width: 9, height: 0.04, depth: 0.14), materials: [UnlitMaterial(color: cGrid)])
+            let r = ModelEntity(mesh: .generateBox(width: 9, height: 0.04, depth: 0.14), materials: [UnlitMaterial(color: .magenta)])
             root.addChild(r)
             rungs.append(r)
         }
 
-        let body = ModelEntity(mesh: .generateSphere(radius: 0.62), materials: [UnlitMaterial(color: cAccent)])
+        buildCharacter()
+    }
+
+    private func buildCharacter() {
+        let body = ModelEntity(mesh: .generateSphere(radius: 0.62), materials: [UnlitMaterial(color: .cyan)])
         body.position = SIMD3<Float>(0, 0.66, 0)
         playerRig.addChild(body)
-        root.addChild(playerRig)
+        playerBody = body
+
+        // Eyes face the chase camera (+Z) with a dark pupil child, so the face reads clearly.
+        for ex in [Float(-0.22), 0.22] {
+            let eye = ModelEntity(mesh: .generateSphere(radius: 0.13), materials: [UnlitMaterial(color: cWhite)])
+            eye.position = SIMD3<Float>(ex, 0.82, 0.52)
+            let pupil = ModelEntity(mesh: .generateSphere(radius: 0.06), materials: [UnlitMaterial(color: UIColor(white: 0.02, alpha: 1))])
+            pupil.position = SIMD3<Float>(0, 0, 0.1)
+            eye.addChild(pupil)
+            playerRig.addChild(eye)
+            eyes.append(eye)
+        }
+
+        antenna = ModelEntity(mesh: .generateCylinder(height: 0.42, radius: 0.025), materials: [UnlitMaterial(color: .cyan)])
+        antenna.position = SIMD3<Float>(0, 1.42, 0)
+        playerRig.addChild(antenna)
+
+        antennaTip = ModelEntity(mesh: .generateSphere(radius: 0.095), materials: [UnlitMaterial(color: .magenta)])
+        antennaTip.position = SIMD3<Float>(0, 1.66, 0)
+        playerRig.addChild(antennaTip)
     }
 
     private func makeEntity(_ kind: EntityKind) -> Entity {
         switch kind {
-        case .low:        return boxEntity(1.9, 0.85, 0.9, cAccent2)
-        case .tall:       return boxEntity(1.9, 3.2, 0.9, cAccent)
-        case .movingTall: return boxEntity(1.9, 3.2, 0.9, cAccent2)   // danger tint
-        case .bar:
-            let g = Entity()
-            let crossbar = boxEntity(7.6, 0.7, 0.7, cAccent2)
-            crossbar.position = SIMD3<Float>(0, 1.3, 0)
-            g.addChild(crossbar)
-            return g
-        case .gem:    return ModelEntity(mesh: gemMesh, materials: [UnlitMaterial(color: cGold)])
-        case .shield: return sphereEntity(0.42, cWhite)
-        case .magnet: return ModelEntity(mesh: magnetMesh, materials: [UnlitMaterial(color: cAccent)])
+        case .low:        return boxEntity(1.9, 0.85, 0.9, .magenta)
+        case .tall:       return boxEntity(1.9, 3.2, 0.9, .cyan)
+        case .movingTall: return boxEntity(1.9, 3.2, 0.9, .magenta)
+        case .bar:        return boxEntity(7.6, 0.7, 0.7, .magenta)
+        case .gem:        return ModelEntity(mesh: gemMesh, materials: [UnlitMaterial(color: cGold)])
+        case .shield:     return sphereEntity(0.42, cWhite)
+        case .magnet:     return ModelEntity(mesh: magnetMesh, materials: [UnlitMaterial(color: .cyan)])
         }
     }
 
@@ -147,5 +200,24 @@ final class RealityRenderer: RendererPort {
 
     private func sphereEntity(_ r: Float, _ c: UIColor) -> ModelEntity {
         ModelEntity(mesh: .generateSphere(radius: r), materials: [UnlitMaterial(color: c)])
+    }
+
+    private func setColor(_ e: ModelEntity?, _ c: UIColor) { e?.model?.materials = [UnlitMaterial(color: c)] }
+}
+
+/// The current crossfaded world palette as `UIColor`s.
+private struct Palette {
+    let bg, grid, accent, accent2: UIColor
+    init(_ snap: GameSnapshot) {
+        let a = Theme.worlds[snap.worldFrom % 3]
+        let b = Theme.worlds[snap.worldTo % 3]
+        let t = Float(snap.worldBlend)
+        func ui(_ v: SIMD3<Float>) -> UIColor {
+            UIColor(red: CGFloat(v.x), green: CGFloat(v.y), blue: CGFloat(v.z), alpha: 1)
+        }
+        bg = ui(Theme.mix(a.bg, b.bg, t))
+        grid = ui(Theme.mix(a.grid, b.grid, t))
+        accent = ui(Theme.mix(a.accent, b.accent, t))
+        accent2 = ui(Theme.mix(a.accent2, b.accent2, t))
     }
 }

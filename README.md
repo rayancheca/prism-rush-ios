@@ -37,16 +37,19 @@ collisions.
 
 <table>
 <tr>
-<td align="center"><img src="docs/screenshots/01_menu.png" width="210"><br><sub><b>1 · Title</b><br>Neon perspective grid + world select</sub></td>
-<td align="center"><img src="docs/screenshots/02_gems_streak.png" width="210"><br><sub><b>2 · Collect</b><br>Gem arc → 12 gems, ×2 streak</sub></td>
-<td align="center"><img src="docs/screenshots/03_slide_under_bar.png" width="210"><br><sub><b>3 · Slide</b><br>Duck under a full-span bar, ×4</sub></td>
+<td align="center"><img src="docs/screenshots/01_menu.png" width="210"><br><sub><b>1 · Title</b><br>Neon skyline + world select</sub></td>
+<td align="center"><img src="docs/screenshots/02_metropolis.png" width="210"><br><sub><b>2 · Neon Metropolis</b><br>Magenta grid, emissive towers</sub></td>
+<td align="center"><img src="docs/screenshots/03_caverns.png" width="210"><br><sub><b>3 · Crystal Caverns</b><br>Teal world, floating crystals, ×5</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/screenshots/04_max_streak_weave.png" width="210"><br><sub><b>4 · Weave</b><br>Tall blocks at the ×5 max streak (2,205)</sub></td>
+<td align="center"><img src="docs/screenshots/04_sands.png" width="210"><br><sub><b>4 · Solar Sands</b><br>Amber dunes + pyramids (24,970)</sub></td>
 <td align="center"><img src="docs/screenshots/05_game_over.png" width="210"><br><sub><b>5 · Shatter</b><br>Score freezes, new best</sub></td>
-<td align="center"><img src="docs/screenshots/00_icon.png" width="210"><br><sub><b>Icon</b><br>1024² rendered in Core Graphics, no text</sub></td>
+<td align="center"><img src="docs/screenshots/00_icon.png" width="210"><br><sub><b>Icon</b><br>1024² Core Graphics, no text</sub></td>
 </tr>
 </table>
+
+> The three worlds **crossfade around the player** every 800 m, then loop with rising difficulty —
+> each with its own palette, obstacle tints, and decor silhouette, all from the same code.
 
 ---
 
@@ -156,11 +159,11 @@ Built phase-by-phase, each gate verified by a real build + on-device screenshot 
 | 0–1 | Scaffold, contracts, RealityView | ✅ |
 | 2 | Deterministic core + tests (26 green, 200-seed bot) | ✅ |
 | 3 | Gray-box playable (renderer, input, HUD, menu, game-over) | ✅ |
-| 4 | Art pass — world crossfade, decor, character face, procedural meshes | 🔨 in progress |
-| 5–6 | Juice (particles/shake/haptics) · synthesized audio | ⏳ |
+| 4 | Art pass — 3-world crossfade, per-world decor, character, procedural meshes | ✅ |
+| 5–6 | Juice (particles/shake/haptics) · synthesized audio | 🔨 next |
 | 7–8 | Soak hardening · ship prep (icon ✅, metadata ✅, archive) | ⏳ |
 
-> The gameplay screenshots are gray-box (Phase 3) with the first procedural meshes wired in; the
-> three-world crossfade and decor land in the Phase 4 art pass.
+> Next up: particle juice (gem bursts, death shatter, trails, screen shake) and a fully synthesized
+> 132 bpm synthwave soundtrack with per-world layers — both generated at runtime, still zero assets.
 
 <div align="center"><sub>Built with Claude Code. No third-party runtime dependencies.</sub></div>

@@ -44,6 +44,7 @@ final class GameModel {
                 }
 
                 self.core.advance(realDt: dt)
+                self.renderer.advanceVisuals(dt)
                 self.renderer.sync(self.core.snapshot)
                 self.overTime = self.core.mode == .over ? self.overTime + dt : 0
             }

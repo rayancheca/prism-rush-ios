@@ -1,10 +1,10 @@
 # PRISM RUSH — Build State
 
 > Single source of truth for session resumability. On any fresh session: read this first, then continue.
-> Last updated: end of Phase 3.
+> Last updated: end of Phase 4.
 
 ## Current phase
-**Phase 3 COMPLETE → entering Phase 4 (art pass).**
+**Phase 4 COMPLETE → entering Phase 5 (juice).**
 
 ## Environment (probed Phase 0)
 | Fact | Value |
@@ -38,19 +38,24 @@ exist here. Override via `PR_SIM_NAME`/`PR_SIM_OS`/`PR_SIM_UDID`.
       screenshots. BUILD SUCCEEDED; all 26 tests green; menu/play/game-over screenshot-verified
       (`reports/shots/phase3_{menu,play,over2}.png`). Score-freeze bug found-by-screenshot and fixed.
 
-## Next 3 actions (Phase 4 — art pass)
-1. **World crossfade** — drive shared obstacle/player/grid materials + backdrop + clear color from the
-    snapshot's `worldFrom/worldTo/worldBlend`. Distance-based opacity fade-in over the last ~20m (RealityKit
-    has no fog). World banner "WORLD N · NAME" + rising synth sweep hook (audio in P6).
-2. **Decor pools with horizon-swap** — per-world decor (city boxes / bobbing crystals / pyramids) recycled at
-    the horizon so a new world visibly "arrives". Proper gem **octahedron** + **torus** magnet + icosahedron
-    shield via `MeshResource(from: MeshDescriptor)` (PROBE this API first).
-3. **Character** — eyes + pupils, blink (2.2–4.2s), antenna with glowing tip on the player rig. Gate: 3
-    screenshots (one per world) judged against the palette table.
+- [x] **Phase 4** — world crossfade (palettes/obstacle tints/grid/backdrop from `worldFrom/To/blend`),
+      `WorldDecor` per-world silhouettes with horizon-swap (towers / crystals / pyramids), character face
+      (eyes + pupils + blink + antenna), procedural meshes (octahedron gem, torus magnet, pyramid) via
+      `MeshDescriptor`. All 3 worlds screenshot-verified with correct palettes + decor (Metropolis/Caverns/
+      Sands). 26 tests green. Walkthrough README updated with 3-world shots + pushed.
 
-## Known polish backlog (non-blocking)
-- Menu shows the player orb overlapping "TAP TO RUN" — reposition/animate as an attract pose in Phase 4.
-- Gems/pickups are gray-box spheres (real octahedron/torus in Phase 4).
+## Next 3 actions (Phase 5 — juice)
+1. **Particles** — `ParticleEmitterComponent` (or pooled quads): trail behind player, gem bursts, landing
+    dust, death shatter (70 accent + 40 white), shield pop. Driven by `RealityRenderer.fire(FXEvent)`.
+2. **Camera + screen** — screen shake on death (decay 2.2/s, respect Reduce Motion), FOV ramp already in;
+    wind/speed lines above speed 22; white flash frames (death 0.5, shield 0.25); floating score popups
+    (SwiftUI projected from world pos). World banner "WORLD N · NAME" overlay on `worldChanged`.
+3. **Haptics** service (CoreHaptics + `UIFeedbackGenerator` fallback) per the haptics map. Gate: capture
+    5 frames mid-run, fix the 3 ugliest things, repeat once.
+
+## Resolved polish backlog
+- Gems are now octahedrons, magnet a torus (procedural meshes). ✓
+- Menu player-orb overlap: superseded by the new menu framing with city towers (acceptable).
 
 ## Decision log
 - **Renderer = RealityKit** (Plan B / SceneKit NOT triggered; RealityView surface verified in Phase 1).
@@ -87,6 +92,7 @@ exist here. Override via `PR_SIM_NAME`/`PR_SIM_OS`/`PR_SIM_UDID`.
 - `phase1`: scaffold + contracts + verified placeholder RealityView.
 - `phase2`: deterministic Core + full test suite green (26 tests; 200-seed solvability bot).
 - `phase3`: RealityKit renderer + SwiftUI shell, gray-box playable. menu/play/over screenshot-verified.
-- `phase4-wip`: procedural meshes (octahedron gem, torus magnet, pyramid) via MeshDescriptor — verified
-  rendering; walkthrough README + `docs/screenshots/` (real autoplay frames); pushed to GitHub
-  (rayancheca/prism-rush-ios, public). Remaining Phase 4: world crossfade, decor, character face.
+- `phase4-wip`: procedural meshes (octahedron gem, torus magnet, pyramid) via MeshDescriptor; walkthrough
+  README + `docs/screenshots/`; pushed to GitHub (rayancheca/prism-rush-ios, public).
+- `phase4`: world crossfade + WorldDecor (horizon-swap) + character face. All 3 worlds screenshot-verified;
+  README updated with 3-world walkthrough.
