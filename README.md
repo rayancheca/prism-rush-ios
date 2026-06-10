@@ -53,6 +53,30 @@ collisions.
 
 ---
 
+## Free-to-play systems
+
+A full meta-game on top of the runner — currency, a shop, customizable characters, world
+checkpoints, secure accounts, and friends competition — driven by an `@Observable` `ProfileStore`
+(persists to UserDefaults and **iCloud** key-value sync, so saves follow you across devices).
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/11_characters.png" width="200"><br><sub><b>Characters</b><br>Buy/equip 7 procedural skins with coins</sub></td>
+<td align="center"><img src="docs/screenshots/12_shop.png" width="200"><br><sub><b>Shop</b><br>StoreKit 2 IAP — coin packs, Double Coins, premium skin</sub></td>
+<td align="center"><img src="docs/screenshots/13_worlds.png" width="200"><br><sub><b>Worlds</b><br>Checkpoint start from any reached world</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/14_profile.png" width="200"><br><sub><b>Profile</b><br>Sign in with Apple · stats · friends leaderboard</sub></td>
+<td align="center"><img src="docs/screenshots/10_slide.png" width="200"><br><sub><b>Slide</b><br>Pancake-lean pose + ground dust + SLICK bonus</sub></td>
+<td valign="center"><sub>• Coins earned per run (gems + distance, ×2 with Double Coins)<br>• Game Center leaderboard `prismrush.best`<br>• Sign in with Apple + iCloud save sync<br>• Data-driven catalogs (skins / IAP) — easy to extend<br>• 1024² code-generated app icon, zero asset files</sub></td>
+</tr>
+</table>
+
+> **Developer-ready, not yet live:** all of this is fully coded, built and tested. *Activating* real
+> money and accounts needs your Apple Developer account — see **Shipping** below.
+
+---
+
 ## Architecture
 
 ```
@@ -162,7 +186,33 @@ Built phase-by-phase, each gate verified by a real build + on-device screenshot 
 | 4 | Art pass — 3-world crossfade, per-world decor, character, procedural meshes | ✅ |
 | 5 | Juice — pooled particles, screen shake, score popups, world banner, haptics | ✅ |
 | 6 | Synthesized 132 bpm synthwave + SFX (AVAudioEngine), best-score/mute persistence | ✅ |
-| 7–8 | Soak hardening · ship prep (icon ✅, metadata ✅, archive) | 🔨 next |
+
+**Free-to-play expansion**
+
+| | | |
+|---|---|---|
+| E1 | Slide animation (pancake lean + ground dust) | ✅ |
+| E2 | Coin economy + `Profile`/`ProfileStore` (UserDefaults + iCloud sync) | ✅ |
+| E3 | Menu hub + character select (buy/equip 7 procedural skins) | ✅ |
+| E4 | Shop + StoreKit 2 IAP (`Products.storekit` local config) | ✅ |
+| E5 | World checkpoints / level select (start from any reached world) | ✅ |
+| E6 | Sign in with Apple + Game Center friends leaderboard | ✅ |
+| — | Soak hardening · App Store archive · live IAP/accounts | ⏳ needs your Apple account |
+
+## Shipping (your Apple Developer account)
+
+Everything above builds, runs and tests on the simulator with no signing. To go live you (the
+account holder) do these once — the code is already wired for them:
+
+1. **Team ID** → `project.yml` `DEVELOPMENT_TEAM`.
+2. **Capabilities** (Signing & Capabilities, and on developer.apple.com): In-App Purchase, Sign in
+   with Apple, Game Center, iCloud (Key-Value storage).
+3. **App Store Connect**: create the app record (bundle `com.rayancheca.prismrush`); add the 5 IAP
+   products from `Products.storekit`; create leaderboard **`prismrush.best`**; check the name "Prism
+   Rush" is available.
+4. **App Privacy** answers in ASC now declare data use (Game Center identity, purchases) — no longer
+   "Data Not Collected".
+5. `xcodebuild archive` + `-exportArchive` (`method: app-store-connect`) and upload.
 
 > Everything you hear is synthesized at runtime with AVAudioEngine — a 132 bpm synthwave bed
 > (kick / hi-hat / saw bass / per-world arp) plus every SFX, still zero asset files. Next: soak
