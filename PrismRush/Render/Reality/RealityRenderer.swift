@@ -32,6 +32,11 @@ final class RealityRenderer: RendererPort {
     private let gemMesh: MeshResource
     private let magnetMesh: MeshResource
 
+    // Selected character skin (`followsWorld` = the default look that tracks the world accent).
+    private var skinBodyHex: UInt32 = 0
+    private var skinAntennaHex: UInt32 = 0
+    private var skinFollowsWorld = true
+
     private var elapsed: Double = 0
     private var blinkT: Double = 3
     private var shake: Float = 0
@@ -67,13 +72,15 @@ final class RealityRenderer: RendererPort {
         tintAccent = pal.accent
         tintAccent2 = pal.accent2
 
-        // Backdrop + grid + character recolor (crossfade).
+        // Backdrop + grid + character recolor (crossfade + selected skin).
+        let bodyColor = skinFollowsWorld ? pal.accent : uiHex(skinBodyHex)
+        let antennaColor = skinFollowsWorld ? pal.accent2 : uiHex(skinAntennaHex)
         setColor(backdrop, pal.bg)
         for r in rungs { setColor(r, pal.grid) }
         for l in laneLines { setColor(l, pal.grid) }
-        setColor(playerBody, pal.accent)
-        setColor(antenna, pal.accent)
-        setColor(antennaTip, pal.accent2)
+        setColor(playerBody, bodyColor)
+        setColor(antenna, bodyColor)
+        setColor(antennaTip, antennaColor)
 
         // Camera follow + speed FOV + decaying screen shake (kept off the follow position so it
         // doesn't bleed into the lerp; Reduce Motion disables it).
@@ -87,13 +94,22 @@ final class RealityRenderer: RendererPort {
         camera.position = cp
         camera.look(at: SIMD3<Float>(px * 0.3, 1.3, -5), from: cp, relativeTo: nil)
 
-        // Player rig: lane/jump pose, squash-&-stretch, bank. Hidden on death.
+        // Player rig: lane/jump pose, squash-&-stretch, bank, plus a pronounced forward-lean slide.
         playerRig.isEnabled = snap.mode != .over
         playerRig.position = SIMD3<Float>(px, Float(snap.playerY), 0)
         let sy = Float(snap.playerScaleY)
-        let sx = 1 + (1 - sy) * 0.45
+        var sx = 1 + (1 - sy) * 0.45
+        if snap.sliding { sx *= 1.35 }                       // flatten wider into a pancake
         playerRig.scale = SIMD3<Float>(sx, sy, sx)
-        playerRig.orientation = simd_quatf(angle: Float(snap.bankZ), axis: SIMD3<Float>(0, 0, 1))
+        let bankQ = simd_quatf(angle: Float(snap.bankZ), axis: SIMD3<Float>(0, 0, 1))
+        let leanQ = simd_quatf(angle: snap.sliding ? -0.6 : 0, axis: SIMD3<Float>(1, 0, 0))
+        playerRig.orientation = bankQ * leanQ
+
+        // Ground dust kicked up during a slide so it's unmistakable.
+        if snap.mode == .play, snap.sliding, snap.grounded {
+            particles.burst(x: px + Float.random(in: -0.35...0.35), y: 0.12, z: 0.45,
+                            color: tintAccent, count: 3, power: 1.6, spread: 0.12, life: 0.32)
+        }
 
         // Grid scroll.
         let off = Float(snap.distance.truncatingRemainder(dividingBy: Double(rungSpacing)))
@@ -159,6 +175,12 @@ final class RealityRenderer: RendererPort {
         pools.releaseAll()
         particles.reset()
         shake = 0
+    }
+
+    func applySkin(bodyHex: UInt32, antennaHex: UInt32, followsWorld: Bool) {
+        skinBodyHex = bodyHex
+        skinAntennaHex = antennaHex
+        skinFollowsWorld = followsWorld
     }
 
     // MARK: scene construction
@@ -237,6 +259,12 @@ final class RealityRenderer: RendererPort {
 
     private func sphereEntity(_ r: Float, _ c: UIColor) -> ModelEntity {
         ModelEntity(mesh: .generateSphere(radius: r), materials: [UnlitMaterial(color: c)])
+    }
+
+    private func uiHex(_ hex: UInt32) -> UIColor {
+        UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
     }
 
     private func setColor(_ e: ModelEntity?, _ c: UIColor) { e?.model?.materials = [UnlitMaterial(color: c)] }

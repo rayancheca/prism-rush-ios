@@ -37,6 +37,7 @@ final class GameModel {
     private(set) var bannerID = 0
     private(set) var bannerName = ""
     private(set) var bannerOrdinal = 0
+    private(set) var lastCoinsEarned = 0
 
     /// Restart is allowed a short beat after death (avoids the death tap instantly restarting).
     var canRestart: Bool { overTime > 0.5 }
@@ -45,9 +46,11 @@ final class GameModel {
         renderer.install(into: content)
         haptics.prepare()
         synth.start()
-        synth.muted = Persistence.muted
-        muted = synth.muted
-        core.best = Persistence.bestScore
+        let profile = ProfileStore.shared.profile
+        synth.muted = profile.muted
+        muted = profile.muted
+        core.best = profile.bestScore
+        applyCurrentSkin()
         core.onFX = { [weak self] fx in self?.handleFX(fx) }
         if autoplay || demo { core.startRun(seed: 7) }
 
@@ -80,6 +83,7 @@ final class GameModel {
     }
 
     func startRun() {
+        applyCurrentSkin()
         core.startRun()
         renderer.resetEntities()
         overTime = 0
@@ -113,7 +117,7 @@ final class GameModel {
             flash(0.5)
             synth.playSFX(Synth.crash())
             synth.musicStop()
-            Persistence.bestScore = core.best
+            recordRunResults()
         case let .worldChanged(index, ordinal):
             bannerName = Theme.worlds[index % 3].name
             bannerOrdinal = ordinal
@@ -131,7 +135,22 @@ final class GameModel {
     func toggleMute() {
         muted.toggle()
         synth.muted = muted
-        Persistence.muted = muted
+        ProfileStore.shared.mutate { $0.muted = muted }
+    }
+
+    func applyCurrentSkin() {
+        let skin = SkinCatalog.skin(ProfileStore.shared.profile.selectedSkin)
+        renderer.applySkin(bodyHex: skin.bodyHex, antennaHex: skin.antennaHex, followsWorld: skin.followsWorld)
+    }
+
+    /// Fold the just-finished run into the profile and award coins (gems + a distance bonus).
+    private func recordRunResults() {
+        let store = ProfileStore.shared
+        let base = core.gemCount + Int(core.distance / 50)
+        let coins = base * store.profile.coinMultiplier
+        lastCoinsEarned = coins
+        store.recordRun(score: core.score, distance: core.distance, gems: core.gemCount,
+                        bestStreak: core.bestStreak, maxWorld: core.maxWorld, coinsEarned: coins)
     }
 
     private func addPopup(_ text: String, color: Color, worldX: Double) {
@@ -205,7 +224,7 @@ struct GameView: View {
             case .menu:
                 MenuView(best: model.core.snapshot.best)
             case .over:
-                GameOverView(snapshot: model.core.snapshot) { model.startRun() }
+                GameOverView(snapshot: model.core.snapshot, coinsEarned: model.lastCoinsEarned) { model.startRun() }
             case .play:
                 EmptyView()
             }

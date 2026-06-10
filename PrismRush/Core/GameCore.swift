@@ -423,6 +423,7 @@ final class GameCore {
             playerX: px, playerY: jumpY, playerScaleY: sy, bankZ: bankZ,
             worldFrom: worldFrom, worldTo: worldTo, worldBlend: worldBlend,
             shieldActive: shield, magnetRemaining: magnetT,
+            sliding: slideT > 0, grounded: grounded,
             entities: entityScratch,
             score: score, gems: gemCount, mult: mult, best: best
         )

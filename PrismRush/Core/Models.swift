@@ -55,6 +55,8 @@ struct GameSnapshot: Sendable {
     var worldBlend: Double          // 0 → fully `worldFrom`, 1 → fully `worldTo`
     var shieldActive: Bool
     var magnetRemaining: Double
+    var sliding: Bool
+    var grounded: Bool
     var entities: [EntityState]
     var score: Int
     var gems: Int
@@ -75,6 +77,8 @@ struct GameSnapshot: Sendable {
         worldBlend: 1,
         shieldActive: false,
         magnetRemaining: 0,
+        sliding: false,
+        grounded: true,
         entities: [],
         score: 0,
         gems: 0,

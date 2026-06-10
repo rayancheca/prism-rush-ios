@@ -3,6 +3,7 @@ import SwiftUI
 /// Death panel: final score, a NEW BEST flourish, run stats, and a restart button.
 struct GameOverView: View {
     let snapshot: GameSnapshot
+    let coinsEarned: Int
     let onRestart: () -> Void
 
     private var isNewBest: Bool { snapshot.score >= snapshot.best && snapshot.score > 0 }
@@ -33,12 +34,18 @@ struct GameOverView: View {
                     .padding(.top, 2)
             }
 
+            CoinBadge(amount: coinsEarned, prefix: "+")
+                .font(.system(size: 20, weight: .heavy, design: .rounded))
+                .foregroundStyle(Color(red: 1, green: 0.82, blue: 0.24))
+                .padding(.top, 10)
+
             VStack(spacing: 0) {
                 statRow("Gems", "\(snapshot.gems)")
                 statRow("Reached", worldReached)
+                statRow("Coins", "\(ProfileStore.shared.profile.coins)")
                 statRow("Best", "\(snapshot.best)")
             }
-            .padding(.top, 16)
+            .padding(.top, 14)
 
             Button(action: onRestart) {
                 Text("RUN AGAIN")

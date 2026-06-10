@@ -49,11 +49,16 @@ struct MenuView: View {
             }
             .padding(.top, 24)
 
-            Text("BEST \(best)")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .tracking(2)
-                .foregroundStyle(.white.opacity(0.65))
-                .padding(.top, 28)
+            HStack(spacing: 18) {
+                CoinBadge(amount: ProfileStore.shared.profile.coins)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                Text("BEST \(best)")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .tracking(2)
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+            .foregroundStyle(.white)
+            .padding(.top, 26)
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

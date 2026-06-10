@@ -4,7 +4,26 @@
 > Last updated: end of Phase 6.
 
 ## Current phase
-**Phase 6 COMPLETE → entering Phase 7 (QA soak hardening).**
+**Base game (Phases 0–6) COMPLETE + pushed. Now in the FREE-TO-PLAY EXPANSION (user-requested).**
+
+### F2P expansion plan & progress (post-base-game)
+- [x] **E1 Slide animation** — `snapshot.sliding/grounded`; renderer does a forward-lean pancake + ground
+      dust. Screenshot-verified (was indistinguishable before).
+- [x] **E2 Economy foundation** — `Meta/`: `Profile` (Codable: coins/stats/unlocks/skins/progression/IAP),
+      `ProfileStore` (@Observable, UserDefaults + iCloud KVS sync), `SkinCatalog` (7 procedural skins).
+      Coins earned at run end (gems + distance/50, ×2 if doubleCoins), shown on game-over + menu, persisted
+      across launches (verified). Best score migrated into the profile. Renderer applies the selected skin.
+- [ ] **E3** — menu hub + Character-select (buy/equip skins with coins).
+- [ ] **E4** — Shop + StoreKit 2 IAP (coin packs, double-coins, bundles) + a `.storekit` test config.
+- [ ] **E5** — Level select / checkpoint start (start from a reached world) + more power-ups + double-coins.
+- [ ] **E6** — Accounts: Sign in with Apple + Game Center friends/leaderboards.
+- [ ] **E7** — Profile/stats screen + polish; privacy manifest update; ship prep.
+
+> NEW HUMAN GATES (Apple Developer account): enable capabilities **iCloud (KV)**, **Sign in with Apple**,
+> **Game Center**, **In-App Purchase**; create IAP products in App Store Connect; sign + upload.
+
+## Base-game phase (original 8-phase plan)
+**Phase 6 COMPLETE → Phase 7 (QA soak) / Phase 8 (ship) remain for the base game.**
 
 ## Environment (probed Phase 0)
 | Fact | Value |
