@@ -39,7 +39,7 @@ collisions.
 <tr>
 <td align="center"><img src="docs/screenshots/01_menu.png" width="210"><br><sub><b>1 · Title</b><br>Neon skyline + world select</sub></td>
 <td align="center"><img src="docs/screenshots/02_metropolis.png" width="210"><br><sub><b>2 · Neon Metropolis</b><br>Magenta grid, emissive towers</sub></td>
-<td align="center"><img src="docs/screenshots/03_caverns.png" width="210"><br><sub><b>3 · Crystal Caverns</b><br>Teal world, floating crystals, ×5</sub></td>
+<td align="center"><img src="docs/screenshots/03_caverns.png" width="210"><br><sub><b>3 · Crystal Caverns</b><br>World banner + crossfade + CLOSE near-miss</sub></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/04_sands.png" width="210"><br><sub><b>4 · Solar Sands</b><br>Amber dunes + pyramids (24,970)</sub></td>
@@ -160,10 +160,11 @@ Built phase-by-phase, each gate verified by a real build + on-device screenshot 
 | 2 | Deterministic core + tests (26 green, 200-seed bot) | ✅ |
 | 3 | Gray-box playable (renderer, input, HUD, menu, game-over) | ✅ |
 | 4 | Art pass — 3-world crossfade, per-world decor, character, procedural meshes | ✅ |
-| 5–6 | Juice (particles/shake/haptics) · synthesized audio | 🔨 next |
+| 5 | Juice — pooled particles, screen shake, score popups, world banner, haptics | ✅ |
+| 6 | Synthesized 132 bpm synthwave soundtrack + SFX (AVAudioEngine) | 🔨 next |
 | 7–8 | Soak hardening · ship prep (icon ✅, metadata ✅, archive) | ⏳ |
 
-> Next up: particle juice (gem bursts, death shatter, trails, screen shake) and a fully synthesized
-> 132 bpm synthwave soundtrack with per-world layers — both generated at runtime, still zero assets.
+> Next up: a fully synthesized 132 bpm synthwave soundtrack with per-world layers and full SFX,
+> generated at runtime with AVAudioEngine — still zero asset files.
 
 <div align="center"><sub>Built with Claude Code. No third-party runtime dependencies.</sub></div>

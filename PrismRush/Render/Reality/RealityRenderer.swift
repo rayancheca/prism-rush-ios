@@ -34,6 +34,12 @@ final class RealityRenderer: RendererPort {
 
     private var elapsed: Double = 0
     private var blinkT: Double = 3
+    private var shake: Float = 0
+    private var lastSpeed: Float = 0
+    private var camX: Float = 0
+    private let reduceMotion = UIAccessibility.isReduceMotionEnabled
+
+    private var particles: ParticleSystem!
 
     // Latest blended obstacle tints, captured each frame for the pools' place closure.
     private var tintAccent = UIColor.cyan
@@ -47,6 +53,7 @@ final class RealityRenderer: RendererPort {
             self?.makeEntity(kind) ?? ModelEntity()
         }
         decor = WorldDecor(root: root)
+        particles = ParticleSystem(parent: root)
     }
 
     func install(into content: RealityViewCameraContent) {
@@ -68,13 +75,15 @@ final class RealityRenderer: RendererPort {
         setColor(antenna, pal.accent)
         setColor(antennaTip, pal.accent2)
 
-        // Camera follow + speed FOV.
+        // Camera follow + speed FOV + decaying screen shake (kept off the follow position so it
+        // doesn't bleed into the lerp; Reduce Motion disables it).
         let px = Float(snap.playerX)
+        lastSpeed = Float(snap.speed)
         camera.camera.fieldOfViewInDegrees = 62 + Float(clampD((snap.speed - 7) / 27, 0, 1)) * 9
-        var cp = camera.position
-        cp.x += (px * 0.42 - cp.x) * 0.15
-        cp.y = 5.1
-        cp.z = 9.6
+        camX += (px * 0.42 - camX) * 0.15
+        let shakeX = (!reduceMotion && shake > 0) ? Float.random(in: -1...1) * shake * 0.3 : 0
+        let shakeY = (!reduceMotion && shake > 0) ? Float.random(in: -1...1) * shake * 0.3 : 0
+        let cp = SIMD3<Float>(camX + shakeX, 5.1 + shakeY, 9.6)
         camera.position = cp
         camera.look(at: SIMD3<Float>(px * 0.3, 1.3, -5), from: cp, relativeTo: nil)
 
@@ -105,24 +114,52 @@ final class RealityRenderer: RendererPort {
             }
         }
 
+        // Speed trail behind the player.
+        if snap.mode == .play {
+            particles.burst(x: px + Float.random(in: -0.2...0.2), y: 0.25 + Float(snap.playerY), z: 0.5,
+                            color: tintAccent, count: 2, power: 0.8, spread: 0.08, life: 0.4)
+        }
+
         // Per-world decor.
         decor.update(distance: snap.distance, world: snap.worldTo, elapsed: elapsed)
     }
 
     func fire(_ event: FXEvent) {
-        // Particles, screen shake, popups and haptics arrive in Phase 5.
+        switch event {
+        case let .gemCollected(x, y, _):
+            particles.burst(x: Float(x), y: Float(y), z: 0, color: cGold, count: 7, power: 3, spread: 0.15, life: 0.45)
+        case let .landed(x):
+            particles.burst(x: Float(x), y: 0.1, z: 0.2, color: tintAccent, count: 8, power: 2.5, spread: 0.3, life: 0.35)
+        case let .pickup(kind, x, y):
+            particles.burst(x: Float(x), y: Float(y), z: 0, color: kind == .shield ? cWhite : tintAccent, count: 24, power: 4.5, spread: 0.3, life: 0.6)
+        case let .shieldAbsorbed(x):
+            particles.burst(x: Float(x), y: 1.2, z: 0, color: cWhite, count: 30, power: 6, spread: 0.4, life: 0.6)
+            shake = max(shake, 0.5)
+        case let .died(x):
+            particles.burst(x: Float(x), y: 1, z: 0, color: tintAccent2, count: 70, power: 7, spread: 0.5, life: 0.9)
+            particles.burst(x: Float(x), y: 1, z: 0, color: cWhite, count: 40, power: 9, spread: 0.3, life: 0.7)
+            shake = 1
+        case .jumped, .slid, .laneChanged, .nearMiss, .worldChanged:
+            break   // popups / banner / haptics handled by the UI layer
+        }
     }
 
-    /// Time-based animation (blink) — driven by the loop's wall-clock dt.
+    /// Time-based animation (blink, particles, shake decay) — driven by the loop's wall-clock dt.
     func advanceVisuals(_ dt: Double) {
         elapsed += dt
         blinkT -= dt
         if blinkT < -0.12 { blinkT = Double.random(in: 2.2...4.2) }
         let blink: Float = blinkT < 0 ? 0.1 : 1
         for eye in eyes { eye.scale = SIMD3<Float>(1, blink, 1) }
+        particles.step(Float(dt), speed: lastSpeed)
+        if shake > 0 { shake = max(0, shake - Float(dt) * 2.2) }
     }
 
-    func resetEntities() { pools.releaseAll() }
+    func resetEntities() {
+        pools.releaseAll()
+        particles.reset()
+        shake = 0
+    }
 
     // MARK: scene construction
 

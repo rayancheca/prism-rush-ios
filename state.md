@@ -1,10 +1,10 @@
 # PRISM RUSH — Build State
 
 > Single source of truth for session resumability. On any fresh session: read this first, then continue.
-> Last updated: end of Phase 4.
+> Last updated: end of Phase 5.
 
 ## Current phase
-**Phase 4 COMPLETE → entering Phase 5 (juice).**
+**Phase 5 COMPLETE → entering Phase 6 (synthesized audio).**
 
 ## Environment (probed Phase 0)
 | Fact | Value |
@@ -44,18 +44,26 @@ exist here. Override via `PR_SIM_NAME`/`PR_SIM_OS`/`PR_SIM_UDID`.
       `MeshDescriptor`. All 3 worlds screenshot-verified with correct palettes + decor (Metropolis/Caverns/
       Sands). 26 tests green. Walkthrough README updated with 3-world shots + pushed.
 
-## Next 3 actions (Phase 5 — juice)
-1. **Particles** — `ParticleEmitterComponent` (or pooled quads): trail behind player, gem bursts, landing
-    dust, death shatter (70 accent + 40 white), shield pop. Driven by `RealityRenderer.fire(FXEvent)`.
-2. **Camera + screen** — screen shake on death (decay 2.2/s, respect Reduce Motion), FOV ramp already in;
-    wind/speed lines above speed 22; white flash frames (death 0.5, shield 0.25); floating score popups
-    (SwiftUI projected from world pos). World banner "WORLD N · NAME" overlay on `worldChanged`.
-3. **Haptics** service (CoreHaptics + `UIFeedbackGenerator` fallback) per the haptics map. Gate: capture
-    5 frames mid-run, fix the 3 ugliest things, repeat once.
+- [x] **Phase 5** — pooled CPU `ParticleSystem` (trail, gem bursts, landing dust, death shatter, shield/
+      pickup pops) driven by `fire(FXEvent)`; screen shake (decay 2.2/s, off the follow position, Reduce-
+      Motion gated); SwiftUI `EffectsOverlay` (rising score popups, CLOSE/SLICK near-miss text, world banner,
+      white flash frames); `Haptics` service (UIFeedbackGenerator map). All screenshot-verified (trail +
+      shatter + banner + CLOSE all captured). 26 tests green.
+
+## Next 3 actions (Phase 6 — synthesized audio)
+1. **SynthEngine** (`Audio/`) — AVAudioEngine graph: `sfxGain` + `musicGain` (ducked under SFX) → master.
+    SFX: gem blip (square 560Hz×1.045^streak), jump sine sweep, slide noise LP, crash, shield/magnet chime,
+    world-change saw sweep. Route from `GameModel.handleFX`.
+2. **Music** — 132 BPM synthwave on 8th notes (kick/hat/saw bass on `[0,0,2,1,0,0,3,2]`, arp from World 2),
+    per-world root shift `[0,+2,-2]` + LP open `500+world*250`. Schedule sample-accurately against
+    `AVAudioTime` (NOT wall-clock). Fade in 1.2s on run start, out 0.8s on death.
+3. **Mute persistence** (`UserDefaults pr.muted`) + sound button; CLI harness rendering 2s of each SFX to
+    `reports/audio/*.wav` for review. Gate: 5-min soak with audio, no engine stalls.
 
 ## Resolved polish backlog
 - Gems are now octahedrons, magnet a torus (procedural meshes). ✓
-- Menu player-orb overlap: superseded by the new menu framing with city towers (acceptable).
+- Wind/speed lines (above speed 22) — deferred minor polish (not yet implemented).
+- Floating popups use an approximate lane→screen mapping (not full 3D projection) — acceptable.
 
 ## Decision log
 - **Renderer = RealityKit** (Plan B / SceneKit NOT triggered; RealityView surface verified in Phase 1).
@@ -96,3 +104,9 @@ exist here. Override via `PR_SIM_NAME`/`PR_SIM_OS`/`PR_SIM_UDID`.
   README + `docs/screenshots/`; pushed to GitHub (rayancheca/prism-rush-ios, public).
 - `phase4`: world crossfade + WorldDecor (horizon-swap) + character face. All 3 worlds screenshot-verified;
   README updated with 3-world walkthrough.
+- `phase5`: juice — pooled particles, screen shake, score popups, world banner, flash, haptics.
+  Banner+near-miss+crossfade hero shot captured; README refreshed.
+
+## Note on running tests
+NEVER drive screenshots / `simctl launch` on the dev sim (10C15FE0) while `xcodebuild test` runs on it —
+concurrent app installs crash the test host and report a false "TEST FAILED" (the suite itself is fine).
