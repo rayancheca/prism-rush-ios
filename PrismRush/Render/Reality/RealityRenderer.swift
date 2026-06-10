@@ -50,6 +50,13 @@ final class RealityRenderer: RendererPort {
     private var tintAccent = UIColor.cyan
     private var tintAccent2 = UIColor.magenta
 
+    // Cached obstacle materials — rebuilt only when the tints change (during a world crossfade), not
+    // per entity per frame. Avoids ~6k UnlitMaterial allocations/sec.
+    private var matAccent = UnlitMaterial(color: .cyan)
+    private var matAccent2 = UnlitMaterial(color: .magenta)
+    private var matAccentKey: UIColor = .clear
+    private var matAccent2Key: UIColor = .clear
+
     init() {
         gemMesh = ProceduralMesh.octahedron(0.34)
         magnetMesh = ProceduralMesh.torus(major: 0.30, minor: 0.12)
@@ -88,11 +95,16 @@ final class RealityRenderer: RendererPort {
         lastSpeed = Float(snap.speed)
         camera.camera.fieldOfViewInDegrees = 62 + Float(clampD((snap.speed - 7) / 27, 0, 1)) * 9
         camX += (px * 0.42 - camX) * 0.15
-        let shakeX = (!reduceMotion && shake > 0) ? Float.random(in: -1...1) * shake * 0.3 : 0
-        let shakeY = (!reduceMotion && shake > 0) ? Float.random(in: -1...1) * shake * 0.3 : 0
+        let shaking = !reduceMotion && shake > 0
+        let shakeX = shaking ? Float.random(in: -1...1) * shake * 0.55 : 0
+        let shakeY = shaking ? Float.random(in: -1...1) * shake * 0.55 : 0
         let cp = SIMD3<Float>(camX + shakeX, 5.1 + shakeY, 9.6)
         camera.position = cp
         camera.look(at: SIMD3<Float>(px * 0.3, 1.3, -5), from: cp, relativeTo: nil)
+        if shaking {   // a touch of rotational roll makes impacts read far harder than position alone
+            let roll = Float.random(in: -1...1) * shake * 0.012
+            camera.orientation = simd_quatf(angle: roll, axis: SIMD3<Float>(0, 0, 1)) * camera.orientation
+        }
 
         // Player rig: lane/jump pose, squash-&-stretch, bank, plus a pronounced forward-lean slide.
         playerRig.isEnabled = snap.mode != .over
@@ -115,16 +127,20 @@ final class RealityRenderer: RendererPort {
         let off = Float(snap.distance.truncatingRemainder(dividingBy: Double(rungSpacing)))
         for (i, r) in rungs.enumerated() { r.position.z = off + 10 - Float(i) * rungSpacing }
 
-        // Spawned entities.
+        // Spawned entities — rebuild the two obstacle materials only when the tints actually change
+        // (i.e. during a world crossfade), then assign by reference. Also fixes stale pooled colors.
         let accent = tintAccent, accent2 = tintAccent2
+        if !matAccentKey.isEqual(accent) { matAccent = UnlitMaterial(color: accent); matAccentKey = accent }
+        if !matAccent2Key.isEqual(accent2) { matAccent2 = UnlitMaterial(color: accent2); matAccent2Key = accent2 }
+        let mA = matAccent, mA2 = matAccent2
         pools.sync(snap.entities) { entity, s in
             let y: Float = (s.kind == .bar) ? 1.3 : Float(s.y)
             entity.position = SIMD3<Float>(Float(s.x), y, Float(s.z))
             switch s.kind {
             case .tall:
-                (entity as? ModelEntity).map { $0.model?.materials = [UnlitMaterial(color: accent)] }
+                (entity as? ModelEntity).map { $0.model?.materials = [mA] }
             case .low, .bar, .movingTall:
-                (entity as? ModelEntity).map { $0.model?.materials = [UnlitMaterial(color: accent2)] }
+                (entity as? ModelEntity).map { $0.model?.materials = [mA2] }
             case .gem, .shield, .magnet:
                 entity.orientation = simd_quatf(angle: Float(s.spin) * 0.9, axis: SIMD3<Float>(0, 1, 0))
             }
@@ -133,7 +149,7 @@ final class RealityRenderer: RendererPort {
         // Speed trail behind the player.
         if snap.mode == .play {
             particles.burst(x: px + Float.random(in: -0.2...0.2), y: 0.25 + Float(snap.playerY), z: 0.5,
-                            color: tintAccent, count: 2, power: 0.8, spread: 0.08, life: 0.4)
+                            color: tintAccent, count: 3, power: 0.9, spread: 0.08, life: 0.45)
         }
 
         // Per-world decor.
@@ -143,18 +159,18 @@ final class RealityRenderer: RendererPort {
     func fire(_ event: FXEvent) {
         switch event {
         case let .gemCollected(x, y, _):
-            particles.burst(x: Float(x), y: Float(y), z: 0, color: cGold, count: 7, power: 3, spread: 0.15, life: 0.45)
+            particles.burst(x: Float(x), y: Float(y), z: 0, color: cGold, count: 12, power: 3.2, spread: 0.18, life: 0.6)
         case let .landed(x):
-            particles.burst(x: Float(x), y: 0.1, z: 0.2, color: tintAccent, count: 8, power: 2.5, spread: 0.3, life: 0.35)
+            particles.burst(x: Float(x), y: 0.1, z: 0.2, color: tintAccent, count: 10, power: 2.6, spread: 0.32, life: 0.4)
         case let .pickup(kind, x, y):
-            particles.burst(x: Float(x), y: Float(y), z: 0, color: kind == .shield ? cWhite : tintAccent, count: 24, power: 4.5, spread: 0.3, life: 0.6)
+            particles.burst(x: Float(x), y: Float(y), z: 0, color: kind == .shield ? cWhite : tintAccent, count: 36, power: 4.8, spread: 0.34, life: 0.8)
         case let .shieldAbsorbed(x):
-            particles.burst(x: Float(x), y: 1.2, z: 0, color: cWhite, count: 30, power: 6, spread: 0.4, life: 0.6)
-            shake = max(shake, 0.5)
+            particles.burst(x: Float(x), y: 1.2, z: 0, color: cWhite, count: 40, power: 6.2, spread: 0.42, life: 0.7)
+            shake = max(shake, 0.8)
         case let .died(x):
-            particles.burst(x: Float(x), y: 1, z: 0, color: tintAccent2, count: 70, power: 7, spread: 0.5, life: 0.9)
-            particles.burst(x: Float(x), y: 1, z: 0, color: cWhite, count: 40, power: 9, spread: 0.3, life: 0.7)
-            shake = 1
+            particles.burst(x: Float(x), y: 1, z: 0, color: tintAccent2, count: 120, power: 7.5, spread: 0.55, life: 1.2)
+            particles.burst(x: Float(x), y: 1, z: 0, color: cWhite, count: 60, power: 9.5, spread: 0.35, life: 0.9)
+            shake = 1.4
         case .jumped, .slid, .laneChanged, .nearMiss, .worldChanged:
             break   // popups / banner / haptics handled by the UI layer
         }

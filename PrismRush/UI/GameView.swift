@@ -14,6 +14,7 @@ final class GameModel {
     @ObservationIgnored let synth = SynthEngine()
     @ObservationIgnored private var sub: EventSubscription?
     private(set) var muted = false
+    private(set) var paused = false
 
     /// Which meta screen is open over the menu (nil = the menu hub itself).
     enum MetaScreen { case characters, shop, levels, stats }
@@ -83,6 +84,11 @@ final class GameModel {
                 self.uiClock += dt
                 self.haptics.tick(dt)
 
+                if self.paused {
+                    self.synth.musicPump(dt: dt, world: self.core.snapshot.worldTo)
+                    return   // freeze the simulation while paused; keep music + UI alive
+                }
+
                 if (self.autoplay || self.demo), self.core.mode == .play {
                     Autopilot.drive(self.core)
                 }
@@ -109,14 +115,28 @@ final class GameModel {
         core.startRun(startDistance: Double(fromWorld) * Tuning.worldLength)
         renderer.resetEntities()
         overTime = 0
+        paused = false
         popups.removeAll()
         activeSheet = nil
         synth.musicStart()
         synth.playSFX(Synth.startChime())
     }
 
+    /// Pause is only meaningful mid-run. The pause button toggles it; backgrounding forces it on.
+    func togglePause() {
+        guard core.mode == .play else { return }
+        paused.toggle()
+    }
+
+    func pauseForBackground() {
+        if core.mode == .play { paused = true }
+    }
+
+    func resume() { paused = false }
+
     /// Abandon the current run/over state and return to the menu hub (the "BACK TO MENU" path).
     func returnToMenu() {
+        paused = false
         core.reset(seed: nil)
         renderer.resetEntities()
         synth.musicStop()
@@ -139,8 +159,8 @@ final class GameModel {
             synth.playSFX(Synth.close())
         case let .pickup(kind, x, _):
             addPopup(kind == .shield ? "SHIELD" : "MAGNET", color: .white, worldX: x)
-            flash(kind == .shield ? 0.18 : 0.15)
-            synth.playSFX(Synth.chime())
+            flash(0.28)
+            synth.playSFX(kind == .shield ? Synth.shieldChime() : Synth.magnetChime())
         case let .shieldAbsorbed(x):
             addPopup("SHIELDED", color: .white, worldX: x)
             flash(0.25)
@@ -237,6 +257,7 @@ final class GameModel {
 
 struct GameView: View {
     @State private var model = GameModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     @ViewBuilder
     private func metaSheet(_ sheet: GameModel.MetaScreen) -> some View {
@@ -270,13 +291,26 @@ struct GameView: View {
             HUDView(core: model.core)
 
             VStack {
-                Button { model.toggleMute() } label: {
-                    Image(systemName: model.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .frame(width: 38, height: 38)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay(Circle().strokeBorder(.white.opacity(0.14)))
+                HStack(spacing: 10) {
+                    Button { model.toggleMute() } label: {
+                        Image(systemName: model.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(width: 38, height: 38)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .overlay(Circle().strokeBorder(.white.opacity(0.14)))
+                    }
+                    if model.core.snapshot.mode == .play {
+                        Button { model.togglePause() } label: {
+                            Image(systemName: "pause.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.85))
+                                .frame(width: 38, height: 38)
+                                .background(.ultraThinMaterial, in: Circle())
+                                .overlay(Circle().strokeBorder(.white.opacity(0.14)))
+                        }
+                        .accessibilityIdentifier("pauseButton")
+                    }
                 }
                 Spacer()
             }
@@ -308,7 +342,15 @@ struct GameView: View {
             }
 
             EffectsOverlay(model: model)
+
+            if model.paused {
+                PauseOverlay(onResume: { model.resume() }, onQuit: { model.returnToMenu() })
+                    .transition(.opacity)
+            }
         }
         .statusBarHidden(true)
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { model.pauseForBackground() }
+        }
     }
 }

@@ -42,6 +42,21 @@ final class InteractionUITests: XCTestCase {
                           "default should no longer be equipped after switching to ember")
     }
 
+    /// B4 — pause must freeze the run, resume must dismiss the overlay, and quit must return home.
+    func testPauseResumeAndQuit() {
+        let app = launch(["PR_AUTOPLAY": "1"])   // bot-driven run, so we're in .play with a pause button
+        let pause = app.buttons["pauseButton"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 10), "pause button should show during play")
+        pause.tap()
+        XCTAssertTrue(app.staticTexts["PAUSED"].waitForExistence(timeout: 4), "PAUSED overlay should appear")
+        app.buttons["resumeButton"].tap()
+        XCTAssertTrue(app.staticTexts["PAUSED"].waitForNonExistence(timeout: 4), "PAUSED should dismiss on resume")
+
+        app.buttons["pauseButton"].tap()
+        app.buttons["quitButton"].tap()
+        XCTAssertTrue(app.buttons["playButton"].waitForExistence(timeout: 5), "quit should return to the menu")
+    }
+
     /// Navigation — every hub button opens its screen, and back returns to the menu (covers B8/Worlds).
     func testHubNavigation() {
         let app = launch(["PR_DEMOPROFILE": "1"])

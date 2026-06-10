@@ -89,6 +89,22 @@ enum Synth {
         return b
     }
 
+    static func shieldChime() -> [Float] {            // rising triad — protective, uplifting
+        var b = blank(0.42)
+        tone(&b, 660, 680, dur: 0.12, .sine, vol: 0.17)
+        tone(&b, 880, 900, dur: 0.12, .sine, vol: 0.17, offset: Int(0.09 * sampleRate))
+        tone(&b, 1320, 1340, dur: 0.20, .triangle, vol: 0.16, offset: Int(0.18 * sampleRate))
+        return b
+    }
+
+    static func magnetChime() -> [Float] {            // descending arpeggio — a magnetic pull
+        var b = blank(0.42)
+        tone(&b, 1180, 1160, dur: 0.10, .triangle, vol: 0.16)
+        tone(&b, 920, 900, dur: 0.10, .triangle, vol: 0.16, offset: Int(0.09 * sampleRate))
+        tone(&b, 700, 680, dur: 0.18, .sine, vol: 0.16, offset: Int(0.18 * sampleRate))
+        return b
+    }
+
     static func worldSweep() -> [Float] {
         var b = blank(0.72)
         tone(&b, 220, 880, dur: 0.7, .saw, vol: 0.12)

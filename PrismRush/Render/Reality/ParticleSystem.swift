@@ -22,7 +22,7 @@ final class ParticleSystem {
     private let count: Int
     private var cursor = 0
 
-    init(parent: Entity, count: Int = 280) {
+    init(parent: Entity, count: Int = 400) {
         self.count = count
         mesh = .generateSphere(radius: 0.085)
         parts = Array(repeating: P(), count: count)
@@ -41,7 +41,9 @@ final class ParticleSystem {
     func burst(x: Float, y: Float, z: Float, color: UIColor, count n: Int, power: Float, spread: Float, life: Float) {
         let mat = UnlitMaterial(color: color)
         for _ in 0..<n {
-            cursor = (cursor + 1) % count
+            // Advance to a free slot so simultaneous bursts don't overwrite live particles (bounded).
+            var tries = 0
+            repeat { cursor = (cursor + 1) % count; tries += 1 } while parts[cursor].on && tries < count
             let i = cursor
             parts[i].pos = SIMD3(x + .random(in: -spread...spread),
                                  y + .random(in: -spread...spread),
@@ -71,7 +73,7 @@ final class ParticleSystem {
             parts[i].pos += parts[i].vel * dt
             parts[i].pos.z += speed * 0.9 * dt
             ents[i].position = parts[i].pos
-            let f = max(0.05, parts[i].life / parts[i].maxLife)
+            let f = max(0.15, parts[i].life / parts[i].maxLife)
             ents[i].scale = SIMD3(repeating: f)
         }
     }
