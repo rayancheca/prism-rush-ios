@@ -50,6 +50,13 @@ final class GameModel {
         renderer.install(into: content)
         haptics.prepare()
         synth.start()
+        if ProcessInfo.processInfo.environment["PR_DEMOPROFILE"] == "1" {
+            ProfileStore.shared.mutate {
+                $0.coins = max($0.coins, 8000)
+                $0.maxWorldReached = max($0.maxWorldReached, 6)
+                $0.ownedSkins.formUnion(["ember", "void"])
+            }
+        }
         let profile = ProfileStore.shared.profile
         synth.muted = profile.muted
         muted = profile.muted
@@ -94,12 +101,13 @@ final class GameModel {
         }
     }
 
-    func startRun() {
+    func startRun(fromWorld: Int = 0) {
         applyCurrentSkin()
-        core.startRun()
+        core.startRun(startDistance: Double(fromWorld) * Tuning.worldLength)
         renderer.resetEntities()
         overTime = 0
         popups.removeAll()
+        activeSheet = nil
         synth.musicStart()
         synth.playSFX(Synth.startChime())
     }
@@ -173,7 +181,7 @@ final class GameModel {
     /// Fold the just-finished run into the profile and award coins (gems + a distance bonus).
     private func recordRunResults() {
         let store = ProfileStore.shared
-        let base = core.gemCount + Int(core.distance / 50)
+        let base = core.gemCount + Int(core.traveledDistance / 50)
         let coins = base * store.profile.coinMultiplier
         lastCoinsEarned = coins
         store.recordRun(score: core.score, distance: core.distance, gems: core.gemCount,
@@ -222,8 +230,10 @@ struct GameView: View {
         switch sheet {
         case .characters:
             CharacterSelectView(model: model)
-        case .shop, .levels, .stats:
-            let title = sheet == .shop ? "Shop" : (sheet == .levels ? "Worlds" : "Stats")
+        case .levels:
+            LevelSelectView(model: model)
+        case .shop, .stats:
+            let title = sheet == .shop ? "Shop" : "Stats"
             MetaScreenScaffold(title: title, coins: ProfileStore.shared.profile.coins, onClose: { model.closeSheet() }) {
                 VStack(spacing: 12) {
                     Image(systemName: "hammer.fill").font(.system(size: 42)).foregroundStyle(.white.opacity(0.4))

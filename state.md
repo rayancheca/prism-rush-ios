@@ -17,7 +17,11 @@
       previews, buy/equip with coins, equipped state). `MetaScreenScaffold`/`CoinBadge`/`CharacterSwatch`
       shared chrome. `PR_SCREEN` debug flag opens a sheet for screenshots. Both screenshot-verified.
 - [ ] **E4** — Shop + StoreKit 2 IAP (coin packs, double-coins, bundles) + a `.storekit` test config.
-- [ ] **E5** — Level select / checkpoint start (start from a reached world) + more power-ups + double-coins.
+- [x] **E5a** — Level select / checkpoint start: `GameCore.startRun(startDistance:)` begins at a reached
+      world's difficulty/palette while `scoreOffset` keeps score & coins counting from zero. `LevelSelectView`
+      grid (per-world color, "Nm in", furthest highlighted). `PR_DEMOPROFILE` debug seeds progression for
+      screenshots. Verified (7 worlds shown).
+- [ ] **E5b** — more in-run power-ups (2× coins pickup) + wire permanent double-coins.
 - [ ] **E6** — Accounts: Sign in with Apple + Game Center friends/leaderboards.
 - [ ] **E7** — Profile/stats screen + polish; privacy manifest update; ship prep.
 

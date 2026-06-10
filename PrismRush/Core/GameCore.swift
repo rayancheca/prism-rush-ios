@@ -31,6 +31,7 @@ final class GameCore {
 
     @ObservationIgnored private(set) var mode: GameMode = .menu
     @ObservationIgnored private(set) var distance: Double = 0
+    @ObservationIgnored private(set) var scoreOffset: Double = 0   // checkpoint head-start (not scored)
     @ObservationIgnored private(set) var speed: Double = Tuning.menuSpeed
     @ObservationIgnored private(set) var px: Double = 0
     @ObservationIgnored private(set) var laneIndex: Int = 1
@@ -76,20 +77,35 @@ final class GameCore {
     // MARK: - Lifecycle
 
     /// Begin a run. `best` is preserved; provide a `seed` for deterministic runs (tests / replay).
-    func startRun(seed: UInt64? = nil) {
+    /// Begin a run. `startDistance > 0` starts at a reached checkpoint (its world + difficulty), but
+    /// score & coins still count from zero (`scoreOffset`) so leaderboards stay fair.
+    func startRun(seed: UInt64? = nil, startDistance: Double = 0) {
         let keepBest = best
         reset(seed: seed)
         best = keepBest
         mode = .play
-        speed = Tuning.menuSpeed   // ramps up immediately under the play target
+        if startDistance > 0 {
+            distance = startDistance
+            scoreOffset = startDistance
+            spawner.cursor = startDistance + 60
+            let wn = Int((startDistance / Tuning.worldLength).rounded(.down))
+            let wi = ((wn % 3) + 3) % 3
+            maxWorld = wn; world = wi; worldFrom = wi; worldTo = wi; worldBlend = 1
+            speed = min(Tuning.speedCap, Tuning.speedStart + startDistance * Tuning.speedRamp)
+        } else {
+            speed = Tuning.menuSpeed   // ramps up immediately under the play target
+        }
         rebuildSnapshot()
     }
+
+    /// Distance actually travelled this run (excludes a checkpoint head-start).
+    var traveledDistance: Double { distance - scoreOffset }
 
     /// Reset to the fresh menu state. Reseeds if `seed` is given (else a new random stream).
     func reset(seed: UInt64?) {
         rng = SplitMix64(seed: seed ?? .random(in: .min ... .max))
         spawner = Spawner()
-        mode = .menu; distance = 0; speed = Tuning.menuSpeed
+        mode = .menu; distance = 0; scoreOffset = 0; speed = Tuning.menuSpeed
         px = 0; laneIndex = 1; jumpY = 0; vy = 0; grounded = true; slideT = 0; sy = 1
         bankZ = 0; jumpBuf = 0
         world = 0; maxWorld = 0; worldFrom = 0; worldTo = 0; worldBlend = 1
@@ -125,7 +141,7 @@ final class GameCore {
         if magnetT > 0 { magnetT = max(0, magnetT - dt) }
         // Score freezes at death: the post-death decel keeps distance climbing, but the run's
         // score must not. `die()` captures the final value; here we only advance it while playing.
-        if mode == .play { score = Int((distance * 2).rounded(.down)) + bonus }
+        if mode == .play { score = Int(((distance - scoreOffset) * 2).rounded(.down)) + bonus }
     }
 
     // MARK: - Input intents (called between ticks on the main actor)
@@ -342,7 +358,7 @@ final class GameCore {
     }
 
     private func die() {
-        score = Int((distance * 2).rounded(.down)) + bonus   // final, frozen score
+        score = Int(((distance - scoreOffset) * 2).rounded(.down)) + bonus   // final, frozen score
         mode = .over
         streak = 0; mult = 1
         if score > best { best = score }
