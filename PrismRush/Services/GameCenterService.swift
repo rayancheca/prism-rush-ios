@@ -8,6 +8,8 @@ import UIKit
 final class GameCenterService: NSObject, GKGameCenterControllerDelegate {
     static let shared = GameCenterService()
     static let leaderboardID = "prismrush.best"
+    /// Recurring leaderboard (daily reset in App Store Connect) for the shared-seed daily challenge.
+    static let dailyLeaderboardID = "prismrush.daily"
 
     private(set) var authenticated = false
 
@@ -37,6 +39,16 @@ final class GameCenterService: NSObject, GKGameCenterControllerDelegate {
         Task {
             try? await GKLeaderboard.submitScore(score, context: 0, player: GKLocalPlayer.local,
                                                  leaderboardIDs: [Self.leaderboardID])
+        }
+    }
+
+    /// Submit a daily-challenge run. `day` (UTC days since epoch) rides along as the context so a
+    /// score's challenge date is recoverable; the recurring leaderboard handles the daily reset.
+    func submitDailyChallenge(score: Int, day: Int) {
+        guard authenticated, score > 0 else { return }
+        Task {
+            try? await GKLeaderboard.submitScore(score, context: day, player: GKLocalPlayer.local,
+                                                 leaderboardIDs: [Self.dailyLeaderboardID])
         }
     }
 

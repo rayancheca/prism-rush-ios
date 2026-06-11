@@ -431,8 +431,13 @@ final class GameModel {
             store.applyRunSummary(summary)
         }
 
-        // Daily challenge: fold the score into the per-UTC-day best + played calendar.
-        if isChallengeRun { store.recordChallengeRun(score: core.score) }
+        // Daily challenge: fold the score into the per-UTC-day best + played calendar, and rank it
+        // on the recurring daily leaderboard (shared seed, revive disabled — fair worldwide board).
+        if isChallengeRun {
+            store.recordChallengeRun(score: core.score)
+            GameCenterService.shared.submitDailyChallenge(score: core.score,
+                                                          day: ProfileStore.daysSinceEpoch(Date()))
+        }
 
         // Checkpoint runs ramp to end-game speed from t = 0 — never leaderboard-eligible
         // (the local best still updates above; see AGENT_core.md §Game Center).
