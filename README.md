@@ -142,6 +142,50 @@ shake/FOV/speed lines.
 > **one Mac build + the visual/audio pass** — the exact checklist lives in
 > [`reports/AGENT_wiring.md`](reports/AGENT_wiring.md) §MAC VERIFICATION (and condensed in
 > [`docs/SHIP_CHECKLIST.md`](docs/SHIP_CHECKLIST.md)).
+> *(Resolved in the v1.2 Mac pass: BUILD OK first try, 95/95 green — see `state.md` §A.)*
+
+---
+
+## v1.3 — characters, progression & the fun fix
+
+Owner playtest verdicts drove this one: *"why doesn't my character change?"*, *"I have to jump
+then slide mid-air to catch the coins"*, *"too loaded with info"*. A two-stage agent fleet
+(4 explorer→designer pipelines → one binding contract, [`reports/design/V13_SPEC.md`](reports/design/V13_SPEC.md),
+then 6 implementation waves with strictly disjoint file ownership + 5 adversarial reviewers + a
+fixer) shipped, all gates green:
+
+**Characters become the game.** 16 fully procedural characters (zero assets — body shape/scale,
+eye & pupil styles, antenna variants, per-skin idle personality) across 4 rarity tiers. Your pick
+now *stays yours in every world* — fixed body identity plus skin-tinted trail, slide dust, landing
+burst and death shatter (only **Prism**, the free chameleon, still morphs with the world — that's
+its whole personality). Locked characters show as silhouettes with their exact unlock path: coins,
+**XP levels 3/6/12/25**, achievements, 7 daily-challenge days, or the one IAP. Animated **idle
+previews everywhere** (30 Hz Canvas — blink schedules, bob, antenna sway): the menu hero stage and
+a stage-and-shelf character select (preview before you commit).
+
+**Progression.** XP per run (distance/gems/near-misses/streak) → **30 levels** with banded coin
+grants and character unlocks; XP bar + level-up burst on the death panel, level ring on the menu.
+Four new earn loops, still **zero ads**: level-up grants, a weekly mission board (3 big slots per
+UTC week), in-run **style coins** for near-miss play, and daily-challenge score tiers.
+
+**The fun fix + 3 new mechanics.** Gem arcs are now laid **on the actual jump parabola**
+(speed-aware — 7/7 collectible with one clean jump, no more mid-air slide). **Prism Rings** to
+thread at apex (PERFECT window pays triple) · **Overdrive Pads** (1 s speed surge in a provably
+safe runway, double gem pay) · **Flow Surge** (every 3rd near-miss erupts a 10-gem fountain) —
+all proven by the same 200-seed/12,000 m solvability bot with **zero Autopilot changes**, under
+`layoutVersion 2` (daily-challenge goldens re-pinned).
+
+**UI reframe.** Menu rebuilt Hero/Verb/Rail/Nav (14 elements → 9, your character front and
+center), role-based palette (cyan = tappable, gold = claimable, world colors stay in-game),
+type/spacing/radius tokens, a **living Worlds tab** (procedural per-world vignettes, per-world
+bests, PLAY FROM HERE), a 4-section Shop that survives StoreKit being offline, an in-run HUD diet
+(ghost-chase chip instead of a static BEST, merged gem/mult pill, icon timer rings, flow pips),
+and a full clickability audit — every element on screen now leads somewhere.
+
+**Verification:** `swift test -c release` **129/129** (Linux-provable) · `./Tools/ci.sh`
+**137/137** (129 unit + 8 XCUITest) · 4-minute autoplay soak on a wiped profile (zero crashes,
+rings/fountains/boosts observed live) · fresh screenshot sweep in
+[`reports/shots/v13/`](reports/shots/v13/).
 
 ---
 
