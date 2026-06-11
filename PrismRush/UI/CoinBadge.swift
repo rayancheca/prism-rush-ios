@@ -2,14 +2,28 @@ import SwiftUI
 
 /// A small gold coin glyph + amount, reused across the HUD, menu, game-over and shop.
 /// The amount rolls with a numeric content transition (premium feel) and reads as
-/// "N coins" to VoiceOver.
+/// "N coins" to VoiceOver. v1.3: optionally tappable (`action` → Shop everywhere, uiux §5);
+/// the default keeps every existing call site compiling as a display-only badge (R13).
 struct CoinBadge: View {
     let amount: Int
     var prefix: String = ""
+    var action: (() -> Void)? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        if let action {
+            Button(action: action) { label }
+                .buttonStyle(.neon)
+                .accessibilityLabel(a11yLabel)
+                .accessibilityHint("Opens the shop")
+        } else {
+            label
+                .accessibilityLabel(a11yLabel)
+        }
+    }
+
+    private var label: some View {
         HStack(spacing: 6) {
             CoinGlyph(size: 16)
             Text("\(prefix)\(amount)")
@@ -19,7 +33,10 @@ struct CoinBadge: View {
         }
         .animation(reduceMotion ? nil : .snappy(duration: 0.4), value: amount)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(prefix.isEmpty ? "" : prefix + " ")\(amount) coins")
+    }
+
+    private var a11yLabel: String {
+        "\(prefix.isEmpty ? "" : prefix + " ")\(amount) coins"
     }
 }
 
