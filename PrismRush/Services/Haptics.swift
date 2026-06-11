@@ -64,8 +64,22 @@ final class Haptics {
             }
         case .chronoEnded:
             light.impactOccurred(intensity: 0.5)   // soft "time resumes" tap
-        case .ringPassed, .boostStarted, .boostEnded, .flowSurge:
-            break   // v1.3 haptic mapping (R17: ring=light, boost=medium, flow=success) lands in wave 5
+        // v1.3 mechanic map (R17): ring = light, perfect/boost = medium, flow surge = success.
+        case let .ringPassed(_, _, perfect):
+            if perfect { medium.impactOccurred() } else { light.impactOccurred(intensity: 0.8) }
+        case .boostStarted:
+            medium.impactOccurred()
+        case .boostEnded:
+            break   // the speed restore is its own feedback — no haptic on the down-edge
+        case .flowSurge:
+            notify.notificationOccurred(.success)
         }
+    }
+
+    /// Level-up / character-grant celebration (R17 success class). Not an `FXEvent` — the level
+    /// outcome only exists after `applyRunSummary`, so GameView calls this directly.
+    func levelUp() {
+        guard enabled else { return }
+        notify.notificationOccurred(.success)
     }
 }

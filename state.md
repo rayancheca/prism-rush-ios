@@ -1,13 +1,49 @@
 # PRISM RUSH — Build State
 
 > Single source of truth for session resumability. On any fresh session: read this first, then continue.
-> Last updated: end of the **v1.2 multi-agent overhaul** (this branch, pre-merge).
+> Last updated: end of the **v1.3 content update** (waves 1–5 complete).
 
 ## Current phase
-**v1.2 OVERHAUL COMPLETE on this branch.** Base game (Phases 0–6) + F2P expansion (E1–E6) + the v1.1
-critique rounds all shipped earlier; this branch adds the Fable 5 multi-agent overhaul on top.
-Everything Linux can prove is green; what remains is the **Mac verification pass + App Store ops**
-(see "Next actions" below and `docs/SHIP_CHECKLIST.md`).
+**v1.3 CONTENT UPDATE COMPLETE.** Implemented per the binding contract
+`reports/design/V13_SPEC.md` (where it disagrees with the four DESIGN_*.md docs, the spec wins).
+What remains is the App Store ops track (unchanged — see §B below and `docs/SHIP_CHECKLIST.md`).
+
+### v1.3 — what shipped (waves 1–5, serialized, disjoint file ownership)
+| Wave | Commit | Scope |
+|---|---|---|
+| 1 core | `cb94f7c` | Ballistic gem arc (7/7 collectible), Prism Rings, Overdrive Pads, Flow Surge, 5-tier pacing + anti-repeat reroll, `streakPerMult` 6→5, `layoutVersion` 1→2 (one bump covers all of v1.3 — R15) |
+| 2 meta | `bb1779c` | `XPCurve` levels 1–30 + banded coin grants (`LevelUpResult`), 16-skin roster (`SkinCatalog` v2 + `SkinUnlocks`), weekly missions (3 slots/UTC week), challenge local tiers (R16), 6 new Profile fields (all `decodeIfPresent ?? default`), cloud-merge rules |
+| 3 render | `f751a5d` | `applySkin(_ skin: Skin)` rig rebuild (shape/scale/eyes/pupils/antenna/sway), skin-tinted trail/dust/landing/shatter, pooled ring torus + boost chevron, boost FOV punch, flow aura/cascade |
+| 4 ui/audio | `4a73d95` + `4d68b83` | Theme tokens (Role/TypeScale/Space/Radius), menu Hero/Verb/Rail/Nav reframe, `AnimatedCharacterSwatch`/`CharacterHeroStage`, stage-and-shelf Characters, Shop 4 sections, Worlds previews + per-world best, HUD diet (flow pips, boost ring, ghost chip), GameOver 3 bands + XP bar, weekly board + CLAIM ALL, six DSP SFX (R17) |
+| 5 wiring | this commit | GameView glue: style-coins 4th per-death delta, `summary.startWorld`, `lastLevelUp` model state (G3), challenge payout capture, `applySkin(Skin)` + ownership guard, `refreshSkinUnlocks` at install/post-run/post-challenge/sheet-close with NEW CHARACTER popups, FX→haptics map (R17), six-SFX wiring, pruned MenuView/GameOverView call sites, XCUITest refresh (+2 flows) |
+
+### v1.3 test status
+- `swift test -c release` (SPM, Linux-provable): wave-1/2 suites green (incl. 200-seed × 6,000 m bot
+  + 12,000 m deep soak with ZERO `Autopilot.swift` diffs; layoutVersion-2 goldens re-pinned).
+- Mac `xcodebuild test` (full gate `./Tools/ci.sh`): **137/137 green** — 129 unit + 8 XCUITest
+  (iPhone 17 Pro · iOS 26.5 sim). v1.2 was 95 (89 + 6); v1.3 adds 40 unit + 2 XCUITest
+  (the spec's §T "≈121" was an estimate — waves 1–2 landed more pins than budgeted).
+
+### v1.3 economy invariants (re-verified this wave — iron rule 9)
+- `applyRunSummary` exactly once per run (GameView `statsRecorded` guard); its `LevelUpResult` is
+  captured as **model state** (`lastLevelUp`), never re-derived from the live store (G3).
+- All FOUR coin components are per-death deltas (`max(0, cumulative − awarded)`): gems & bonuses
+  (rings/boost/fountains pay through `gemCount`), distance, worlds, and the new STYLE line
+  (`XPCurve.styleCoins` vs `styleCoinsAwarded` watermark). New-best fanfare once per run.
+- Challenge runs still can never revive/checkpoint; checkpoint runs still skip GC submission.
+
+### v1.3 device QA checklist (manual feel pass — needs the operator + a device)
+Filed as remaining (automated equivalents are covered by the suite + autoplay):
+Bolt trail end-to-end · Prism crossfade regression · Eclipse readability on Caverns (§P parking-lot
+candidate `0x232337` lighten) · Reduce Motion statics · Pebble vs Eclipse silhouettes · 7/7 arc by
+feel · ring PERFECT timing · overdrive runway feel · flow surge cadence · level-up burst · weekly
+board rollover · challenge tier toast.
+
+---
+
+## v1.2 phase notes (superseded by v1.3 above)
+Base game (Phases 0–6) + F2P expansion (E1–E6) + the v1.1 critique rounds shipped earlier; the
+v1.2 multi-agent overhaul landed on top, then the **Mac verification pass** below confirmed it.
 
 ### v1.2 overhaul — wave structure (who built what)
 | Wave | Scope | Report |
@@ -190,9 +226,16 @@ The old soak/ship plan is folded into `docs/SHIP_CHECKLIST.md`. The 500-seed QA 
 - **(v1.2) Leaderboards = `prismrush.best` (classic, per-run, checkpoint runs never submitted) +
   `prismrush.daily` (RECURRING, daily reset UTC; context = UTC days-since-epoch).** Submitting per-run
   scores (not `profile.bestScore`) keeps checkpoint-earned bests off the board.
-- **(v1.2) `DailyChallenge.layoutVersion` (currently 1) MUST be bumped whenever spawner/pattern/
-  RNG-consumption changes** — goldens pinned in `DailyChallengeTests`; same-day players must see the
-  same track within a layout version.
+- **(v1.2) `DailyChallenge.layoutVersion` (now 2 — bumped once for all of v1.3, R15) MUST be bumped
+  whenever spawner/pattern/RNG-consumption changes** — goldens pinned in `DailyChallengeTests`;
+  same-day players must see the same track within a layout version.
+- **(v1.3) `V13_SPEC.md` is the binding contract** for the v1.3 surface (R-decisions, §C symbol
+  names, §W file ownership). Legacy shims it parks (3-arg `applySkin`, defaulted MenuView params,
+  `DailyChallengeCard` absorption) are deleted in v1.4 (R13/§P parking lot).
+- **(v1.3) Mission-claim character grants land on sheet close**: MissionsView claims straight on
+  `ProfileStore` (G3), so `GameModel.closeSheet()` runs `refreshSkinUnlocks` — Drift/Wisp pop on
+  the way back to the hub. Run/challenge grants land in `recordRunResults`; launch catch-up in
+  `install()`.
 - **(v1.2) Revive economy = per-death deltas** (`max(0, cumulative − awarded)` per component);
   `applyRunSummary` exactly once per run (first death); challenge runs can never revive or checkpoint.
 - **(v1.2) Pattern order matters**: split bar is index 10, moving walls stay LAST (index 11) — the

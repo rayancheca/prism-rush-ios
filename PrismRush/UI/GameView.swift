@@ -53,9 +53,17 @@ final class GameModel {
     private(set) var lastCoinsFromGems = 0
     private(set) var lastCoinsFromDistance = 0
     private(set) var lastCoinsFromWorlds = 0
+    /// The 4th per-death delta (v1.3): CLOSE/SLICK style coins via `XPCurve.styleCoins` (rule 9).
+    private(set) var lastCoinsFromStyle = 0
     @ObservationIgnored private var gemCoinsAwarded = 0
     @ObservationIgnored private var distCoinsAwarded = 0
     @ObservationIgnored private var worldCoinsAwarded = 0
+    @ObservationIgnored private var styleCoinsAwarded = 0
+    /// XP/level outcome of this run, captured ONCE from `applyRunSummary` and held as model state
+    /// (G3: the panel must animate the run's result, never a re-derived live-store snapshot).
+    private(set) var lastLevelUp: LevelUpResult?
+    /// Challenge-tier payout from `recordChallengeRun` (R16) — feeds the game-over tier line.
+    private(set) var lastChallengePayout = 0
     // Per-run FX counters (missions feed + game-over stats), reset in `startRun`.
     @ObservationIgnored private var nearMissesThisRun = 0
     @ObservationIgnored private var closesThisRun = 0
@@ -99,22 +107,24 @@ final class GameModel {
             ProfileStore.shared.mutate {
                 $0.coins = max($0.coins, 8000)
                 $0.maxWorldReached = max($0.maxWorldReached, 6)
-                $0.ownedSkins.formUnion(["ember", "void"])
+                $0.ownedSkins.formUnion(["ember", "void", "bolt"])
                 $0.selectedSkin = "default"   // deterministic start state for UI tests/screenshots
                 $0.lastDailyClaim = nil       // daily + chest always claimable in the demo profile
                 $0.lastChestOpen = nil
             }
         }
-        let profile = ProfileStore.shared.profile
-        synth.muted = profile.muted
-        muted = profile.muted
+        // One-shot launch reads (not a body snapshot — G3 applies to SwiftUI body observation).
+        let saved = ProfileStore.shared.profile
+        synth.muted = saved.muted
+        muted = saved.muted
         // Settings persistence: SettingsView applies changes live (model.synth / model.haptics);
         // these lines make them stick across launches (AGENT_meta.md §4).
-        synth.musicVolume = Float(profile.musicVolume)
-        synth.sfxVolume = Float(profile.sfxVolume)
-        haptics.enabled = profile.hapticsEnabled
-        core.best = profile.bestScore
+        synth.musicVolume = Float(saved.musicVolume)
+        synth.sfxVolume = Float(saved.sfxVolume)
+        haptics.enabled = saved.hapticsEnabled
+        core.best = saved.bestScore
         applyCurrentSkin()
+        checkSkinUnlocks()   // launch catch-up: cloud merges/level-ups earned while away grant here
         core.onFX = { [weak self] fx in self?.handleFX(fx) }
         if autoplay || demo { core.startRun(seed: 7) }
         // Debug: jump straight to a meta screen for screenshots.
@@ -188,6 +198,9 @@ final class GameModel {
         gemCoinsAwarded = 0
         distCoinsAwarded = 0
         worldCoinsAwarded = 0
+        styleCoinsAwarded = 0
+        lastLevelUp = nil
+        lastChallengePayout = 0
         nearMissesThisRun = 0
         closesThisRun = 0
         slicksThisRun = 0
@@ -334,8 +347,25 @@ final class GameModel {
             synth.play(.landThud)
         case .laneChanged:
             synth.play(.laneTick)
-        case .ringPassed, .boostStarted, .boostEnded, .flowSurge:
-            break   // v1.3 popups/SFX/haptics land in the wave-5 rewire (renderer already reacts)
+        // v1.3 mechanics — popup styles keyed by prefix in EffectsOverlay (RING/PERFECT/
+        // OVERDRIVE/FLOW SURGE); the score shown is exactly what the core just paid.
+        case let .ringPassed(x, _, perfect):
+            if perfect {
+                addPopup("PERFECT +\(Tuning.ringScore * core.mult)", color: Theme.color(0xFFD23D), worldX: x)
+                synth.play(.ringPerfect)
+            } else {
+                addPopup("RING +\(Tuning.ringScore * core.mult)", color: Theme.color(0x00F5FF), worldX: x)
+                synth.play(.ringPass)
+            }
+        case let .boostStarted(x):
+            addPopup("OVERDRIVE", color: Theme.color(0xFF9F1C), worldX: x)
+            synth.play(.boostStart)
+        case .boostEnded:
+            synth.play(.boostEnd)
+        case let .flowSurge(level, x):
+            addPopup(level > 1 ? "FLOW SURGE ×\(level)" : "FLOW SURGE",
+                     color: Theme.color(0x00F5FF), worldX: x)
+            synth.play(.flowSurge)
         }
     }
 
@@ -345,13 +375,38 @@ final class GameModel {
         ProfileStore.shared.mutate { $0.muted = muted }
     }
 
+    /// Push the equipped skin's full rig recipe to the renderer (v1.3 `applySkin(Skin)` API).
+    /// Ownership guard: a cloud merge or stale save can select a skin this device doesn't own —
+    /// fall back to the default rather than render an unowned cosmetic.
     func applyCurrentSkin() {
-        let skin = SkinCatalog.skin(ProfileStore.shared.profile.selectedSkin)
-        renderer.applySkin(bodyHex: skin.bodyHex, antennaHex: skin.antennaHex, followsWorld: skin.followsWorld)
+        let store = ProfileStore.shared
+        let selected = SkinCatalog.skin(store.profile.selectedSkin)
+        renderer.applySkin(store.owns(skin: selected.id) ? selected : SkinCatalog.skin("default"))
+    }
+
+    /// Auto-grant every newly earned character (XP level / achievement / challenge-days — R2) and
+    /// celebrate each exactly once: `ownedSkins` insertion inside `refreshSkinUnlocks` is the
+    /// dedupe, so a popup can never repeat. Called at install (launch catch-up), after run/
+    /// challenge recording, and on sheet close (mission claims bump achievement tiers).
+    private func checkSkinUnlocks() {
+        let granted = ProfileStore.shared.refreshSkinUnlocks(level: ProfileStore.shared.playerLevel)
+        for skin in granted {
+            addPopup("NEW CHARACTER — \(skin.name.uppercased())",
+                     color: Theme.color(skin.bodyHex == 0 ? 0x00F5FF : skin.bodyHex), worldX: 0)
+            synth.play(.purchaseChime)
+            haptics.levelUp()
+        }
     }
 
     func open(_ screen: MetaScreen) { activeSheet = screen; synth.play(.uiTick) }
-    func closeSheet() { activeSheet = nil; synth.play(.uiTick) }
+
+    func closeSheet() {
+        activeSheet = nil
+        synth.play(.uiTick)
+        // MissionsView claims straight on ProfileStore (G3 store reads), so achievement-unlocked
+        // characters (Drift/Wisp) are granted on the way back to the hub — popup lands on the menu.
+        checkSkinUnlocks()
+    }
 
     /// Equip an owned skin, or buy it with coins (premium skins require IAP — handled in the shop).
     @discardableResult
@@ -393,7 +448,12 @@ final class GameModel {
         distCoinsAwarded += lastCoinsFromDistance
         lastCoinsFromWorlds = max(0, worldsCrossed * 5 * mult - worldCoinsAwarded)
         worldCoinsAwarded += lastCoinsFromWorlds
-        let coinsDelta = lastCoinsFromGems + lastCoinsFromDistance + lastCoinsFromWorlds
+        // 4th component (v1.3): CLOSE/SLICK style coins — same watermark shape as the other three
+        // (XPCurve.styleCoins is cumulative-this-run, so post-revive deaths pay only the new part).
+        lastCoinsFromStyle = max(0, XPCurve.styleCoins(closes: closesThisRun, slicks: slicksThisRun,
+                                                       multiplier: mult) - styleCoinsAwarded)
+        styleCoinsAwarded += lastCoinsFromStyle
+        let coinsDelta = lastCoinsFromGems + lastCoinsFromDistance + lastCoinsFromWorlds + lastCoinsFromStyle
         coinsAwardedThisRun += coinsDelta
         lastCoinsEarned = coinsDelta
 
@@ -431,18 +491,31 @@ final class GameModel {
             summary.bestStreak = core.bestStreak           // max-style: engine maxes
             summary.bestMult = min(Tuning.multCap, 1 + core.bestStreak / Tuning.streakPerMult)
             summary.worldsCrossed = core.maxWorld + 1      // 1-based, matches ach.worlds targets
+            summary.startWorld = runStartWorld             // checkpoint start: zeroes skipped-world XP
             summary.revives = core.revivesUsed
             summary.duration = lastRunDuration
-            store.applyRunSummary(summary)
+            // Captured as model state for the death panel (G3) — applyRunSummary stays
+            // exactly-once-per-run behind this statsRecorded branch (rule 9).
+            let result = store.applyRunSummary(summary)
+            lastLevelUp = result
+            if result.levelAfter > result.levelBefore {
+                addPopup("LEVEL UP — \(result.levelAfter)", color: Theme.color(0x00F5FF), worldX: 0)
+                synth.play(.levelUp)
+                haptics.levelUp()
+            }
         }
 
         // Daily challenge: fold the score into the per-UTC-day best + played calendar, and rank it
         // on the recurring daily leaderboard (shared seed, revive disabled — fair worldwide board).
         if isChallengeRun {
-            store.recordChallengeRun(score: core.score)
+            lastChallengePayout = store.recordChallengeRun(score: core.score)   // tier payout (R16)
             GameCenterService.shared.submitDailyChallenge(score: core.score,
                                                           day: ProfileStore.daysSinceEpoch(Date()))
         }
+
+        // Character grants ride the fresh post-run state: new XP level, new achievement tiers,
+        // and (challenge deaths) the just-extended challengeDaysPlayed calendar (Tempo).
+        checkSkinUnlocks()
 
         // Checkpoint runs ramp to end-game speed from t = 0 — never leaderboard-eligible
         // (the local best still updates above; see AGENT_core.md §Game Center).
@@ -458,7 +531,9 @@ final class GameModel {
     private func flash(_ strength: Double) { flashStrength = strength; flashID += 1 }
 
     private func ageEffects() {
-        if !popups.isEmpty { popups.removeAll { uiClock - $0.born > 0.9 } }
+        // Prune window must outlive the longest EffectsOverlay popup style (milestones hold 1.6 s);
+        // shorter popups have already faded to opacity 0 by then — lingering is invisible.
+        if !popups.isEmpty { popups.removeAll { uiClock - $0.born > 1.8 } }
         if rewardToast != nil, uiClock > toastClearAt { rewardToast = nil }
     }
 
@@ -559,6 +634,8 @@ struct GameView: View {
             switch model.core.snapshot.mode {
             case .menu:
                 if model.activeSheet == nil {
+                    // Final v1.3 signature: settings ride inside Profile, Daily Rush inside the
+                    // rewards rail — their legacy params are gone from this call site (R13).
                     MenuView(best: model.core.snapshot.best,
                              coins: ProfileStore.shared.profile.coins,
                              onPlay: {
@@ -571,8 +648,7 @@ struct GameView: View {
                              onLevels: { model.open(.levels) },
                              onProfile: { model.open(.stats) },
                              rewards: AnyView(RewardsBar(model: model, onMissions: { model.open(.missions) })),
-                             onSettings: { model.open(.settings) },
-                             onDailyChallenge: { model.startDailyChallenge() })
+                             onHowToPlay: { showFirstRunTutorial = true })
                 }
             case .over:
                 GameOverView(snapshot: model.core.snapshot,
@@ -593,16 +669,24 @@ struct GameView: View {
                              coinsFromWorlds: model.lastCoinsFromWorlds,
                              revivesLeft: model.isChallengeRun ? 0 : 2 - model.core.revivesUsed,
                              restartCountdown: model.restartCountdown,
-                             onGetCoins: { model.open(.shop) })
+                             onGetCoins: { model.open(.shop) },
+                             levelUp: model.lastLevelUp,
+                             styleCoins: model.lastCoinsFromStyle,
+                             challengePayout: model.lastChallengePayout,
+                             isChallengeRun: model.isChallengeRun,
+                             onCharacters: { model.open(.characters) },
+                             onFullStats: { model.open(.stats) })
             case .play:
                 EmptyView()
             }
 
-            // Meta sheets render over the menu; the Shop alone is also reachable over the death
-            // panel (GET COINS / EARN ×2 — AGENT_meta.md §7 "lift the gate" option).
+            // Meta sheets render over the menu; over the death panel only the panel's own deep
+            // links open (GET COINS/EARN ×2 → Shop, NEW CHARACTER → Characters, FULL STATS →
+            // Profile — uiux §6.7; everything else stays menu-only).
             if let sheet = model.activeSheet,
                model.core.snapshot.mode == .menu
-                || (sheet == .shop && model.core.snapshot.mode == .over) {
+                || (model.core.snapshot.mode == .over
+                    && (sheet == .shop || sheet == .characters || sheet == .stats)) {
                 metaSheet(sheet).transition(.move(edge: .bottom))
             }
 
