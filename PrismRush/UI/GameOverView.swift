@@ -367,8 +367,8 @@ struct GameOverView: View {
             HStack(spacing: 8) {
                 statChip("\(Int(distance))m · World \(worldOrdinal + 1)")
                 statChip(bestStreak > 0
-                         ? "×\(topMult) streak · \(nearMisses) close calls"
-                         : "\(nearMisses) close calls")
+                         ? "×\(topMult) streak · \(nearMisses) close call\(nearMisses == 1 ? "" : "s")"
+                         : "\(nearMisses) close call\(nearMisses == 1 ? "" : "s")")
             }
             if let onFullStats {
                 Button(action: onFullStats) {
