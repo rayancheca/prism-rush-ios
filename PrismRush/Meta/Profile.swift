@@ -48,6 +48,8 @@ struct Profile: Codable, Equatable, Sendable {
     // Monetization flags (set by StoreKit purchases).
     var doubleCoins: Bool = false
     var ownedProducts: Set<String> = []
+    var totalIAPPurchases: Int = 0          // lifetime VERIFIED purchases (drives the starter offer slot); cloud-merges as max
+    var firstPurchaseBonusUsed: Bool = false // one-time +50% coin-pack bonus already paid; cloud-merges as OR
 
     // Settings.
     var muted: Bool = false
@@ -72,6 +74,7 @@ extension Profile {
         case musicVolume, sfxVolume, hapticsEnabled
         case bestDistanceByWorld, totalXP, xpLevelRewarded, seenSkins
         case weeklyMissionDate, challengeRewardTier, purchasedWorlds
+        case totalIAPPurchases, firstPurchaseBonusUsed
     }
 
     init(from decoder: Decoder) throws {
@@ -111,5 +114,7 @@ extension Profile {
         weeklyMissionDate = try c.decodeIfPresent(Date.self, forKey: .weeklyMissionDate) ?? d.weeklyMissionDate
         challengeRewardTier = try c.decodeIfPresent(Int.self, forKey: .challengeRewardTier) ?? d.challengeRewardTier
         purchasedWorlds = try c.decodeIfPresent(Set<Int>.self, forKey: .purchasedWorlds) ?? d.purchasedWorlds
+        totalIAPPurchases = try c.decodeIfPresent(Int.self, forKey: .totalIAPPurchases) ?? d.totalIAPPurchases
+        firstPurchaseBonusUsed = try c.decodeIfPresent(Bool.self, forKey: .firstPurchaseBonusUsed) ?? d.firstPurchaseBonusUsed
     }
 }

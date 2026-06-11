@@ -26,18 +26,26 @@ ASC → My Apps → **+** → New App:
 of the pre-counted alternates in `Store/metadata.md` §8 (e.g. keep the name and change only if forced
 — the bundle ID does NOT need to change with the name).
 
-## B. Create the 5 in-app purchases — ⚡ to create, 🍎 to go live (submitted with your first build)
+## B. Create the 7 in-app purchases — ⚡ to create, 🍎 to go live (submitted with your first build)
 
-ASC → your app → Monetization → In-App Purchases → **+**. Create exactly these five
-(IDs must match `Products.storekit` character-for-character or purchases silently fail):
+ASC → your app → Monetization → In-App Purchases → **+**. Create exactly these seven
+(IDs must match `Products.storekit` character-for-character or purchases silently fail).
+Until they exist here, the in-app Shop shows fallback prices with a quiet "APP STORE SETUP
+PENDING" footnote — that's expected, not a bug.
 
 | Product ID | Type | Price | Display name | Description (paste) |
 |---|---|---|---|---|
 | `com.rayancheca.prismrush.coins.small` | Consumable | $0.99 (Tier 1) | Pouch of Coins | 1,200 coins |
+| `com.rayancheca.prismrush.starter` **NEW v1.4.1** | Consumable | $1.99 (Tier 2) | Starter Bundle | 3,000 coins |
 | `com.rayancheca.prismrush.coins.medium` | Consumable | $4.99 (Tier 5) | Bag of Coins | 7,000 coins |
 | `com.rayancheca.prismrush.coins.large` | Consumable | $9.99 (Tier 10) | Vault of Coins | 16,000 coins |
+| `com.rayancheca.prismrush.coins.mega` **NEW v1.4.1** | Consumable | $19.99 (Tier 20) | Crate of Coins | 40,000 coins |
 | `com.rayancheca.prismrush.doublecoins` | **Non-Consumable** | $2.99 (Tier 3) | Double Coins | Earn 2x coins, forever |
 | `com.rayancheca.prismrush.skin.aurora` | **Non-Consumable** | $1.99 (Tier 2) | Aurora Skin | Exclusive Aurora character |
+
+Notes on the two NEW ones: the Starter Bundle is the in-app first-purchase offer (the Shop only
+shows it to players with zero purchases); the Crate is the whale-tier pack the BEST VALUE badge
+points at. Both are plain consumables in ASC — all offer logic lives client-side.
 
 Each IAP also needs a review screenshot (any in-app shot of the Shop screen works — step F.5
 produces them) and must be **attached to the version** before you submit it.
@@ -132,7 +140,7 @@ Easiest path (GUI):
 2. Product → **Archive** (signing is automatic — Team ID is already configured).
 3. In the Organizer window: **Distribute App** → **App Store Connect** → Upload → accept defaults.
 4. In ASC: the build appears under TestFlight after ~15 min of processing. Select it on the
-   version page, attach the 5 IAPs to the version, fill export compliance (uses only standard
+   version page, attach the 7 IAPs to the version, fill export compliance (uses only standard
    encryption → exempt), then **Submit for Review**. 🍎
 5. Optional but smart: TestFlight it to your own phone first and replay the F.4 checklist on real
    hardware (haptics especially).

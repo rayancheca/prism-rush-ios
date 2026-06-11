@@ -424,12 +424,23 @@ struct GameOverView: View {
                             : "Continue costs \(reviveCost) coins — you need \(reviveCost - balance) more")
 
         if !affordable, let onGetCoins {
+            // v1.4.1: surface the one-time +50% coin-pack bonus on the funnel entry while it's
+            // still unclaimed (reads the live store in body — G3; honest: the Shop pays it).
+            let bonusEligible = !ProfileStore.shared.profile.firstPurchaseBonusUsed
             Button(action: onGetCoins) {
-                HStack(spacing: 6) {
-                    Image(systemName: "cart.fill")
-                    Text("GET COINS").tracking(2)
+                VStack(spacing: 3) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "cart.fill")
+                        Text("GET COINS").tracking(2)
+                    }
+                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    if bonusEligible {
+                        Text("FIRST PURCHASE +50% BONUS")
+                            .font(.system(size: 9, weight: .semibold, design: .rounded))
+                            .tracking(2)
+                            .opacity(0.8)
+                    }
                 }
-                .font(.system(size: 13, weight: .heavy, design: .rounded))
                 .foregroundStyle(Theme.Role.reward)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
@@ -438,6 +449,9 @@ struct GameOverView: View {
             }
             .buttonStyle(.neon)
             .accessibilityIdentifier("getCoinsButton")
+            .accessibilityLabel(bonusEligible
+                                ? "Get coins. Fifty percent first purchase bonus available."
+                                : "Get coins")
             .padding(.top, 8)
         }
     }

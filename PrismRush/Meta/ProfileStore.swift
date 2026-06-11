@@ -80,6 +80,30 @@ final class ProfileStore {
         return true
     }
 
+    // MARK: IAP coin grants (v1.4.1 — first-purchase funnel)
+
+    /// Pure payout rule for a VERIFIED coin-pack purchase: the first coin pack ever bought pays a
+    /// one-time +50% bonus (integer half, rounded down — never overpays); every later pack pays
+    /// face value. Static + pure so the rule and its idempotence pin in Linux tests.
+    static func coinPackPayout(base: Int, bonusUsed: Bool) -> Int {
+        bonusUsed ? base : base + base / 2
+    }
+
+    /// Grant a verified coin-pack purchase — called from `IAPCatalog.apply` ONLY (the single
+    /// verified-transaction grant path). The bonus flag flips in the same mutate as the payout,
+    /// so a `Transaction.updates` replay or any later pack can never pay the +50% twice; restores
+    /// never route here (`IAPCatalog.restore` skips consumables). Purchased coins are bought, not
+    /// earned: `totalCoinsEarned` (mission/achievement feed) is deliberately untouched.
+    func grantCoinPack(_ base: Int) {
+        guard base > 0 else { return }
+        let payout = Self.coinPackPayout(base: base, bonusUsed: profile.firstPurchaseBonusUsed)
+        mutate {
+            $0.coins += payout
+            $0.firstPurchaseBonusUsed = true
+            $0.totalIAPPurchases += 1
+        }
+    }
+
     /// Fold a finished run into lifetime stats + currency.
     func recordRun(score: Int, distance: Double, gems: Int, bestStreak: Int, maxWorld: Int, coinsEarned: Int) {
         mutate {
@@ -528,6 +552,8 @@ final class ProfileStore {
         merged.ownedSkins.formUnion(remote.ownedSkins)
         merged.ownedProducts.formUnion(remote.ownedProducts)
         merged.doubleCoins = merged.doubleCoins || remote.doubleCoins
+        merged.totalIAPPurchases = max(merged.totalIAPPurchases, remote.totalIAPPurchases)
+        merged.firstPurchaseBonusUsed = merged.firstPurchaseBonusUsed || remote.firstPurchaseBonusUsed
         merged.missionProgress.merge(remote.missionProgress) { mine, theirs in max(mine, theirs) }
         merged.claimedMissions.formUnion(remote.claimedMissions)
         merged.achievementTier.merge(remote.achievementTier) { mine, theirs in max(mine, theirs) }

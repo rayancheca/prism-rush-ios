@@ -92,7 +92,7 @@ speed.
 | Primary Category | Games → Arcade |
 | Age Rating | 4+ |
 | Price | Free |
-| In-App Purchases | 5 — Pouch of Coins $0.99 · Bag of Coins $4.99 · Vault of Coins $9.99 · Double Coins $2.99 · Aurora Skin $1.99 (see `Products.storekit`) |
+| In-App Purchases | 7 — Pouch of Coins $0.99 · Starter Bundle $1.99 (first-purchase offer) · Bag of Coins $4.99 · Vault of Coins $9.99 · Crate of Coins $19.99 · Double Coins $2.99 · Aurora Skin $1.99 (see `Products.storekit`) |
 
 ---
 

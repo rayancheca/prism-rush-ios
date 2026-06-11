@@ -56,6 +56,28 @@
       "productID" : "com.rayancheca.prismrush.skin.aurora",
       "referenceName" : "Aurora Skin",
       "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "1.99",
+      "familyShareable" : false,
+      "internalID" : "1006",
+      "localizations" : [
+        { "description" : "3,000 coins", "displayName" : "Starter Bundle", "locale" : "en_US" }
+      ],
+      "productID" : "com.rayancheca.prismrush.starter",
+      "referenceName" : "Starter Bundle",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "19.99",
+      "familyShareable" : false,
+      "internalID" : "1007",
+      "localizations" : [
+        { "description" : "40,000 coins", "displayName" : "Crate of Coins", "locale" : "en_US" }
+      ],
+      "productID" : "com.rayancheca.prismrush.coins.mega",
+      "referenceName" : "Crate of Coins",
+      "type" : "Consumable"
     }
   ],
   "settings" : {

@@ -157,6 +157,57 @@ final class EconomyTests: XCTestCase {
         XCTAssertEqual(store.profile.maxWorldReached, 4, "earned reach keeps folding as before")
     }
 
+    // MARK: IAP first-purchase bonus (v1.4.1 — funnel lever, honest + replay-safe)
+
+    func testCoinPackPayoutPureRule() async {
+        XCTAssertEqual(ProfileStore.coinPackPayout(base: 3_000, bonusUsed: false), 4_500)
+        XCTAssertEqual(ProfileStore.coinPackPayout(base: 3_000, bonusUsed: true), 3_000)
+        XCTAssertEqual(ProfileStore.coinPackPayout(base: 1_200, bonusUsed: false), 1_800)
+        XCTAssertEqual(ProfileStore.coinPackPayout(base: 40_000, bonusUsed: false), 60_000)
+        XCTAssertEqual(ProfileStore.coinPackPayout(base: 1, bonusUsed: false), 1,
+                       "integer half rounds DOWN — the bonus never overpays")
+    }
+
+    func testFirstPurchaseBonusPaysExactlyOnce() async {
+        let store = ProfileStore(testing: Profile())
+        XCTAssertFalse(store.profile.firstPurchaseBonusUsed)
+        XCTAssertEqual(store.profile.totalIAPPurchases, 0)
+
+        // First verified coin pack ever: base + 50%.
+        store.grantCoinPack(1_200)
+        XCTAssertEqual(store.profile.coins, 1_800)
+        XCTAssertTrue(store.profile.firstPurchaseBonusUsed)
+        XCTAssertEqual(store.profile.totalIAPPurchases, 1)
+
+        // Transaction.updates replay / any later pack: base only — the FLAG dedupes, not the
+        // caller, so the StoreKit handler can replay without ever double-paying the bonus.
+        store.grantCoinPack(1_200)
+        XCTAssertEqual(store.profile.coins, 3_000)
+        XCTAssertEqual(store.profile.totalIAPPurchases, 2)
+
+        // Purchased coins are bought, not earned: the mission/achievement feed stays clean.
+        XCTAssertEqual(store.profile.totalCoinsEarned, 0)
+
+        // Garbage refuses without side effects.
+        store.grantCoinPack(0)
+        store.grantCoinPack(-5)
+        XCTAssertEqual(store.profile.coins, 3_000)
+        XCTAssertEqual(store.profile.totalIAPPurchases, 2)
+    }
+
+    func testFirstPurchaseFlagCloudMergeNeverRearms() async {
+        var bought = Profile()
+        bought.firstPurchaseBonusUsed = true
+        bought.totalIAPPurchases = 3
+        let fresh = Profile()
+        // OR/max in both directions: a fresh device merging in can never re-arm the bonus or
+        // resurrect the starter offer slot.
+        XCTAssertTrue(ProfileStore.merged(local: fresh, remote: bought).firstPurchaseBonusUsed)
+        XCTAssertTrue(ProfileStore.merged(local: bought, remote: fresh).firstPurchaseBonusUsed)
+        XCTAssertEqual(ProfileStore.merged(local: fresh, remote: bought).totalIAPPurchases, 3)
+        XCTAssertEqual(ProfileStore.merged(local: bought, remote: fresh).totalIAPPurchases, 3)
+    }
+
     // MARK: revive (F3)
 
     func testReviveResumesPlayWithGrace() async {
@@ -239,5 +290,8 @@ final class EconomyTests: XCTestCase {
         XCTAssertEqual(p.seenSkins, ["default"])
         XCTAssertTrue(p.bestDistanceByWorld.isEmpty)
         XCTAssertTrue(p.purchasedWorlds.isEmpty, "v1.4 world purchases default empty on legacy saves")
+        // v1.4.1's two IAP-funnel fields default too (decodeIfPresent ?? default — iron rule 7).
+        XCTAssertEqual(p.totalIAPPurchases, 0)
+        XCTAssertFalse(p.firstPurchaseBonusUsed)
     }
 }
