@@ -1,23 +1,28 @@
 import SwiftUI
 import AuthenticationServices
 
-/// Profile / account hub: lifetime stats, Sign in with Apple, the Game Center friends leaderboard,
-/// and Restore Purchases.
+/// Profile / account hub: lifetime stats, Sign in with Apple, and the Game Center friends
+/// leaderboard. (Restore Purchases lives in Settings.)
 struct ProfileView: View {
     let model: GameModel
     // @Observable singletons are read directly in `body` so observation tracks them. (Wrapping them
     // in @State snapshots the reference and breaks re-render on change — the sign-in/equip bugs.)
     private let account = AccountService.shared
     private let gc = GameCenterService.shared
-    @State private var restoring = false
+
+    @ScaledMetric(relativeTo: .footnote) private var copySize: CGFloat = 13
 
     var body: some View {
         let p = ProfileStore.shared.profile
         MetaScreenScaffold(title: "Profile", coins: p.coins, onClose: { model.closeSheet() }) {
             VStack(spacing: 18) {
                 accountCard
-                statsGrid(p)
-                actions
+                if p.totalRuns == 0 {
+                    firstRunCard
+                } else {
+                    statsGrid(p)
+                }
+                leaderboard
             }
         }
     }
@@ -39,7 +44,7 @@ struct ProfileView: View {
                 }
             } else {
                 Text("Sign in to secure your account across devices.")
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .font(.system(size: copySize, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
                 SignInWithAppleButton(.signIn, onRequest: { account.configure($0) }, onCompletion: { account.handle($0) })
@@ -57,6 +62,27 @@ struct ProfileView: View {
         .padding(16)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.12)))
+    }
+
+    /// Friendly zero-state instead of a wall of zeros before the first run.
+    private var firstRunCard: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 26))
+                .foregroundStyle(Theme.color(0xFFD23D))
+            Text("Your story starts with one run.")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+            Text("Stats, streaks and worlds will fill in here the moment you hit PLAY.")
+                .font(.system(size: copySize, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.6))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 26).padding(.horizontal, 16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.12)))
+        .accessibilityElement(children: .combine)
     }
 
     private func statsGrid(_ p: Profile) -> some View {
@@ -77,17 +103,38 @@ struct ProfileView: View {
         }
         .frame(maxWidth: .infinity).padding(.vertical, 16)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(label.capitalized): \(value)")
     }
 
-    @ViewBuilder private var actions: some View {
-        Button { gc.showLeaderboard() } label: {
-            row("trophy.fill", "Friends Leaderboard", Theme.color(0xFFD23D))
-        }
-        Button {
-            restoring = true
-            Task { await IAPManager.shared.restoreEntitlements(); restoring = false }
-        } label: {
-            row("arrow.clockwise", restoring ? "Restoring…" : "Restore Purchases", .white)
+    @ViewBuilder private var leaderboard: some View {
+        if gc.authenticated {
+            Button { gc.showLeaderboard() } label: {
+                row("trophy.fill", "Friends Leaderboard", Theme.color(0xFFD23D))
+            }
+            .buttonStyle(.neon)
+            .accessibilityIdentifier("leaderboardRow")
+        } else {
+            // Inline signed-out state instead of a row that silently does nothing.
+            HStack(spacing: 12) {
+                Image(systemName: "trophy")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.4))
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Leaderboards need Game Center")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.8))
+                    Text("Sign in from the Settings app, then relaunch.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+                Spacer()
+            }
+            .padding(16)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.08)))
+            .accessibilityElement(children: .combine)
         }
     }
 
