@@ -24,3 +24,6 @@ reports/audio/*.caf
 * 2.swift
 * 2.xcodeproj
 * 2.yml
+* [0-9].swift
+* [0-9].xcodeproj
+* [0-9].yml

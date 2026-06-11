@@ -49,6 +49,25 @@ CI (`.github/workflows/core-tests.yml`) runs the SPM suite on every push/PR.
 Never run screenshots/`simctl launch` on the dev sim while `xcodebuild test` runs on it — concurrent
 installs crash the test host (false "TEST FAILED").
 
+## Owner decrees (verbatim product law — these OVERRIDE any design doc, spec, or R-decision)
+
+The owner's stated intent outranks every `reports/design/*.md` decision. When a doc conflicts
+with a decree, the doc is wrong — amend the doc, never "ship the doc". Current decrees:
+
+1. **A character NEVER changes identity with the world — including the default.** The player's
+   pick (colors, shape, trail) is constant across all worlds. No `followsWorld` behavior on any
+   skin. (Origin: v1.2 + v1.4.1 feedback — "what's the point of characters if they change
+   colors every level?" The v1.3 'Prism the chameleon' R-decision violated this and was revoked.)
+2. **Previews never lie.** Menu hero, select swatches, shop cards and tease renders must match
+   the in-game appearance (same colors, shape, eye style — same character).
+3. **No broken-looking states for expected situations.** Pre-launch/offline store, empty
+   leaderboards, locked content: always intentional-looking, never a red error for normality.
+4. **Everything on screen leads somewhere.** No dead decorative elements.
+5. **Zero ads, no dark patterns.** Monetization is honest: advertised bonuses are always
+   delivered, no fake urgency.
+6. **Clarity beats spectacle.** Every input (jump/slide/lane) must be readable in a single
+   frame; UI stays calm (role-based color, one gradient family per screen).
+
 ## Iron rules
 
 1. **Core/ never imports a renderer or UIKit.** It meets the outside world only through
