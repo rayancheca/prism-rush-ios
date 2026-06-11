@@ -144,18 +144,29 @@ private struct WorldCard: View {
 }
 
 /// The next locked world: desaturated vignette under a scrim, lock glyph, requirement line.
-/// Tap = shake (no purchase path — distance is the only key, uiux §3.2).
+/// Tap = shake (no purchase path — distance is the only key, uiux §3.2). Reduce Motion swaps
+/// the shake for a brief lock-tinted border flash (same denial language as CharacterSelect).
 private struct LockedWorldCard: View {
     let world: Int
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var deniedShakes: CGFloat = 0
+    @State private var deniedFlash = false
 
     private var palette: WorldPalette { Theme.worlds[world % 3] }
     private var requiredM: Int { Int(Double(world) * Tuning.worldLength) }
 
     var body: some View {
         Button {
-            withAnimation(.linear(duration: 0.3)) { deniedShakes += 1 }
+            if reduceMotion {
+                deniedFlash = true            // hold, then clear (CharacterSelect.deny() pattern)
+                Task {
+                    try? await Task.sleep(for: .milliseconds(450))
+                    deniedFlash = false
+                }
+            } else {
+                withAnimation(.linear(duration: 0.3)) { deniedShakes += 1 }
+            }
         } label: {
             VStack(spacing: 0) {
                 WorldPreviewCanvas(palette: palette, worldIndex: world, size: .card)
@@ -186,7 +197,9 @@ private struct LockedWorldCard: View {
             }
             .background(Theme.Role.surface)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.l))
-            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.l).strokeBorder(Theme.Role.hairline))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.l)
+                .strokeBorder(deniedFlash ? Theme.Role.lock : Theme.Role.hairline,
+                              lineWidth: deniedFlash ? 2 : 1))
             .modifier(ShakeEffect(trigger: deniedShakes))
         }
         .buttonStyle(.neon)

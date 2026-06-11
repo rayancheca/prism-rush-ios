@@ -7,6 +7,9 @@ import SwiftUI
 /// is read from `ProfileStore.shared` at the point of use inside `body` (G3 — no snapshot `let`).
 struct CharacterSelectView: View {
     let model: GameModel
+    /// Pre-focus the stage on this skin (shop rail / featured-card routing — uiux §4.1
+    /// "tap card → CharacterSelect focused to that skin"). nil = open on the equipped skin.
+    var initialFocus: String? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Local UI focus (selection ≠ commitment). nil = follow the equipped skin.
@@ -15,6 +18,9 @@ struct CharacterSelectView: View {
     @State private var stageDenied = false
     @State private var toast: String?
     @State private var toastTask: Task<Void, Never>?
+    /// The challengeDays "back to the menu" close, tracked so re-routing inside its 900 ms window
+    /// (e.g. GET IN SHOP swaps the sheet) cancels it instead of closing the WRONG sheet later.
+    @State private var closeTask: Task<Void, Never>?
     /// One-shot capture of which owned skins were unseen when the screen opened, so NEW badges
     /// stay visible during this visit while `markSkinsSeen()` clears the persistent flag.
     /// (Transient presentation state — not a live-store snapshot; reads in body stay direct.)
@@ -55,10 +61,12 @@ struct CharacterSelectView: View {
         }
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: toast)
         .onAppear {
+            if let initialFocus { focusedID = initialFocus }   // shop-routed: stage THAT skin
             newThisVisit = ProfileStore.shared.profile.ownedSkins
                 .subtracting(ProfileStore.shared.profile.seenSkins)
             ProfileStore.shared.markSkinsSeen()   // clears the nav badge-dot + future NEW badges
         }
+        .onDisappear { closeTask?.cancel() }      // a dismissed sheet must never close its successor
     }
 
     // MARK: the stage
@@ -163,6 +171,7 @@ struct CharacterSelectView: View {
 
     /// Locked-tap routing (DESIGN_characters §3.4) — nothing on screen is dead.
     private func stateAction(for skin: Skin) {
+        closeTask?.cancel()   // any new commitment supersedes a pending challengeDays close
         let store = ProfileStore.shared
         if store.profile.ownedSkins.contains(skin.id) {
             model.buyOrEquipSkin(skin)
@@ -182,10 +191,12 @@ struct CharacterSelectView: View {
             showToast("REACH LEVEL \(n) · \(need.formatted()) XP TO GO")
         case .challengeDays:
             // Toast first (rendered in-sheet — GameModel's toast API is private), then back to
-            // the menu where the Daily Rush rail cell sits.
+            // the menu where the Daily Rush rail cell sits. Tracked + cancellation-checked, same
+            // pattern as toastTask: re-routing or dismissal must not close a successor sheet.
             showToast("PLAY TODAY'S CHALLENGE")
-            Task {
+            closeTask = Task {
                 try? await Task.sleep(for: .milliseconds(900))
+                guard !Task.isCancelled else { return }
                 model.closeSheet()
             }
         }

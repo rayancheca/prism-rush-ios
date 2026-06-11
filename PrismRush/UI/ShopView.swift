@@ -158,7 +158,7 @@ struct ShopView: View {
                           preview: AnyView(AnimatedCharacterSwatch(skin: skin, size: 52)),
                           pill: AnyView(coinPricePill(skin.cost)),
                           a11y: "Today's feature: \(skin.name), \(skin.cost) coins. Opens characters to preview.") {
-                model.open(.characters)
+                model.open(.characters, focusSkin: skin.id)   // stage THAT skin (uiux §4.1)
             }
         }
     }
@@ -347,7 +347,8 @@ struct ShopView: View {
     private func miniSkinCard(_ skin: Skin) -> some View {
         let owned = ProfileStore.shared.profile.ownedSkins.contains(skin.id)
         let equipped = ProfileStore.shared.profile.selectedSkin == skin.id
-        return Button { model.open(.characters) } label: {
+        // Tap → CharacterSelect focused to THIS skin (uiux §4.1) — never the equipped one.
+        return Button { model.open(.characters, focusSkin: skin.id) } label: {
             VStack(spacing: Theme.Space.xs) {
                 AnimatedCharacterSwatch(skin: skin, size: 42)
                 Text(skin.name.uppercased())

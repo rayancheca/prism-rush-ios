@@ -34,7 +34,7 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(core.activeGems.isEmpty)
 
         slick(core)
-        XCTAssertEqual(core.flowStreak, 3)
+        XCTAssertEqual(core.flowStreak, 0, "the surge consumes the streak (§C.1: since last surge/reset)")
         XCTAssertEqual(surges, [1], "exactly one surge on the 3rd near-miss")
         XCTAssertEqual(core.bonus - bonus0, 3 * Tuning.nearMissBonus + Tuning.flowSurgeScore)
 
@@ -71,10 +71,10 @@ final class FlowTests: XCTestCase {
         XCTAssertEqual(core.mode, .play, "shield absorbed the hit")
         XCTAssertEqual(core.flowStreak, 0, "an absorbed hit still breaks the flow")
 
-        // …and the NEXT 3 near-misses surge again from zero.
+        // …and the NEXT 3 near-misses surge again from zero (which then consumes the streak).
         slick(core); slick(core); slick(core)
         XCTAssertEqual(surges, 1)
-        XCTAssertEqual(core.flowStreak, 3)
+        XCTAssertEqual(core.flowStreak, 0, "surged on the 3rd — streak consumed")
 
         // Death zeroes it too.
         let core2 = cleanCore(seed: 7)
@@ -84,7 +84,8 @@ final class FlowTests: XCTestCase {
         XCTAssertEqual(core2.flowStreak, 0, "death breaks the flow")
     }
 
-    /// Surges at streak 3, 6, 9 carry escalating levels 1, 2, 3 (audio/visuals key off it).
+    /// Surges on the 3rd, 6th and 9th near-miss carry escalating levels 1, 2, 3 (audio/visuals
+    /// key off it); the streak itself wraps to 0 at every surge (§C.1 — since last surge/reset).
     func testSurgeLevelsEscalate() async {
         let core = cleanCore(seed: 8)
         var surges: [Int] = []
@@ -94,7 +95,7 @@ final class FlowTests: XCTestCase {
             // Space the slicks so spent bars recycle (capBar) — the player may well run through
             // earlier fountains meanwhile; that is normal play and must not disturb the cadence.
             for _ in 0..<80 { core.tick(Tuning.tickDt) }
-            XCTAssertEqual(core.flowStreak, n)
+            XCTAssertEqual(core.flowStreak, n % Tuning.flowPerSurge)
         }
         XCTAssertEqual(surges, [1, 2, 3], "every 3rd near-miss, with 1-based escalation levels")
     }

@@ -452,6 +452,9 @@ struct Skin: Identifiable, Sendable {                      // SkinCatalog.swift 
 | `CharacterHeroStage(skin: Skin, height: CGFloat)` | swatch + glow disc + name pill (one tap target) |
 | `WorldPreviewCanvas(palette: WorldPalette, worldIndex: Int, size: PreviewSize)` | `PreviewSize: .chip/.card/.hero` |
 | `GameOverView` init additions | `levelUp: LevelUpResult? = nil, styleCoins: Int = 0, challengePayout: Int = 0` |
+| `GameOverView` init additions (amended post-review — wave 4 shipped, wave 5 wired) | `isChallengeRun: Bool = false` (gates the 7-day dot strip + tier line) · `onCharacters: (() -> Void)? = nil` (NEW CHARACTER UNLOCKED · TAP → Characters) · `onFullStats: (() -> Void)? = nil` (FULL STATS › → Profile) |
+| `MenuView` init addition (amended post-review) | `onHowToPlay: (() -> Void)? = nil` (FIRST RUN › when best == 0; falls back to `onPlay`) |
+| `CharacterSelectView` init addition (amended post-review) | `initialFocus: String? = nil` (shop rail/featured routing — stage opens focused on that skin, uiux §4.1) |
 | `Theme.Role` / `Theme.TypeScale` / `Theme.Space` / `Theme.Radius` | uiux §2 tokens (R12 naming) |
 | `Synth.SFX` new cases | `ringPass, ringPerfect, boostStart, boostEnd, flowSurge, levelUp` |
 | MenuView / meta views | read `ProfileStore.shared` directly in `body`; legacy init params defaulted |

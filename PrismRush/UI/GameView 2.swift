@@ -433,13 +433,7 @@ final class GameModel {
         milestoneQueue.append((text, color, sfx))
     }
 
-    /// Open a meta screen. `focusSkin` pre-focuses Characters' stage on that skin; the default
-    /// nil clears any stale focus, so plain opens land on the equipped skin as before.
-    func open(_ screen: MetaScreen, focusSkin: String? = nil) {
-        pendingCharacterFocus = screen == .characters ? focusSkin : nil
-        activeSheet = screen
-        synth.play(.uiTick)
-    }
+    func open(_ screen: MetaScreen) { activeSheet = screen; synth.play(.uiTick) }
 
     func closeSheet() {
         activeSheet = nil
@@ -627,7 +621,7 @@ struct GameView: View {
     private func metaSheet(_ sheet: GameModel.MetaScreen) -> some View {
         switch sheet {
         case .characters:
-            CharacterSelectView(model: model, initialFocus: model.pendingCharacterFocus)
+            CharacterSelectView(model: model)
         case .levels:
             LevelSelectView(model: model)
         case .shop:

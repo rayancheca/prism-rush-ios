@@ -53,7 +53,7 @@ final class GameCore {
     @ObservationIgnored private(set) var doublerT: Double = 0  // gems pay double currency while > 0
     @ObservationIgnored private(set) var chronoT: Double = 0   // slow-mo: distance integrates at × chronoFactor
     @ObservationIgnored private(set) var boostT: Double = 0    // overdrive: world speed × boostFactor (capped)
-    @ObservationIgnored private(set) var flowStreak: Int = 0   // near-misses since the last reset (surge every 3rd)
+    @ObservationIgnored private(set) var flowStreak: Int = 0   // near-misses since last surge/reset (§C.1) — always < flowPerSurge
     @ObservationIgnored private(set) var flowSurges: Int = 0   // surges this run (FX escalation level, 1-based)
     @ObservationIgnored private(set) var bonus: Int = 0
     @ObservationIgnored private(set) var score: Int = 0
@@ -345,7 +345,8 @@ final class GameCore {
     /// whether or not surges fire (iron rule 2; pinned by `FlowTests`).
     private func registerFlowNearMiss() {
         flowStreak += 1
-        guard flowStreak % Tuning.flowPerSurge == 0 else { return }
+        guard flowStreak >= Tuning.flowPerSurge else { return }
+        flowStreak = 0   // §C.1: "streak since last surge/reset" — the surge consumes the streak
         flowSurges += 1
         bonus += Tuning.flowSurgeScore * mult
         for i in 0..<Tuning.fountainGems {

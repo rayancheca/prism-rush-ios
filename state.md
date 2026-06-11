@@ -17,6 +17,26 @@ What remains is the App Store ops track (unchanged — see §B below and `docs/S
 | 4 ui/audio | `4a73d95` + `4d68b83` | Theme tokens (Role/TypeScale/Space/Radius), menu Hero/Verb/Rail/Nav reframe, `AnimatedCharacterSwatch`/`CharacterHeroStage`, stage-and-shelf Characters, Shop 4 sections, Worlds previews + per-world best, HUD diet (flow pips, boost ring, ghost chip), GameOver 3 bands + XP bar, weekly board + CLAIM ALL, six DSP SFX (R17) |
 | 5 wiring | this commit | GameView glue: style-coins 4th per-death delta, `summary.startWorld`, `lastLevelUp` model state (G3), challenge payout capture, `applySkin(Skin)` + ownership guard, `refreshSkinUnlocks` at install/post-run/post-challenge/sheet-close with NEW CHARACTER popups, FX→haptics map (R17), six-SFX wiring, pruned MenuView/GameOverView call sites, XCUITest refresh (+2 flows) |
 
+### v1.3 post-review fixer pass (after the 5 adversarial reviews of waves 1–5)
+All 3 BLOCKERs + actionable WARNs addressed in one commit on top of `7f3e4f1`:
+- **PR_DEMOPROFILE determinism (blocker):** demo profile now pins `totalXP = 0`,
+  `xpLevelRewarded = 1`, strips all auto-grant skins and zeroes their metrics
+  (`ach.dist`/`ach.close` tiers, `challengeDaysPlayed`) — `testHeroStageShowsLockedRequirement`
+  can no longer be poisoned by XP banked into the sim profile by earlier autoplay/CI cycles.
+- **Milestone popup queue (blocker):** LEVEL UP / NEW CHARACTER popups (same anchor, often born
+  in the same call at L3/L6/L12/L25) now release one per 1.0 s beat with their chime + haptic.
+- **flowStreak matches §C.1 verbatim:** resets to 0 at every surge (cadence unchanged — FlowTests
+  re-pinned; HUD pips `% flowPerSurge` render identically; renderer never read it).
+- buyOrEquipSkin hard-gates non-`.coins`/`.free` unlocks (kills the 0-coin backdoor for
+  level/achievement/challenge skins); R14 loop skips non-positive `into` values.
+- Shop rail/featured cards focus CharacterSelect on the tapped skin (`initialFocus`, uiux §4.1);
+  challengeDays close-task is tracked/cancellable; LockedWorldCard shake is Reduce Motion-gated;
+  death-panel sheet gate widened to every sheet (in-sheet routes to Settings/Missions/Worlds no
+  longer vanish the stack); V13_SPEC §C.4 amended with the shipped extra params.
+- **QA note:** the dev/QA sim + device profiles ran checkpoint summaries before
+  `summary.startWorld` landed — wipe the QA profile before the device "BEST HERE" pass so
+  corrupted per-world bests can't survive into ship verification.
+
 ### v1.3 test status
 - `swift test -c release` (SPM, Linux-provable): wave-1/2 suites green (incl. 200-seed × 6,000 m bot
   + 12,000 m deep soak with ZERO `Autopilot.swift` diffs; layoutVersion-2 goldens re-pinned).

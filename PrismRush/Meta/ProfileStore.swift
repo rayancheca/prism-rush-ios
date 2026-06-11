@@ -285,6 +285,9 @@ final class ProfileStore {
             let finalWorld = max(summary.startWorld, summary.worldsCrossed - 1)
             for w in summary.startWorld...finalWorld {
                 let into = min(L, Double(summary.startWorld) * L + summary.distance - Double(w) * L)
+                // `into > 0` guard: a malformed summary (worldsCrossed overstating distance) must
+                // not seed 0-valued keys — once written they live forever via per-key-max merge.
+                guard into > 0 else { continue }
                 $0.bestDistanceByWorld[w] = max($0.bestDistanceByWorld[w] ?? 0, into)
             }
             for m in MissionCatalog.perRun {
