@@ -19,7 +19,7 @@ final class GameModel {
     @ObservationIgnored private var toastClearAt: Double = 0
 
     /// Which meta screen is open over the menu (nil = the menu hub itself).
-    enum MetaScreen { case characters, shop, levels, stats }
+    enum MetaScreen { case characters, shop, levels, stats, settings, missions }
     var activeSheet: MetaScreen?
     @ObservationIgnored private var overTime: Double = 0
     @ObservationIgnored private var demoElapsed: Double = 0
@@ -36,6 +36,31 @@ final class GameModel {
     @ObservationIgnored private var statsRecorded = false
     @ObservationIgnored private var newBestCelebrated = false
     @ObservationIgnored private var runStartWorld = 0
+
+    /// True while the current run is today's shared challenge (revive is disabled — fair, shared
+    /// track; checkpoint starts are structurally impossible, the entry point always seeds world 0).
+    private(set) var isChallengeRun = false
+    /// Wall-clock start of the current run (feeds the game-over TIME tile + RunSummary.duration).
+    @ObservationIgnored private var runStartedAt = Date()
+    /// Run duration captured at death-time, so the panel's TIME tile doesn't keep ticking.
+    private(set) var lastRunDuration: Double = 0
+    /// Best on record BEFORE this run started (death folds the run into profile.bestScore, so the
+    /// panel must compare against this, not the live profile).
+    private(set) var previousBest = 0
+    // Exact per-death coin-delta split (sums to `lastCoinsEarned` — each component is an Int
+    // before the multiplier, so the split is exact, no rounding drift).
+    private(set) var lastCoinsFromGems = 0
+    private(set) var lastCoinsFromDistance = 0
+    private(set) var lastCoinsFromWorlds = 0
+    @ObservationIgnored private var gemCoinsAwarded = 0
+    @ObservationIgnored private var distCoinsAwarded = 0
+    @ObservationIgnored private var worldCoinsAwarded = 0
+    // Per-run FX counters (missions feed + game-over stats), reset in `startRun`.
+    @ObservationIgnored private var nearMissesThisRun = 0
+    @ObservationIgnored private var closesThisRun = 0
+    @ObservationIgnored private var slicksThisRun = 0
+    @ObservationIgnored private var slidesThisRun = 0
+    var nearMisses: Int { nearMissesThisRun }
 
     @ObservationIgnored private let autoplay = ProcessInfo.processInfo.environment["PR_AUTOPLAY"] == "1"
     @ObservationIgnored private let demo = ProcessInfo.processInfo.environment["PR_DEMO"] == "1"
@@ -82,6 +107,11 @@ final class GameModel {
         let profile = ProfileStore.shared.profile
         synth.muted = profile.muted
         muted = profile.muted
+        // Settings persistence: SettingsView applies changes live (model.synth / model.haptics);
+        // these lines make them stick across launches (AGENT_meta.md §4).
+        synth.musicVolume = Float(profile.musicVolume)
+        synth.sfxVolume = Float(profile.sfxVolume)
+        haptics.enabled = profile.hapticsEnabled
         core.best = profile.bestScore
         applyCurrentSkin()
         core.onFX = { [weak self] fx in self?.handleFX(fx) }
@@ -92,6 +122,8 @@ final class GameModel {
         case "shop": activeSheet = .shop
         case "levels": activeSheet = .levels
         case "stats": activeSheet = .stats
+        case "settings": activeSheet = .settings
+        case "missions": activeSheet = .missions
         default: break
         }
 
@@ -139,12 +171,24 @@ final class GameModel {
         applyCurrentSkin()
         core.startRun(seed: seed, startDistance: Double(fromWorld) * Tuning.worldLength)
         renderer.resetEntities()
+        // PLAY / RUN AGAIN must never inherit the challenge flag — `startDailyChallenge` re-sets
+        // it AFTER this returns (AGENT_meta.md §3).
+        isChallengeRun = false
+        runStartedAt = Date()
+        previousBest = ProfileStore.shared.profile.bestScore
         overTime = 0
         canRestart = false
         restartCountdown = 0
         coinsAwardedThisRun = 0
         distanceRecordedThisRun = 0
         gemsRecordedThisRun = 0
+        gemCoinsAwarded = 0
+        distCoinsAwarded = 0
+        worldCoinsAwarded = 0
+        nearMissesThisRun = 0
+        closesThisRun = 0
+        slicksThisRun = 0
+        slidesThisRun = 0
         statsRecorded = false
         newBestCelebrated = false
         runStartWorld = fromWorld
@@ -153,6 +197,14 @@ final class GameModel {
         activeSheet = nil
         synth.musicStart()
         synth.play(.startChime)
+    }
+
+    /// Start today's shared challenge run: seeded from the UTC date so the whole world plays the
+    /// same track. Revive is disabled for fairness (see `canRevive`); a checkpoint start is
+    /// structurally impossible (`fromWorld` stays 0).
+    func startDailyChallenge() {
+        startRun(seed: ProfileStore.shared.todaysChallengeSeed())
+        isChallengeRun = true
     }
 
     /// Pause is only meaningful mid-run. The pause button toggles it; backgrounding forces it on.
@@ -170,7 +222,8 @@ final class GameModel {
     // Continue-after-death, paid with coins (no ads). Escalating cost, capped at 2 continues per run.
     var reviveCost: Int { 150 * (core.revivesUsed + 1) }
     var canRevive: Bool {
-        core.mode == .over && core.revivesUsed < 2 && ProfileStore.shared.profile.coins >= reviveCost
+        core.mode == .over && !isChallengeRun && core.revivesUsed < 2
+            && ProfileStore.shared.profile.coins >= reviveCost
     }
 
     @discardableResult
@@ -226,9 +279,14 @@ final class GameModel {
             addPopup("+\(Tuning.gemBaseScore * mult)", color: Theme.color(0xFFD23D), worldX: x)
             synth.play(.gem(streak: streak))
         case let .nearMiss(kind, x):
+            nearMissesThisRun += 1
             switch kind {
-            case .close: addPopup("CLOSE", color: Theme.color(0x00F5FF), worldX: x)
-            case .slick: addPopup("SLICK", color: Theme.color(0xFFD23D), worldX: x)
+            case .close:
+                closesThisRun += 1
+                addPopup("CLOSE", color: Theme.color(0x00F5FF), worldX: x)
+            case .slick:
+                slicksThisRun += 1
+                addPopup("SLICK", color: Theme.color(0xFFD23D), worldX: x)
             }
             synth.play(.close)
         case let .pickup(kind, x, _):
@@ -267,6 +325,7 @@ final class GameModel {
         case .jumped:
             synth.play(.jump)
         case .slid:
+            slidesThisRun += 1
             synth.play(.slide)
         case .landed:
             synth.play(.landThud)
@@ -309,6 +368,7 @@ final class GameModel {
     /// awarded as `max(0, cumulative − alreadyAwarded)` deltas, and `totalRuns` counts once per run.
     private func recordRunResults() {
         let store = ProfileStore.shared
+        lastRunDuration = Date().timeIntervalSince(runStartedAt)
 
         // New best fanfare, once per run, against the best on record BEFORE this death is folded in.
         if core.score > store.profile.bestScore, !newBestCelebrated {
@@ -318,10 +378,17 @@ final class GameModel {
 
         // Earn = gems + traveled distance/35 + a small bonus per world crossed THIS run (a
         // checkpoint start must not pay for the skipped worlds), then the Double-Coins multiplier.
+        // Computed per component so the death panel's breakdown is the exact delta split — each
+        // component is an Int before the multiplier, so the sum equals the old single-base figure.
+        let mult = store.profile.coinMultiplier
         let worldsCrossed = max(0, core.maxWorld - runStartWorld)
-        let base = core.gemCount + Int(core.traveledDistance / 35) + worldsCrossed * 5
-        let cumulative = base * store.profile.coinMultiplier
-        let coinsDelta = max(0, cumulative - coinsAwardedThisRun)
+        lastCoinsFromGems = max(0, core.gemCount * mult - gemCoinsAwarded)
+        gemCoinsAwarded += lastCoinsFromGems
+        lastCoinsFromDistance = max(0, Int(core.traveledDistance / 35) * mult - distCoinsAwarded)
+        distCoinsAwarded += lastCoinsFromDistance
+        lastCoinsFromWorlds = max(0, worldsCrossed * 5 * mult - worldCoinsAwarded)
+        worldCoinsAwarded += lastCoinsFromWorlds
+        let coinsDelta = lastCoinsFromGems + lastCoinsFromDistance + lastCoinsFromWorlds
         coinsAwardedThisRun += coinsDelta
         lastCoinsEarned = coinsDelta
 
@@ -345,7 +412,27 @@ final class GameModel {
             statsRecorded = true
             store.recordRun(score: core.score, distance: distanceDelta, gems: gemsDelta,
                             bestStreak: core.bestStreak, maxWorld: core.maxWorld, coinsEarned: coinsDelta)
+
+            // Missions feed: exactly once per run (`runsFinished` counts 1 per call, so post-revive
+            // deaths must NOT call again — AGENT_meta.md §8's recommended shape). The first death
+            // carries the run's metrics; post-revive tail progress is deliberately not folded
+            // (accepted trade-off; `revives` therefore stays 0 here — see reports/AGENT_wiring.md).
+            var summary = RunSummary()
+            summary.gems = gemsDelta                       // == run totals at first death
+            summary.distance = distanceDelta
+            summary.nearMissCloses = closesThisRun
+            summary.slicks = slicksThisRun
+            summary.slides = slidesThisRun
+            summary.bestStreak = core.bestStreak           // max-style: engine maxes
+            summary.bestMult = min(Tuning.multCap, 1 + core.bestStreak / Tuning.streakPerMult)
+            summary.worldsCrossed = core.maxWorld + 1      // 1-based, matches ach.worlds targets
+            summary.revives = core.revivesUsed
+            summary.duration = lastRunDuration
+            store.applyRunSummary(summary)
         }
+
+        // Daily challenge: fold the score into the per-UTC-day best + played calendar.
+        if isChallengeRun { store.recordChallengeRun(score: core.score) }
 
         // Checkpoint runs ramp to end-game speed from t = 0 — never leaderboard-eligible
         // (the local best still updates above; see AGENT_core.md §Game Center).
@@ -389,6 +476,7 @@ final class GameModel {
 
 struct GameView: View {
     @State private var model = GameModel()
+    @State private var showFirstRunTutorial = false
     @Environment(\.scenePhase) private var scenePhase
 
     @ViewBuilder
@@ -402,6 +490,10 @@ struct GameView: View {
             ShopView(model: model)
         case .stats:
             ProfileView(model: model)
+        case .settings:
+            SettingsView(model: model)
+        case .missions:
+            MissionsView(model: model)
         }
     }
 
@@ -459,12 +551,18 @@ struct GameView: View {
                 if model.activeSheet == nil {
                     MenuView(best: model.core.snapshot.best,
                              coins: ProfileStore.shared.profile.coins,
-                             onPlay: { model.startRun() },
+                             onPlay: {
+                                 // First-ever PLAY routes through the tutorial (AGENT_meta.md §6).
+                                 if ProfileStore.shared.profile.totalRuns == 0 { showFirstRunTutorial = true }
+                                 else { model.startRun() }
+                             },
                              onCharacters: { model.open(.characters) },
                              onShop: { model.open(.shop) },
                              onLevels: { model.open(.levels) },
                              onProfile: { model.open(.stats) },
-                             rewards: AnyView(RewardsBar(model: model)))
+                             rewards: AnyView(RewardsBar(model: model, onMissions: { model.open(.missions) })),
+                             onSettings: { model.open(.settings) },
+                             onDailyChallenge: { model.startDailyChallenge() })
                 }
             case .over:
                 GameOverView(snapshot: model.core.snapshot,
@@ -474,13 +572,36 @@ struct GameView: View {
                              reviveCost: model.reviveCost,
                              onRevive: { model.reviveForCoins() },
                              onRestart: { model.startRun() },
-                             onHome: { model.returnToMenu() })
+                             onHome: { model.returnToMenu() },
+                             previousBest: model.previousBest,
+                             runDistance: model.core.traveledDistance,
+                             timeSurvived: model.lastRunDuration,
+                             bestStreak: model.core.bestStreak,
+                             nearMisses: model.nearMisses,
+                             coinsFromGems: model.lastCoinsFromGems,
+                             coinsFromDistance: model.lastCoinsFromDistance,
+                             coinsFromWorlds: model.lastCoinsFromWorlds,
+                             revivesLeft: model.isChallengeRun ? 0 : 2 - model.core.revivesUsed,
+                             restartCountdown: model.restartCountdown,
+                             onGetCoins: { model.open(.shop) })
             case .play:
                 EmptyView()
             }
 
-            if model.core.snapshot.mode == .menu, let sheet = model.activeSheet {
+            // Meta sheets render over the menu; the Shop alone is also reachable over the death
+            // panel (GET COINS / EARN ×2 — AGENT_meta.md §7 "lift the gate" option).
+            if let sheet = model.activeSheet,
+               model.core.snapshot.mode == .menu
+                || (sheet == .shop && model.core.snapshot.mode == .over) {
                 metaSheet(sheet).transition(.move(edge: .bottom))
+            }
+
+            // First-run tutorial: shown instead of the first PLAY, then starts the run on dismiss.
+            if showFirstRunTutorial {
+                HowToPlayView(onClose: { showFirstRunTutorial = false; model.startRun() },
+                              doneLabel: "LET'S GO")
+                    .transition(.move(edge: .bottom))
+                    .zIndex(2)
             }
 
             EffectsOverlay(model: model)
