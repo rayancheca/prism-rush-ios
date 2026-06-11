@@ -291,3 +291,17 @@ guard CGImageDestinationFinalize(dest) else {
 
 print("gen_icon: wrote \(outURL.path)")
 print("gen_icon: \(image.width)×\(image.height) px, opaque sRGB PNG")
+
+// The shipped springboard icon is a COPY of this output inside the asset catalog. Keep them
+// in lockstep: a regeneration that only updated Store/ would silently diverge from the app.
+let catalogPath = "PrismRush/Assets.xcassets/AppIcon.appiconset/icon_1024.png"
+if outPath == "Store/icon_1024.png", FileManager.default.fileExists(atPath: catalogPath) {
+    try? FileManager.default.removeItem(atPath: catalogPath)
+    do {
+        try FileManager.default.copyItem(atPath: outPath, toPath: catalogPath)
+        print("gen_icon: synced catalog copy \(catalogPath)")
+    } catch {
+        FileHandle.standardError.write(Data("gen_icon: FAILED to sync \(catalogPath) — do it manually: \(error)\n".utf8))
+        exit(1)
+    }
+}

@@ -28,7 +28,9 @@ final class ParticleSystem {
     // accents step through quantized blends, so the cache is bounded by a hard cap.
     private var matCache: [UIColor: UnlitMaterial] = [:]
 
-    init(parent: Entity, count: Int = 400) {
+    // 560: worst realistic steady state (slide dust ~180 + boosted trail ~130 + speed lines ~21)
+    // plus the largest one-shot burst (.died, 180) must fit without overwriting live slots.
+    init(parent: Entity, count: Int = 560) {
         self.count = count
         mesh = .generateSphere(radius: 0.085)
         parts = Array(repeating: P(), count: count)

@@ -65,6 +65,10 @@ installs crash the test host (false "TEST FAILED").
    `body` so observation tracks them. This exact anti-pattern shipped three v1.0 bugs.
 6. **Zero binary assets.** Meshes via `MeshDescriptor`, audio via DSP in `Synth.swift`, icon via
    `Tools/gen_icon.swift`. Don't add asset catalogs, textures, or sound files.
+   **Sole carve-out (owner-sanctioned, v1.3.1):** `PrismRush/Assets.xcassets` holds exactly the
+   `AppIcon.appiconset` — an app icon cannot ship without a catalog. Its PNG is a byte-copy of the
+   `gen_icon.swift` output (the tool syncs it automatically); never hand-edit it, and don't add
+   anything else to the catalog.
 7. **`Profile` fields are always `decodeIfPresent ?? default`** in `init(from:)` — old saves must
    never wipe or fail to load (pinned by decode tests). Adding a field? Give it a default.
 8. **Swift 6 strict concurrency `complete`.** Non-isolated callbacks delivered on main

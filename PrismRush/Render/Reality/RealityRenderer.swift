@@ -255,7 +255,10 @@ final class RealityRenderer: RendererPort {
         // Player rig: lane/jump pose, squash-&-stretch, bank, plus a pronounced forward-lean slide.
         // The renderer-side extras (run gallop, airborne stretch, takeoff pop, landing impulse)
         // layer MULTIPLICATIVELY on Core's playerScaleY baseline and are all RM-gated.
-        playerRig.isEnabled = snap.mode != .over
+        // Live play only: the death shatter replaces the rig in .over, and on the menu the
+        // SwiftUI hero stage is the character moment (the in-world rig idling behind PLAY
+        // doubled the character on screen).
+        playerRig.isEnabled = snap.mode == .play
         var sy = Float(snap.playerScaleY)
         var sx = 1 + (1 - sy) * 0.45
         var poseY = Float(snap.playerY)
@@ -573,6 +576,7 @@ final class RealityRenderer: RendererPort {
         jumpStretchT = 0; landSquashT = 0
         whip = 0; whipVel = 0
         runPhase = 0
+        lastSliding = false; runBobOn = false; speedNorm = 0   // sync-cached flags: advanceVisuals runs before the next sync
         trailDebt = 0; dustDebt = 0; speedLineDebt = 0
         ringPulseLife = 0
         ringPulse.isEnabled = false
