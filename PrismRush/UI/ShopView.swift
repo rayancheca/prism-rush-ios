@@ -173,9 +173,13 @@ struct ShopView: View {
                 buy(Self.mediumPackID)
             }
         case "aurora":
+            // Featured = always a locked skin (rotation skips owned ones): render the same
+            // tease as the select grid, never an owned-bright storefront lie (AUDIT D6-5).
             let skin = SkinCatalog.skin("aurora")
             heroShell(title: skin.name, blurb: skin.flavor,
-                      preview: AnyView(AnimatedCharacterSwatch(skin: skin, size: 52)),
+                      preview: AnyView(AnimatedCharacterSwatch(
+                          skin: skin, size: 52,
+                          silhouette: !ProfileStore.shared.profile.ownedSkins.contains(skin.id))),
                       pill: AnyView(goldPricePill(productID: Self.auroraID)),
                       tag: "TODAY'S FEATURE",
                       a11y: "Today's feature: \(skin.name), premium character.") {
@@ -184,9 +188,12 @@ struct ShopView: View {
         default:
             // Coin-priced character: the shop never charges coins without showing the stage —
             // the tap routes to Characters for the preview-before-buy commit (uiux §4.1).
+            // Locked tease render, consistent with the select grid it routes to (AUDIT D6-5).
             let skin = SkinCatalog.skin(id)
             heroShell(title: skin.name, blurb: skin.flavor,
-                      preview: AnyView(AnimatedCharacterSwatch(skin: skin, size: 52)),
+                      preview: AnyView(AnimatedCharacterSwatch(
+                          skin: skin, size: 52,
+                          silhouette: !ProfileStore.shared.profile.ownedSkins.contains(skin.id))),
                       pill: AnyView(coinPricePill(skin.cost)),
                       tag: "TODAY'S FEATURE",
                       a11y: "Today's feature: \(skin.name), \(skin.cost) coins. Opens characters to preview.") {
@@ -478,11 +485,14 @@ struct ShopView: View {
 
     private func miniSkinCard(_ skin: Skin) -> some View {
         let owned = ProfileStore.shared.profile.ownedSkins.contains(skin.id)
-        let equipped = ProfileStore.shared.profile.selectedSkin == skin.id
+        // EQUIPPED from the resolver — same truth as the run and the select stage (AUDIT D3-1).
+        let equipped = ProfileStore.shared.equippedSkinID == skin.id
         // Tap → CharacterSelect focused to THIS skin (uiux §4.1) — never the equipped one.
         return Button { model.open(.characters, focusSkin: skin.id) } label: {
             VStack(spacing: Theme.Space.xs) {
-                AnimatedCharacterSwatch(skin: skin, size: 42)
+                // Locked skins wear the SAME tease as the select grid they route to (AUDIT
+                // D6-5): a skin must not read owned-bright here and locked-dim one tap later.
+                AnimatedCharacterSwatch(skin: skin, size: 42, silhouette: !owned)
                 Text(skin.name.uppercased())
                     .typeScale(.micro)
                     .foregroundStyle(Theme.Role.textPrimary)

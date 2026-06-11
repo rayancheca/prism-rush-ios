@@ -349,6 +349,55 @@ final class EconomyTests: XCTestCase {
         XCTAssertEqual(ProfileStore.sanitized(ok, now: now), ok)
     }
 
+    // MARK: equipped-skin resolver + self-heal (AUDIT D3-1 — decrees 2+3+4)
+    // A cloud merge or stale save can select a skin this device doesn't own. The run already
+    // refuses to render it; these pins make every other surface share that truth via
+    // `equippedSkinID` and stop the contradiction from persisting.
+
+    func testUnownedSelectedSkinResolverFallsBackWithoutMutating() async {
+        var broken = Profile()
+        broken.selectedSkin = "aurora"                       // cloud said aurora…
+        XCTAssertFalse(broken.ownedSkins.contains("aurora")) // …but it was never owned here
+        let store = ProfileStore(testing: broken)
+        XCTAssertEqual(store.equippedSkinID, "default", "resolver falls back to the default")
+        XCTAssertEqual(store.profile.selectedSkin, "aurora",
+                       "the resolver alone never mutates — the selection stays dormant")
+
+        // The moment the skin IS unlocked, the dormant selection takes effect — the cloud's
+        // pick is honored with no re-equip needed (AUDIT D3-1: never lose a later-valid choice).
+        store.unlock(skin: "aurora")
+        XCTAssertEqual(store.equippedSkinID, "aurora")
+    }
+
+    func testSanitizedHealsUnownedSelectionOnLoad() async {
+        var broken = Profile()
+        broken.selectedSkin = "aurora"
+        XCTAssertEqual(ProfileStore.sanitized(broken).selectedSkin, "default",
+                       "load self-heal: EQUIPPED-on-a-locked-skin can't persist across launches")
+        // A consistent save passes through untouched — sanitizing never harms a valid pick.
+        var ok = Profile()
+        ok.ownedSkins.insert("aurora"); ok.selectedSkin = "aurora"
+        XCTAssertEqual(ProfileStore.sanitized(ok).selectedSkin, "aurora")
+    }
+
+    func testCloudMergeHealsSelectionAfterOwnershipUnion() async {
+        var local = Profile()
+        local.selectedSkin = "aurora"                        // the sticky broken combo
+
+        // The merge that brings the unlock: the ownership union runs FIRST, so the cloud
+        // selection is NOT lost — it lands already valid (AUDIT D3-1 ordering pin).
+        var remote = Profile()
+        remote.ownedSkins.insert("aurora")
+        XCTAssertEqual(ProfileStore.merged(local: local, remote: remote).selectedSkin, "aurora",
+                       "a selection whose unlock arrives in the same merge survives")
+
+        // A merge where nobody owns it: healed to the default — the contradiction can't
+        // outlive a merge in either direction.
+        XCTAssertEqual(ProfileStore.merged(local: local, remote: Profile()).selectedSkin, "default")
+        XCTAssertEqual(ProfileStore.merged(local: Profile(), remote: local).selectedSkin, "default",
+                       "remote's unowned pick can't infect the merged profile either")
+    }
+
     // MARK: profile schema resilience (G5 + decoder)
 
     func testProfileDecodesLegacyJSONWithoutWiping() async throws {

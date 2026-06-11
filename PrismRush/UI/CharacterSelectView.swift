@@ -29,7 +29,9 @@ struct CharacterSelectView: View {
     @State private var newThisVisit: Set<String> = []
 
     private var focusedSkin: Skin {
-        SkinCatalog.skin(focusedID ?? ProfileStore.shared.profile.selectedSkin)
+        // Falls back to the RESOLVED equipped skin (AUDIT D3-1): opening on a raw unowned
+        // `selectedSkin` would stage a locked tease as if it were the player's character.
+        SkinCatalog.skin(focusedID ?? ProfileStore.shared.equippedSkinID)
     }
 
     var body: some View {
@@ -45,7 +47,7 @@ struct CharacterSelectView: View {
                 }
             }
             .animation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.3),
-                       value: ProfileStore.shared.profile.selectedSkin)
+                       value: ProfileStore.shared.equippedSkinID)
             .animation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.3),
                        value: focusedID)
         }
@@ -105,7 +107,9 @@ struct CharacterSelectView: View {
     private var stateButton: some View {
         let skin = focusedSkin
         let owned = ProfileStore.shared.profile.ownedSkins.contains(skin.id)
-        let equipped = ProfileStore.shared.profile.selectedSkin == skin.id
+        // Equipped = the RESOLVED truth, not raw `selectedSkin` (AUDIT D3-1): an unowned
+        // selection must read BUY/requirement (routable), never a disabled EQUIPPED dead-end.
+        let equipped = ProfileStore.shared.equippedSkinID == skin.id
         return Button { stateAction(for: skin) } label: {
             stateLabel(for: skin, owned: owned, equipped: equipped)
         }
@@ -343,8 +347,9 @@ struct CharacterSelectView: View {
 
     private func shelfCard(_ skin: Skin) -> some View {
         // Card-level state reads happen here, per render, straight off the live store (G3).
+        // EQUIPPED rings/labels come from the resolver, same truth as the run (AUDIT D3-1).
         let owned = ProfileStore.shared.profile.ownedSkins.contains(skin.id)
-        let equipped = ProfileStore.shared.profile.selectedSkin == skin.id
+        let equipped = ProfileStore.shared.equippedSkinID == skin.id
         let focused = focusedSkin.id == skin.id
         return ShelfCard(skin: skin,
                          owned: owned,

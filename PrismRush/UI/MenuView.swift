@@ -36,14 +36,22 @@ struct MenuView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             // The magenta radial is gone (uiux §2.1): just the sanctioned 6% world-tinted
-            // ambient that tracks the furthest world — the 3D scene glows through.
+            // ambient that tracks the deepest startable world — the 3D scene glows through.
             RadialGradient(colors: [furthestAccent.opacity(0.06), .clear],
                            center: .bottom, startRadius: 10, endRadius: 520).ignoresSafeArea()
         )
     }
 
+    /// Deepest STARTABLE world (reach OR purchase), clamped to the display ladder — mirrors the
+    /// Worlds header the chip routes to (LevelSelectView's `furthest`), so a v1.4 world purchase
+    /// shows on the hub immediately instead of the hub rendering as if it didn't take (AUDIT
+    /// D3-3). Display only: reach-based systems keep reading `maxWorldReached`.
+    private var furthestStartableWorld: Int {
+        min(ProfileStore.shared.highestStartableWorld, ProfileStore.maxStartWorlds - 1)
+    }
+
     private var furthestAccent: Color {
-        Theme.color(Theme.worlds[(ProfileStore.shared.unlockedWorldCount - 1) % 3].accent)
+        Theme.color(Theme.worlds[furthestStartableWorld % 3].accent)
     }
 
     // MARK: zone A — status strip
@@ -121,7 +129,9 @@ struct MenuView: View {
     /// The whole stage (character + glow disc + name pill) is ONE button → Characters. The hero
     /// stage IS the buddy chip (R6) — "Running as …" survives as its VoiceOver label.
     private func heroStageButton(height: CGFloat) -> some View {
-        let skin = SkinCatalog.skin(ProfileStore.shared.profile.selectedSkin)
+        // The resolver, never raw `selectedSkin` (AUDIT D3-1): the stage must show the skin the
+        // run actually plays, so "Running as X. Equipped." can't claim a locked cosmetic.
+        let skin = SkinCatalog.skin(ProfileStore.shared.equippedSkinID)
         return Button(action: onCharacters) {
             CharacterHeroStage(skin: skin, height: height)
                 .frame(maxWidth: .infinity)
@@ -137,7 +147,7 @@ struct MenuView: View {
     /// One world-progress chip replaces the three dead world chips: the numeral is the single
     /// sanctioned spot of world color on the menu (uiux §1.3). Tap → Worlds.
     private var worldProgressChip: some View {
-        let worldIdx = ProfileStore.shared.unlockedWorldCount - 1   // furthest start world, 0-based
+        let worldIdx = furthestStartableWorld   // deepest startable world (reach OR purchase), 0-based
         let palette = Theme.worlds[worldIdx % 3]
         let checkpointM = Int(Double(worldIdx) * Tuning.worldLength)
         return Button(action: onLevels) {

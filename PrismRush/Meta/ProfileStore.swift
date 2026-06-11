@@ -63,6 +63,10 @@ final class ProfileStore {
     /// player can set the device clock forward, claim a reward, set it back, and the future-dated
     /// `last…` timestamp makes every timer read as elapsed/ready again. Applied to every loaded
     /// profile (local, cloud, and external cloud merges); the read paths clamp too (belt and braces).
+    /// Also self-heals the unowned-selection contradiction (AUDIT D3-1): a stale save can carry a
+    /// `selectedSkin` the profile doesn't own — reset it to the default so "EQUIPPED on a locked
+    /// skin" can never persist across launches. (`merged` heals too, AFTER its ownership union, so
+    /// a cloud selection whose unlock arrives in the same merge is never lost.)
     static func sanitized(_ p: Profile, now: Date = Date()) -> Profile {
         var p = p
         if let t = p.lastDailyClaim, t > now { p.lastDailyClaim = now }
@@ -70,6 +74,7 @@ final class ProfileStore {
         if let t = p.dailyMissionDate, t > now { p.dailyMissionDate = now }
         if let t = p.dailyChallengeDate, t > now { p.dailyChallengeDate = now }
         if let t = p.weeklyMissionDate, t > now { p.weeklyMissionDate = now }
+        if !p.ownedSkins.contains(p.selectedSkin) { p.selectedSkin = "default" }
         return p
     }
 
@@ -157,6 +162,14 @@ final class ProfileStore {
     func owns(skin id: String) -> Bool { profile.ownedSkins.contains(id) }
     func unlock(skin id: String) { mutate { $0.ownedSkins.insert(id) } }
     func select(skin id: String) { mutate { $0.selectedSkin = id } }
+
+    /// The skin the player ACTUALLY runs as — `selectedSkin` counts only while owned. The ONE
+    /// canonical resolver every surface reads (menu hero, select EQUIPPED states, shop rail, the
+    /// run): a cloud merge or stale save can select a skin this device doesn't own, and any
+    /// surface reading raw `selectedSkin` then claims EQUIPPED on a locked skin while the run
+    /// plays the default (AUDIT D3-1 — decrees 2+3+4). Read-only by design: a dormant selection
+    /// takes effect again the moment its skin is unlocked, with no re-equip needed.
+    var equippedSkinID: String { owns(skin: profile.selectedSkin) ? profile.selectedSkin : "default" }
 
     /// The ONLY way any consumer reads the player's level (R9) — derived, never stored.
     var playerLevel: Int { XPCurve.level(for: profile.totalXP) }
@@ -610,6 +623,10 @@ final class ProfileStore {
         merged.xpLevelRewarded = max(merged.xpLevelRewarded, remote.xpLevelRewarded)
         merged.seenSkins.formUnion(remote.seenSkins)
         merged.bestDistanceByWorld.merge(remote.bestDistanceByWorld) { mine, theirs in max(mine, theirs) }
+        // Selection self-heal LAST — after the ownership union above — so a selection whose
+        // unlock arrives in this very merge survives, while a selection nobody owns can't
+        // outlive the merge as an EQUIPPED-on-locked contradiction (AUDIT D3-1).
+        if !merged.ownedSkins.contains(merged.selectedSkin) { merged.selectedSkin = "default" }
         return merged
     }
 
