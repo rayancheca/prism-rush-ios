@@ -5,7 +5,7 @@ import XCTest
 final class DifficultyTests: XCTestCase {
 
     /// The inter-pattern gap shrinks monotonically from 11 → 5 as distance grows.
-    func testGapMonotonicDown() {
+    func testGapMonotonicDown() async {
         var prev = Double.infinity
         for d in stride(from: 0.0, through: 6400, by: 25) {
             let g = Spawner.gap(forDistance: d)
@@ -19,19 +19,19 @@ final class DifficultyTests: XCTestCase {
     }
 
     /// Pattern-availability gates open at the documented distances.
-    func testPatternGating() {
+    func testPatternGating() async {
         XCTAssertEqual(Spawner.maxIndex(forDistance: 0), 5)
         XCTAssertEqual(Spawner.maxIndex(forDistance: 259), 5)
         XCTAssertEqual(Spawner.maxIndex(forDistance: 260), 9)        // diff = 0.08 < 0.45
         XCTAssertEqual(Spawner.maxIndex(forDistance: 1439), 9)       // diff just under 0.45
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 1440), 10)      // diff = 0.45 → patterns 1...10 (no moving walls)
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 1919), 10)      // diff just under 0.6
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 1440), 11)      // diff = 0.45 → gauntlet + split bars (no moving walls)
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 1919), 11)      // diff just under 0.6
         XCTAssertEqual(Spawner.maxIndex(forDistance: 1920), Patterns.count) // diff = 0.6 → moving walls unlock
         XCTAssertEqual(Spawner.maxIndex(forDistance: 6000), Patterns.count)
     }
 
     /// Fairness: World 2 (800–1600 m) must never spawn moving walls — players are still acclimating.
-    func testWorld2HasNoMovingWalls() {
+    func testWorld2HasNoMovingWalls() async {
         for d in stride(from: 800.0, through: 1599.0, by: 50) {
             XCTAssertLessThan(Spawner.maxIndex(forDistance: d), Patterns.count,
                               "moving walls should not be selectable at d=\(d) (World 2)")
@@ -39,7 +39,7 @@ final class DifficultyTests: XCTestCase {
     }
 
     /// Speed is non-decreasing throughout a live run and never exceeds the cap.
-    func testSpeedMonotonicToCap() {
+    func testSpeedMonotonicToCap() async {
         let core = GameCore(seed: 7)
         core.startRun(seed: 7)
         var prev = -Double.infinity
@@ -53,7 +53,7 @@ final class DifficultyTests: XCTestCase {
     }
 
     /// The closed-form speed target is itself monotonic and capped.
-    func testSpeedTargetFormula() {
+    func testSpeedTargetFormula() async {
         var prev = -Double.infinity
         for d in stride(from: 0.0, through: 8000, by: 10) {
             let target = min(Tuning.speedCap, Tuning.speedStart + d * Tuning.speedRamp)

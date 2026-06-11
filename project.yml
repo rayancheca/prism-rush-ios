@@ -9,9 +9,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
-    # HUMAN GATE: operator pastes the Apple Developer Team ID here before archiving (Phase 8).
-    # Left blank so Simulator builds (which do not sign) stay green. See state.md.
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: "8M64JJQQAU"
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1"
     GENERATE_INFOPLIST_FILE: YES

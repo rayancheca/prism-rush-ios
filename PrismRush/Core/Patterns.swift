@@ -6,16 +6,21 @@ enum SpawnCmd: Sendable, Equatable {
     case tall(d: Double, lane: Int)
     case movingTall(d: Double, phase: Double)
     case bar(d: Double)
+    case splitBar(d: Double, openLane: Int)
     case gem(d: Double, lane: Int, y: Double)
     case shield(d: Double, lane: Int)
     case magnet(d: Double, lane: Int)
+    case doubler(d: Double, lane: Int)
+    case chrono(d: Double, lane: Int)
 }
 
-/// The 11-pattern catalogue, ported verbatim from the shipped Three.js prototype.
-/// Every pattern is provably solvable (see `SolvabilityBotTests`). Each function appends its
-/// spawns to `out` and returns its length (used by the spawner to advance the cursor).
+/// The 12-pattern catalogue: 0–9 ported verbatim from the shipped Three.js prototype, 10 (split
+/// bar) new in v1.2, 11 the moving walls (kept LAST so the spawner's prefix gating unlocks split
+/// bars at mid difficulty without unlocking moving walls early). Every pattern is provably
+/// solvable (see `SolvabilityBotTests`). Each function appends its spawns to `out` and returns
+/// its length (used by the spawner to advance the cursor).
 enum Patterns {
-    static let count = 11
+    static let count = 12
 
     // MARK: helpers (mirror the prototype's gemLine / gemArc / otherLanes)
 
@@ -70,10 +75,13 @@ enum Patterns {
             out.append(.tall(d: b + 6, lane: o[0])); out.append(.low(d: b + 6, lane: o[1])); out.append(.low(d: b + 6, lane: free))
             gemArc(b + 2, free, &out); return 18
 
-        case 7:  // twin talls, then shield OR magnet (50/50) in the free lane
+        case 7:  // twin talls, then a pickup in the free lane (shield/magnet common, doubler rarer)
             let free = rng.int(0, 2); let o = otherLanes(free)
             out.append(.tall(d: b + 6, lane: o[0])); out.append(.tall(d: b + 6, lane: o[1]))
-            if rng.chance(0.5) { out.append(.shield(d: b + 13, lane: free)) } else { out.append(.magnet(d: b + 13, lane: free)) }
+            let roll = rng.unit()
+            if roll < 0.4 { out.append(.shield(d: b + 13, lane: free)) }
+            else if roll < 0.8 { out.append(.magnet(d: b + 13, lane: free)) }
+            else { out.append(.doubler(d: b + 13, lane: free)) }
             return 18
 
         case 8:  // double bar 9 apart
@@ -86,7 +94,15 @@ enum Patterns {
             out.append(.low(d: b + 24, lane: 0)); out.append(.low(d: b + 24, lane: 1)); out.append(.low(d: b + 24, lane: 2))
             gemArc(b + 20, free, &out); gemLine(b + 27, free, 4, &out); return 34
 
-        case 10: // moving walls x2 — phase 0 puts each wall at CENTER on its collision plane, so the
+        case 10: // split bar over two lanes — steer to the open gap OR slide under. Gem line marks
+                 // the gap; a chrono slow-mo sometimes waits just beyond it as the reward.
+            let open = rng.int(0, 2)
+            out.append(.splitBar(d: b + 7, openLane: open))
+            gemLine(b + 10, open, 4, &out)
+            if rng.chance(0.35) { out.append(.chrono(d: b + 17, lane: open)) }
+            return 22
+
+        case 11: // moving walls x2 — phase 0 puts each wall at CENTER on its collision plane, so the
                  // gem-lined outer lanes (0 and 2) are always the safe, readable escape. The wall still
                  // oscillates visually on approach; amplitude 1.6 guarantees a clear lane.
             out.append(.movingTall(d: b + 9, phase: 0)); gemLine(b + 1, 0, 3, &out)

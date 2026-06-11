@@ -8,6 +8,8 @@ import UIKit
 final class GameCenterService: NSObject, GKGameCenterControllerDelegate {
     static let shared = GameCenterService()
     static let leaderboardID = "prismrush.best"
+    /// Recurring leaderboard (daily reset in App Store Connect) for the shared-seed daily challenge.
+    static let dailyLeaderboardID = "prismrush.daily"
 
     private(set) var authenticated = false
 
@@ -23,11 +25,30 @@ final class GameCenterService: NSObject, GKGameCenterControllerDelegate {
         }
     }
 
+    /// Submit a finished run's score. Checkpoint runs reach end-game speed (66 pts/s) from t = 0 —
+    /// strictly better for best-score chasing — so they are never leaderboard-eligible
+    /// (AGENT_core.md §Game Center). The local best still updates regardless; the leaderboard
+    /// keeps each player's maximum, so submitting per-run scores converges on the true best.
+    func submitRun(score: Int, usedCheckpoint: Bool) {
+        guard !usedCheckpoint else { return }
+        submit(score)
+    }
+
     func submit(_ score: Int) {
         guard authenticated, score > 0 else { return }
         Task {
             try? await GKLeaderboard.submitScore(score, context: 0, player: GKLocalPlayer.local,
                                                  leaderboardIDs: [Self.leaderboardID])
+        }
+    }
+
+    /// Submit a daily-challenge run. `day` (UTC days since epoch) rides along as the context so a
+    /// score's challenge date is recoverable; the recurring leaderboard handles the daily reset.
+    func submitDailyChallenge(score: Int, day: Int) {
+        guard authenticated, score > 0 else { return }
+        Task {
+            try? await GKLeaderboard.submitScore(score, context: day, player: GKLocalPlayer.local,
+                                                 leaderboardIDs: [Self.dailyLeaderboardID])
         }
     }
 

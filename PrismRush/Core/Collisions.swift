@@ -35,6 +35,18 @@ enum Collisions {
             && playerBottom < Tuning.barKillTop
     }
 
+    /// Split bar covering two lanes with one open gap: the bar's vertical kill band applies only
+    /// while the player overlaps a COVERED lane — standing in the gap (or sliding) is safe.
+    static func splitBarHit(playerTop: Double, playerBottom: Double, playerX: Double, openLane: Int, z: Double) -> Bool {
+        guard abs(z) < Tuning.obstacleZHalf,
+              playerTop > Tuning.barKillBottom,
+              playerBottom < Tuning.barKillTop else { return false }
+        for l in 0..<3 where l != openLane {
+            if abs(playerX - Tuning.laneX[l]) < Tuning.laneHitHalfWidth { return true }
+        }
+        return false
+    }
+
     /// Gem pickup window (uses the gem's *base* Y, before cosmetic bob).
     static func gemPickup(playerCenterY pcy: Double, playerX: Double, gemX: Double, gemBaseY: Double, z: Double) -> Bool {
         abs(z) < Tuning.gemPickup.dz
@@ -51,4 +63,10 @@ enum Collisions {
 
     /// Whether a gem at relative `z` is inside the magnet's pull window.
     static func magnetActive(z: Double) -> Bool { z > -Tuning.magnetRange && z < 2 }
+
+    /// CLOSE near-miss band for a passed tall: a genuine squeeze, never a full lane (pitch 2.2) away.
+    static func closeNearMiss(dx: Double) -> Bool {
+        dx >= Tuning.nearMissInner && dx < Tuning.nearMissOuter
+    }
+
 }

@@ -31,6 +31,10 @@ enum Autopilot {
             switch o.kind {
             case .tall:
                 lanes = [o.lane]
+            case .splitBar:
+                // Covered lanes steer the bot toward the gap (o.lane is the OPEN lane); the bar
+                // slide-commit below remains the fallback when the gap can't be reached in time.
+                lanes = [0, 1, 2].filter { $0 != o.lane }
             case .movingTall:
                 // At the collision plane (dist ≈ d) the wall sits at sin(phase)*amplitude; widen the
                 // blocked band to cover its sweep across the ~1.9-unit kill depth.
@@ -80,18 +84,19 @@ enum Autopilot {
             if nextDangerous && !stayingForced { laneDir = 0 }
         }
 
-        // 2) Vertical: jump lows in the target lane, slide (or air-slam) bars.
-        let jumpLead = clampD(c.speed * 0.17, 4.5, 6.5)
+        // 2) Vertical: jump lows in the target lane, slide (or air-slam) bars. Leads scale with
+        //    the EFFECTIVE speed — under chrono slow-mo, obstacles arrive at the slowed rate.
+        let jumpLead = clampD(c.effectiveSpeed * 0.17, 4.5, 6.5)
         // Commit to (and hold) a slide from this far out. Generous so that when the bot is still
         // airborne from a preceding low, the air-slam has time to drop it under the bar.
-        let slideCommit = clampD(c.speed * 0.42, 8, 14)
+        let slideCommit = clampD(c.effectiveSpeed * 0.42, 8, 14)
         var nearestBar = Double.infinity
         var nearestLowTarget = Double.infinity
         for o in c.activeObstacles {
             let arrival = o.d - c.distance
             guard arrival > 0, arrival <= reach else { continue }
-            if o.kind == .bar {
-                nearestBar = min(nearestBar, arrival)
+            if o.kind == .bar || o.kind == .splitBar {
+                nearestBar = min(nearestBar, arrival)   // sliding clears a split bar in ANY lane
             } else if o.kind == .low && o.lane == target {
                 nearestLowTarget = min(nearestLowTarget, arrival)
             }

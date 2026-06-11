@@ -19,6 +19,42 @@ enum ProceduralMesh {
         return build(p, idx, fallback: r)
     }
 
+    /// Two octahedra side by side in one mesh (the coin-doubler pickup): the gem vertex set
+    /// duplicated at ±`offset` on x, indices rebased for the second copy. One MeshDescriptor.
+    static func twinOctahedron(_ r: Float, offset: Float = 0.34) -> MeshResource {
+        let base: [SIMD3<Float>] = [
+            [r, 0, 0], [-r, 0, 0], [0, r, 0], [0, -r, 0], [0, 0, r], [0, 0, -r],
+        ]
+        let faces: [UInt32] = [
+            2, 4, 0,  2, 0, 5,  2, 5, 1,  2, 1, 4,   // top fan
+            3, 0, 4,  3, 5, 0,  3, 1, 5,  3, 4, 1,   // bottom fan
+        ]
+        var p: [SIMD3<Float>] = []
+        var idx: [UInt32] = []
+        for (k, dx) in [-offset, offset].enumerated() {
+            p.append(contentsOf: base.map { $0 + SIMD3<Float>(dx, 0, 0) })
+            idx.append(contentsOf: faces.map { $0 + UInt32(k * base.count) })
+        }
+        return build(p, idx, fallback: r + offset)
+    }
+
+    /// Hourglass for the chrono slow-mo pickup: two four-sided pyramids meeting apex-to-apex at
+    /// the origin (square caps at y ±`halfHeight`, pinched waist at the centre). 9 vertices.
+    static func hourglass(halfBase b: Float, halfHeight h: Float) -> MeshResource {
+        let p: [SIMD3<Float>] = [
+            [-b, -h, -b], [b, -h, -b], [b, -h, b], [-b, -h, b],  // bottom square 0..3 (CCW from above)
+            [0, 0, 0],                                            // shared waist apex 4
+            [-b, h, -b], [b, h, -b], [b, h, b], [-b, h, b],       // top square 5..8
+        ]
+        let idx: [UInt32] = [
+            1, 0, 4,  2, 1, 4,  3, 2, 4,  0, 3, 4,   // lower pyramid sides (outward)
+            0, 2, 1,  0, 3, 2,                         // bottom cap (downward)
+            5, 6, 4,  6, 7, 4,  7, 8, 4,  8, 5, 4,   // upper inverted-pyramid sides (outward)
+            5, 7, 6,  5, 8, 7,                         // top cap (upward)
+        ]
+        return build(p, idx, fallback: max(b, h))
+    }
+
     /// Four-sided pyramid for the Solar Sands decor.
     static func pyramid(halfBase b: Float, height h: Float) -> MeshResource {
         let p: [SIMD3<Float>] = [

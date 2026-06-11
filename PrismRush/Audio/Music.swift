@@ -15,9 +15,12 @@ final class Music {
     private var vol: Float = 0
     private var targetVol: Float = 0
     private var fadeRate: Float = 1
+    private var duckLevel: Float = 1
     private let lookaheadFrames: Int64
 
     var world = 0
+    /// Settings slider (0...1), multiplied into every fade/duck. Owned by `SynthEngine`.
+    var userVolume: Float = 1
 
     init(player: AVAudioPlayerNode, mixer: AVAudioMixerNode, format: AVAudioFormat) {
         self.player = player
@@ -34,7 +37,8 @@ final class Music {
         vol = 0.08                     // start just audible so the run-start beat lands
         targetVol = 0.85
         fadeRate = 0.85 / 0.5          // fade in over ~0.5 s
-        mixer.outputVolume = vol
+        duckLevel = 1
+        mixer.outputVolume = vol * userVolume
         player.play()
     }
 
@@ -44,12 +48,27 @@ final class Music {
         fadeRate = max(vol, 0.0001) / 0.8   // fade out over ~0.8 s
     }
 
+    /// Big SFX push the bed down to `level`; `pump` recovers it to 1 over ~0.25 s.
+    func duck(to level: Float) { duckLevel = min(duckLevel, level) }
+
+    /// After an engine stop (interruption / route change) the player's sample timeline and queued
+    /// buffers are gone, so `scheduledFrames` no longer matches `playedFrames()` and pump wedges.
+    /// Restart the player and reset the anchor; the next pump refills from the current beat.
+    /// Only call with the engine running — `play()` on a stopped engine raises.
+    func reanchor() {
+        guard playing else { return }
+        player.stop()
+        scheduledFrames = 0
+        player.play()
+    }
+
     func pump(_ dt: Double) {
         if vol != targetVol {
             let step = fadeRate * Float(dt)
             vol = vol < targetVol ? min(targetVol, vol + step) : max(targetVol, vol - step)
-            mixer.outputVolume = vol
         }
+        duckLevel = min(1, duckLevel + Float(dt) * 2)   // recover from a 0.5 duck in ~0.25 s
+        mixer.outputVolume = vol * duckLevel * userVolume
         guard playing else { return }
 
         let played = playedFrames()

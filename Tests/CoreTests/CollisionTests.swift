@@ -75,6 +75,35 @@ final class CollisionTests: XCTestCase {
         XCTAssertFalse(Collisions.barHit(playerTop: pb.top, playerBottom: pb.bottom, z: 0))
     }
 
+    // MARK: Split bars
+
+    func testSplitBarHitInCoveredLane() {
+        let pb = Collisions.playerBounds(jumpY: 0, scaleY: 1)
+        // Open lane 0: standing in covered lanes 1 / 2 is fatal, the gap is safe.
+        XCTAssertTrue(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: 0, openLane: 0, z: 0))
+        XCTAssertTrue(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: 2.2, openLane: 0, z: 0))
+        XCTAssertFalse(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: -2.2, openLane: 0, z: 0))
+    }
+
+    func testSplitBarLateralBoundary() {
+        let pb = Collisions.playerBounds(jumpY: 0, scaleY: 1)
+        // Open lane 2: covered lane at x=0 kills within |dx| < 1.25, exactly like a tall's width.
+        XCTAssertTrue(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: 1.24, openLane: 2, z: 0))
+        XCTAssertFalse(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: 2.2, openLane: 2, z: 0))
+    }
+
+    func testSplitBarClearedBySlide() {
+        let pb = Collisions.playerBounds(jumpY: 0, scaleY: Tuning.slideScaleY)
+        // Sliding clears the vertical kill band even directly under a covered lane.
+        XCTAssertFalse(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: 0, openLane: 2, z: 0))
+    }
+
+    func testSplitBarDepthBoundary() {
+        let pb = Collisions.playerBounds(jumpY: 0, scaleY: 1)
+        XCTAssertTrue(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: 0, openLane: 2, z: 0.94))
+        XCTAssertFalse(Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: 0, openLane: 2, z: 0.96))
+    }
+
     // MARK: Gems
 
     func testGemPickupWindow() {
@@ -94,9 +123,21 @@ final class CollisionTests: XCTestCase {
     // MARK: Magnet window
 
     func testMagnetWindow() {
-        XCTAssertTrue(Collisions.magnetActive(z: -12.9))
-        XCTAssertFalse(Collisions.magnetActive(z: -13.0))
+        XCTAssertTrue(Collisions.magnetActive(z: -(Tuning.magnetRange - 0.1)))
+        XCTAssertFalse(Collisions.magnetActive(z: -Tuning.magnetRange))
         XCTAssertTrue(Collisions.magnetActive(z: 1.9))
         XCTAssertFalse(Collisions.magnetActive(z: 2.0))
+    }
+
+    // MARK: CLOSE near-miss band
+
+    func testCloseNearMissBand() {
+        XCTAssertFalse(Collisions.closeNearMiss(dx: 1.24), "inside the kill width is not a near-miss")
+        XCTAssertTrue(Collisions.closeNearMiss(dx: 1.25))
+        XCTAssertTrue(Collisions.closeNearMiss(dx: 1.6))
+        XCTAssertFalse(Collisions.closeNearMiss(dx: 1.95))
+        XCTAssertFalse(Collisions.closeNearMiss(dx: 2.2), "a full lane away must NOT award CLOSE")
+        XCTAssertLessThan(Tuning.nearMissOuter, Tuning.laneX[2] - Tuning.laneX[1],
+                          "outer band must stay below the lane pitch")
     }
 }

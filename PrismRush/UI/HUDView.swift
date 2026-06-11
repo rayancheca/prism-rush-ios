@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// In-run heads-up display: score + best on the left, gems + streak multiplier on the right.
+/// In-run heads-up display: score + best on the left; gems, streak multiplier and live power-up
+/// timers (magnet / coin doubler / chrono slow-mo) on the right.
 /// Reads the observed `core.snapshot`, so it refreshes as the run progresses.
 struct HUDView: View {
     let core: GameCore
@@ -22,6 +23,7 @@ struct HUDView: View {
 
                 Spacer()
 
+                // Starts below the mute/pause cluster anchored in the top-trailing corner.
                 VStack(alignment: .trailing, spacing: 8) {
                     HStack(spacing: 7) {
                         RoundedRectangle(cornerRadius: 2)
@@ -47,7 +49,18 @@ struct HUDView: View {
                             .transition(.scale)
                             .id(snap.mult)
                     }
+
+                    if snap.magnetRemaining > 0 {
+                        powerChip("MAG", snap.magnetRemaining, Theme.color(0x00F5FF))
+                    }
+                    if snap.doublerRemaining > 0 {
+                        powerChip("×2", snap.doublerRemaining, Theme.color(0x00FF88))
+                    }
+                    if snap.chronoRemaining > 0 {
+                        powerChip("SLOW", snap.chronoRemaining, Theme.color(0x9BF0FF))
+                    }
                 }
+                .padding(.top, 38)
             }
             Spacer()
         }
@@ -57,6 +70,21 @@ struct HUDView: View {
         .animation(.spring(duration: 0.25), value: snap.mult)
         .opacity(snap.mode == .play ? 1 : 0)
         .allowsHitTesting(false)
+    }
+
+    /// Power-up countdown chip — same glassy pill chrome as the gems counter.
+    private func powerChip(_ label: String, _ remaining: Double, _ color: Color) -> some View {
+        HStack(spacing: 7) {
+            Circle()
+                .fill(color)
+                .frame(width: 9, height: 9)
+                .shadow(color: color, radius: 5)
+            Text("\(label) \(Int(remaining.rounded(.up)))")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .monospacedDigit()
+        }
+        .pillBackground()
+        .transition(.scale)
     }
 }
 

@@ -32,8 +32,9 @@ enum Synth {
         }
     }
 
-    /// Filtered noise burst (one-pole low/high pass) with a linear decay, summed into `buf`.
-    static func noise(_ buf: inout [Float], dur: Float, vol: Float, cutoff: Float, highpass: Bool = false, offset: Int = 0, seed: UInt32 = 0x1234_5678) {
+    /// Filtered noise burst (one-pole low/high pass) with a linear decay — or a linear swell when
+    /// `swell` is set (whooshes that build instead of die) — summed into `buf`.
+    static func noise(_ buf: inout [Float], dur: Float, vol: Float, cutoff: Float, highpass: Bool = false, swell: Bool = false, offset: Int = 0, seed: UInt32 = 0x1234_5678) {
         let n = Int(dur * sampleRate)
         var rng = seed
         var lp: Float = 0
@@ -57,8 +58,12 @@ enum Synth {
 
     // MARK: SFX (route through sfxGain)
 
+    /// Per-streak pitch ratio. 1.08 ≈ a bit over a semitone, so each gem in a chain is an audible
+    /// step up the ladder (the prototype's 1.045 was barely perceptible).
+    static let gemPitchStep: Float = 1.08
+
     static func gem(streak: Int) -> [Float] {
-        let f = 560 * pow(1.045, Float(streak % 26))
+        let f = 560 * pow(gemPitchStep, Float(streak % 26))
         var b = blank(0.10)
         tone(&b, f, f * 1.5, dur: 0.09, .square, vol: 0.16)
         return b
@@ -120,6 +125,75 @@ enum Synth {
         var b = blank(0.27); tone(&b, 440, 880, dur: 0.25, .triangle, vol: 0.2); return b
     }
 
+    static func laneTick() -> [Float] {               // tiny blip so lane changes register
+        var b = blank(0.04); tone(&b, 300, 360, dur: 0.04, .sine, vol: 0.08); return b
+    }
+
+    static func landThud() -> [Float] {               // hard-landing thump: pitch-drop + dust tick
+        var b = blank(0.14)
+        tone(&b, 150, 46, dur: 0.13, .sine, vol: 0.30)
+        noise(&b, dur: 0.05, vol: 0.10, cutoff: 800)
+        return b
+    }
+
+    static func purchaseChime() -> [Float] {          // rising major triad — money well spent
+        var b = blank(0.50)
+        tone(&b, 523, 525, dur: 0.16, .triangle, vol: 0.16)
+        tone(&b, 659, 661, dur: 0.16, .triangle, vol: 0.16, offset: Int(0.10 * sampleRate))
+        tone(&b, 784, 788, dur: 0.26, .triangle, vol: 0.17, offset: Int(0.20 * sampleRate))
+        tone(&b, 1046, 1050, dur: 0.22, .sine, vol: 0.10, offset: Int(0.26 * sampleRate))
+        return b
+    }
+
+    static func equipClick() -> [Float] {             // snappy mechanical click for equipping a skin
+        var b = blank(0.06)
+        tone(&b, 1800, 900, dur: 0.03, .square, vol: 0.07)
+        noise(&b, dur: 0.025, vol: 0.06, cutoff: 3000, highpass: true)
+        return b
+    }
+
+    static func uiTick() -> [Float] {                 // soft blip for sheet open/close
+        var b = blank(0.05); tone(&b, 660, 880, dur: 0.045, .triangle, vol: 0.07); return b
+    }
+
+    static func newBestFanfare() -> [Float] {         // quick triumphant arp + held top note
+        var b = blank(0.75)
+        let arp: [Float] = [523, 659, 784, 1046]
+        for (i, f) in arp.enumerated() {
+            tone(&b, f, f * 1.01, dur: 0.14, .square, vol: 0.10, offset: Int(Float(i) * 0.11 * sampleRate))
+        }
+        tone(&b, 1046, 1052, dur: 0.30, .triangle, vol: 0.14, offset: Int(0.44 * sampleRate))
+        return b
+    }
+
+    static func deathSweep() -> [Float] {             // long fall: saw dive + noise swelling under it
+        var b = blank(0.92)
+        tone(&b, 660, 55, dur: 0.90, .saw, vol: 0.18)
+        noise(&b, dur: 0.88, vol: 0.24, cutoff: 900, swell: true)
+        return b
+    }
+
+    static func doublerPickup() -> [Float] {          // coin-y double chime — ×2 means two
+        var b = blank(0.30)
+        tone(&b, 988, 992, dur: 0.10, .square, vol: 0.13)
+        tone(&b, 1319, 1325, dur: 0.18, .square, vol: 0.13, offset: Int(0.10 * sampleRate))
+        return b
+    }
+
+    static func frenzyStart() -> [Float] {            // rising whoosh into the power-up
+        var b = blank(0.42)
+        tone(&b, 200, 980, dur: 0.38, .saw, vol: 0.10)
+        noise(&b, dur: 0.36, vol: 0.12, cutoff: 2400, highpass: true, swell: true)
+        return b
+    }
+
+    static func frenzyEnd() -> [Float] {              // falling whoosh out of it
+        var b = blank(0.42)
+        tone(&b, 980, 200, dur: 0.38, .saw, vol: 0.10)
+        noise(&b, dur: 0.36, vol: 0.12, cutoff: 2400, highpass: true)
+        return b
+    }
+
     // MARK: Music — one 8th-note step (kick / hat / saw bass / sparkle arp), per the prototype.
 
     static let bpm: Float = 132
@@ -150,5 +224,60 @@ enum Synth {
             tone(&b, freq(arpMidi), freq(arpMidi), dur: 0.2, .triangle, vol: 0.05)
         }
         return b
+    }
+}
+
+extension Synth {
+    /// Stable identity for every one-shot effect. All SFX are deterministic, so `SynthEngine`
+    /// renders each case once and caches the PCM buffer instead of re-synthesizing per play.
+    /// Pure (no AVAudio), so the full catalog stays unit-testable on Linux.
+    enum SFX: Hashable, Sendable {
+        case gem(streak: Int)
+        case jump, slide, crash, chime, shieldPickup, magnetPickup, doublerPickup
+        case worldSweep, close, startChime
+        case laneTick, landThud, purchaseChime, equipClick, uiTick, newBestFanfare, deathSweep
+        case frenzyStart, frenzyEnd
+
+        /// Gem repeats its pitch ladder every 26 streaks — collapse so the cache stays bounded.
+        var normalized: SFX {
+            if case let .gem(streak) = self { return .gem(streak: ((streak % 26) + 26) % 26) }
+            return self
+        }
+
+        /// Big moments push the music bed down (see `Music.duck(to:)`); ticks and blips don't.
+        var ducksMusic: Bool {
+            switch self {
+            case .crash, .deathSweep, .worldSweep, .shieldPickup, .magnetPickup, .doublerPickup,
+                 .frenzyStart, .frenzyEnd, .newBestFanfare:
+                return true
+            default:
+                return false
+            }
+        }
+
+        var samples: [Float] {
+            switch self {
+            case let .gem(streak): return Synth.gem(streak: streak)
+            case .jump: return Synth.jump()
+            case .slide: return Synth.slide()
+            case .crash: return Synth.crash()
+            case .chime: return Synth.chime()
+            case .shieldPickup: return Synth.shieldChime()
+            case .magnetPickup: return Synth.magnetChime()
+            case .doublerPickup: return Synth.doublerPickup()
+            case .worldSweep: return Synth.worldSweep()
+            case .close: return Synth.close()
+            case .startChime: return Synth.startChime()
+            case .laneTick: return Synth.laneTick()
+            case .landThud: return Synth.landThud()
+            case .purchaseChime: return Synth.purchaseChime()
+            case .equipClick: return Synth.equipClick()
+            case .uiTick: return Synth.uiTick()
+            case .newBestFanfare: return Synth.newBestFanfare()
+            case .deathSweep: return Synth.deathSweep()
+            case .frenzyStart: return Synth.frenzyStart()
+            case .frenzyEnd: return Synth.frenzyEnd()
+            }
+        }
     }
 }

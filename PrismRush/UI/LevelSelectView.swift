@@ -6,9 +6,11 @@ struct LevelSelectView: View {
     let model: GameModel
 
     var body: some View {
-        let profile = ProfileStore.shared.profile
-        let unlocked = max(1, profile.maxWorldReached + 1)
-        let count = min(unlocked, 12)
+        let store = ProfileStore.shared
+        let profile = store.profile
+        // One source of truth for "how deep can you start": ProfileStore.unlockedWorldCount
+        // (maxWorldReached + 1, capped at ProfileStore.maxStartWorlds).
+        let count = store.unlockedWorldCount
 
         MetaScreenScaffold(title: "Worlds", coins: profile.coins, onClose: { model.closeSheet() }) {
             VStack(spacing: 16) {
@@ -20,7 +22,7 @@ struct LevelSelectView: View {
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 14)], spacing: 14) {
                     ForEach(0..<count, id: \.self) { world in
-                        WorldCard(world: world, isFurthest: world == unlocked - 1) {
+                        WorldCard(world: world, isFurthest: world == count - 1) {
                             model.startRun(fromWorld: world)
                         }
                     }
@@ -50,7 +52,7 @@ private struct WorldCard: View {
                 Text(palette.name)
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
-                Text(world == 0 ? "START" : "\(world * 800)m in")
+                Text(world == 0 ? "START" : "\(Int(Double(world) * Tuning.worldLength))m in")
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.55))
             }
@@ -63,6 +65,8 @@ private struct WorldCard: View {
                                   lineWidth: isFurthest ? 2.5 : 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.neon)
+        .accessibilityLabel("World \(world + 1), \(palette.name)\(world == 0 ? ", the start" : ", \(Int(Double(world) * Tuning.worldLength)) meters in")")
+        .accessibilityHint("Starts a run from this checkpoint")
     }
 }

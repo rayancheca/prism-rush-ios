@@ -11,6 +11,7 @@ final class EntityPools {
     private var live: [Int: Entity] = [:]
     private var liveKind: [Int: EntityKind] = [:]
     private var seen = Set<Int>()
+    private var vanished: [Int] = []   // scratch buffer, reused across frames (no per-frame alloc)
 
     init(root: Entity, make: @escaping (EntityKind) -> Entity) {
         self.root = root
@@ -35,7 +36,7 @@ final class EntityPools {
         }
 
         // Recycle ids that disappeared this frame.
-        var vanished: [Int] = []
+        vanished.removeAll(keepingCapacity: true)
         for id in live.keys where !seen.contains(id) { vanished.append(id) }
         for id in vanished {
             if let e = live[id] { recycle(e, liveKind[id] ?? .gem) }

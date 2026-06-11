@@ -12,7 +12,9 @@ final class ProfileStore {
     private(set) var profile: Profile
 
     @ObservationIgnored private let localKey = "pr.profile.v1"
+    #if canImport(Darwin)
     @ObservationIgnored private let cloud = NSUbiquitousKeyValueStore.default
+    #endif
     @ObservationIgnored private let persisting: Bool
 
     /// Test-only: start from a known profile with persistence + cloud disabled.
@@ -23,7 +25,9 @@ final class ProfileStore {
 
     init() {
         persisting = true
-        profile = ProfileStore.load(localKey: "pr.profile.v1", cloud: NSUbiquitousKeyValueStore.default)
+        #if canImport(Darwin)
+        profile = ProfileStore.sanitized(
+            ProfileStore.load(localKey: "pr.profile.v1", cloud: NSUbiquitousKeyValueStore.default))
         // Pull any newer cloud value when it changes (other device).
         NotificationCenter.default.addObserver(
             forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
@@ -32,6 +36,31 @@ final class ProfileStore {
             MainActor.assumeIsolated { self?.mergeFromCloud() }
         }
         cloud.synchronize()
+        #else
+        profile = ProfileStore.sanitized(ProfileStore.loadLocal(localKey: localKey))
+        #endif
+    }
+
+    // MARK: clock-manipulation hardening
+
+    /// Clamp any stored timestamp that claims to be in the future down to `now`. Without this, a
+    /// player can set the device clock forward, claim a reward, set it back, and the future-dated
+    /// `last…` timestamp makes every timer read as elapsed/ready again. Applied to every loaded
+    /// profile (local, cloud, and external cloud merges); the read paths clamp too (belt and braces).
+    static func sanitized(_ p: Profile, now: Date = Date()) -> Profile {
+        var p = p
+        if let t = p.lastDailyClaim, t > now { p.lastDailyClaim = now }
+        if let t = p.lastChestOpen, t > now { p.lastChestOpen = now }
+        if let t = p.dailyMissionDate, t > now { p.dailyMissionDate = now }
+        if let t = p.dailyChallengeDate, t > now { p.dailyChallengeDate = now }
+        return p
+    }
+
+    /// A stored "last claimed/opened" instant, clamped so a future-dated value (clock rollback
+    /// exploit) reads as "just now" — i.e. claimed today / cooldown fully re-armed.
+    private func clamped(_ stored: Date?, now: Date) -> Date? {
+        guard let stored else { return nil }
+        return min(stored, now)
     }
 
     // MARK: mutation
@@ -70,8 +99,11 @@ final class ProfileStore {
     func unlock(skin id: String) { mutate { $0.ownedSkins.insert(id) } }
     func select(skin id: String) { mutate { $0.selectedSkin = id } }
 
+    /// The deepest starting world offered in level select (matches the world cards the UI shows).
+    static let maxStartWorlds = 12
+
     /// Highest selectable starting world (0-based), capped to one past what's been reached.
-    var unlockedWorldCount: Int { max(1, min(99, profile.maxWorldReached + 1)) }
+    var unlockedWorldCount: Int { max(1, min(Self.maxStartWorlds, profile.maxWorldReached + 1)) }
 
     // MARK: retention — daily reward, login streak, timed free chest (all `now`-injectable for tests)
 
@@ -79,13 +111,13 @@ final class ProfileStore {
     static let chestInterval: TimeInterval = 30 * 60   // a free chest every 30 minutes
 
     func dailyRewardAvailable(now: Date = Date()) -> Bool {
-        guard let last = profile.lastDailyClaim else { return true }
+        guard let last = clamped(profile.lastDailyClaim, now: now) else { return true }
         return !Calendar.current.isDate(last, inSameDayAs: now)
     }
 
     /// The streak the player would have by claiming now (yesterday → +1, gap → reset to 1).
     func pendingDailyStreak(now: Date = Date()) -> Int {
-        guard let last = profile.lastDailyClaim else { return 1 }
+        guard let last = clamped(profile.lastDailyClaim, now: now) else { return 1 }
         if Calendar.current.isDate(last, inSameDayAs: now) { return profile.loginStreak }
         if let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now),
            Calendar.current.isDate(last, inSameDayAs: yesterday) {
@@ -108,12 +140,12 @@ final class ProfileStore {
     }
 
     func chestReady(now: Date = Date()) -> Bool {
-        guard let last = profile.lastChestOpen else { return true }
+        guard let last = clamped(profile.lastChestOpen, now: now) else { return true }
         return now.timeIntervalSince(last) >= Self.chestInterval
     }
 
     func secondsUntilChest(now: Date = Date()) -> TimeInterval {
-        guard let last = profile.lastChestOpen else { return 0 }
+        guard let last = clamped(profile.lastChestOpen, now: now) else { return 0 }
         return max(0, Self.chestInterval - now.timeIntervalSince(last))
     }
 
@@ -121,8 +153,197 @@ final class ProfileStore {
     func openFreeChest(now: Date = Date(), reward: Int? = nil) -> Int? {
         guard chestReady(now: now) else { return nil }
         let amount = reward ?? Int.random(in: 60...220)
-        mutate { $0.lastChestOpen = now; $0.coins += amount; $0.totalCoinsEarned += amount }
+        refreshDailyMissions(now: now)
+        mutate {
+            $0.lastChestOpen = now; $0.coins += amount; $0.totalCoinsEarned += amount
+            Self.bump(&$0.missionProgress, metric: .chestsOpened, by: 1)
+        }
         return amount
+    }
+
+    // MARK: missions & achievements
+
+    /// UTC calendar — daily missions and the daily challenge roll over at UTC midnight, worldwide.
+    @ObservationIgnored private static let utc: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        return c
+    }()
+
+    static func daysSinceEpoch(_ date: Date) -> Int {
+        Int(floor(date.timeIntervalSince1970 / 86_400))
+    }
+
+    /// ISO "yyyy-MM-dd" in UTC — the day key used for challenge calendars + rollover checks.
+    static func utcDayKey(_ date: Date) -> String {
+        let c = utc.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+    }
+
+    /// Seconds until the next UTC midnight (drives the daily countdowns).
+    static func secondsUntilUTCMidnight(now: Date = Date()) -> TimeInterval {
+        let next = Double(daysSinceEpoch(now) + 1) * 86_400
+        return max(0, next - now.timeIntervalSince1970)
+    }
+
+    /// Today's 3 daily mission slots (deterministic per UTC day). Also rolls progress over if the
+    /// stored slots belong to a previous day.
+    func dailyMissions(now: Date = Date()) -> [Mission] {
+        refreshDailyMissions(now: now)
+        return MissionCatalog.dailySlots(daysSinceEpoch: Self.daysSinceEpoch(now))
+    }
+
+    /// If the UTC day changed since the last visit, wipe daily progress + claims so the new board
+    /// starts clean. (A future-dated stored day is clamped by `sanitized`/read order — setting the
+    /// clock back simply re-rolls the board; nothing becomes claimable twice in one real day.)
+    func refreshDailyMissions(now: Date = Date()) {
+        let today = Self.utcDayKey(now)
+        if let last = profile.dailyMissionDate, Self.utcDayKey(min(last, now)) == today { return }
+        let dailyIDs = Set(MissionCatalog.dailyPool.map(\.id))
+        mutate {
+            $0.dailyMissionDate = now
+            for id in dailyIDs {
+                $0.missionProgress.removeValue(forKey: id)
+                $0.claimedMissions.remove(id)
+            }
+        }
+    }
+
+    /// Fold one finished run into per-run, daily, and lifetime mission progress.
+    func applyRunSummary(_ summary: RunSummary, now: Date = Date()) {
+        refreshDailyMissions(now: now)
+        mutate {
+            for m in MissionCatalog.perRun {
+                // Per-run missions track the best single-run value (the run must do it alone).
+                let v = m.metric.value(in: summary)
+                $0.missionProgress[m.id] = max($0.missionProgress[m.id] ?? 0, v)
+            }
+            for m in MissionCatalog.dailyPool {
+                Self.bump(&$0.missionProgress, id: m.id, metric: m.metric, in: summary)
+            }
+            for m in MissionCatalog.achievements {
+                Self.bump(&$0.missionProgress, id: m.id, metric: m.metric, in: summary)
+            }
+        }
+    }
+
+    private static func bump(_ progress: inout [String: Double], id: String, metric: Mission.Metric, in summary: RunSummary) {
+        let v = metric.value(in: summary)
+        guard v > 0 else { return }
+        if metric.accumulatesByMax {
+            progress[id] = max(progress[id] ?? 0, v)
+        } else {
+            progress[id] = (progress[id] ?? 0) + v
+        }
+    }
+
+    /// Bump every mission tracking `metric` by a flat amount (non-run events, e.g. chest opens).
+    private static func bump(_ progress: inout [String: Double], metric: Mission.Metric, by amount: Double) {
+        for m in MissionCatalog.perRun + MissionCatalog.dailyPool + MissionCatalog.achievements
+        where m.metric == metric {
+            progress[m.id] = (progress[m.id] ?? 0) + amount
+        }
+    }
+
+    /// One mission's live display state.
+    struct MissionState {
+        var progress: Double
+        var target: Double
+        var reward: Int
+        var claimable: Bool
+        var claimed: Bool      // fully exhausted (per-run/daily claimed; tiered = all tiers paid)
+        var tier: Int          // tiers already claimed (tiered missions only; else 0)
+        var tierCount: Int     // total tiers (tiered missions only; else 1)
+    }
+
+    func missionState(_ m: Mission, now: Date = Date()) -> MissionState {
+        let progress = profile.missionProgress[m.id] ?? 0
+        switch m.scope {
+        case .perRun, .daily:
+            let claimed = profile.claimedMissions.contains(m.id)
+            return MissionState(progress: min(progress, m.target), target: m.target, reward: m.rewardCoins,
+                                claimable: !claimed && progress >= m.target, claimed: claimed,
+                                tier: 0, tierCount: 1)
+        case .lifetimeTiered(let targets, let rewards):
+            let tier = min(profile.achievementTier[m.id] ?? 0, targets.count)
+            let done = tier >= targets.count
+            let target = done ? targets[targets.count - 1] : targets[tier]
+            let reward = done ? 0 : rewards[min(tier, rewards.count - 1)]
+            return MissionState(progress: min(progress, target), target: target, reward: reward,
+                                claimable: !done && progress >= target, claimed: done,
+                                tier: tier, tierCount: targets.count)
+        }
+    }
+
+    /// Claim a completed mission → coins. Daily board is refreshed first so a stale claim from
+    /// yesterday's board can't pay out today.
+    @discardableResult
+    func claimMission(_ id: String, now: Date = Date()) -> Int? {
+        refreshDailyMissions(now: now)
+        guard let m = MissionCatalog.mission(id) else { return nil }
+        if case .daily = m.scope {
+            // Only today's 3 slots are claimable (pool missions still accumulate quietly).
+            guard MissionCatalog.dailySlots(daysSinceEpoch: Self.daysSinceEpoch(now))
+                .contains(where: { $0.id == id }) else { return nil }
+        }
+        let state = missionState(m, now: now)
+        guard state.claimable, state.reward > 0 else { return nil }
+        mutate {
+            switch m.scope {
+            case .perRun, .daily:
+                $0.claimedMissions.insert(id)
+            case .lifetimeTiered:
+                $0.achievementTier[id] = state.tier + 1
+            }
+            $0.coins += state.reward
+            $0.totalCoinsEarned += state.reward
+        }
+        return state.reward
+    }
+
+    /// How many missions/achievement tiers are ready to claim (menu badge).
+    func unclaimedCount(now: Date = Date()) -> Int {
+        refreshDailyMissions(now: now)
+        let active = MissionCatalog.perRun + dailyMissions(now: now) + MissionCatalog.achievements
+        return active.filter { missionState($0, now: now).claimable }.count
+    }
+
+    // MARK: daily challenge (shared seeded run, one track per UTC day)
+
+    /// Seed for today's shared challenge run — derived from the UTC calendar date so the whole
+    /// world plays the same track and rolls over together.
+    func todaysChallengeSeed(now: Date = Date()) -> UInt64 {
+        let c = Self.utc.dateComponents([.year, .month, .day], from: now)
+        return DailyChallenge.seed(year: c.year ?? 1970, month: c.month ?? 1, day: c.day ?? 1)
+    }
+
+    /// Best score on TODAY'S challenge (0 if not yet played today, UTC).
+    func todaysChallengeBest(now: Date = Date()) -> Int {
+        guard let last = clamped(profile.dailyChallengeDate, now: now),
+              Self.utcDayKey(last) == Self.utcDayKey(now) else { return 0 }
+        return profile.dailyChallengeBest
+    }
+
+    /// Record a finished challenge run: keeps the per-UTC-day best and marks the day played.
+    func recordChallengeRun(score: Int, now: Date = Date()) {
+        let today = Self.utcDayKey(now)
+        let sameDay = clamped(profile.dailyChallengeDate, now: now).map { Self.utcDayKey($0) == today } ?? false
+        mutate {
+            $0.dailyChallengeBest = sameDay ? max($0.dailyChallengeBest, score) : score
+            $0.dailyChallengeDate = now
+            $0.challengeDaysPlayed.insert(today)
+            // Bound storage: the UI only shows a 7-day calendar; keep a generous 60-day window.
+            if $0.challengeDaysPlayed.count > 60 {
+                let keep = $0.challengeDaysPlayed.sorted().suffix(60)
+                $0.challengeDaysPlayed = Set(keep)
+            }
+        }
+    }
+
+    /// Whether the challenge was played on the UTC day `offset` days before today (0 = today).
+    func playedChallenge(daysAgo offset: Int, now: Date = Date()) -> Bool {
+        let day = now.addingTimeInterval(-Double(offset) * 86_400)
+        return profile.challengeDaysPlayed.contains(Self.utcDayKey(day))
     }
 
     // MARK: persistence
@@ -130,13 +351,25 @@ final class ProfileStore {
     private func save() {
         guard persisting, let data = try? JSONEncoder().encode(profile) else { return }
         UserDefaults.standard.set(data, forKey: localKey)
+        #if canImport(Darwin)
         cloud.set(data, forKey: localKey)
         cloud.synchronize()
+        #endif
     }
 
+    private static func loadLocal(localKey: String) -> Profile {
+        if let data = UserDefaults.standard.data(forKey: localKey),
+           let p = try? JSONDecoder().decode(Profile.self, from: data) {
+            return p
+        }
+        return Profile()
+    }
+
+    #if canImport(Darwin)
     private func mergeFromCloud() {
         guard let data = cloud.data(forKey: localKey),
-              let remote = try? JSONDecoder().decode(Profile.self, from: data) else { return }
+              let decoded = try? JSONDecoder().decode(Profile.self, from: data) else { return }
+        let remote = ProfileStore.sanitized(decoded)
         // Conservative merge: keep the higher progression/coins (last-writer-wins would lose coins).
         var merged = profile
         merged.coins = max(merged.coins, remote.coins)
@@ -145,6 +378,10 @@ final class ProfileStore {
         merged.ownedSkins.formUnion(remote.ownedSkins)
         merged.ownedProducts.formUnion(remote.ownedProducts)
         merged.doubleCoins = merged.doubleCoins || remote.doubleCoins
+        merged.missionProgress.merge(remote.missionProgress) { mine, theirs in max(mine, theirs) }
+        merged.claimedMissions.formUnion(remote.claimedMissions)
+        merged.achievementTier.merge(remote.achievementTier) { mine, theirs in max(mine, theirs) }
+        merged.challengeDaysPlayed.formUnion(remote.challengeDaysPlayed)
         if merged != profile { profile = merged; save() }
     }
 
@@ -157,4 +394,5 @@ final class ProfileStore {
         }
         return Profile()
     }
+    #endif
 }

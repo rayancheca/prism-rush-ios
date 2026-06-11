@@ -26,4 +26,44 @@ enum Theme {
 
     static func color(_ v: SIMD3<Float>) -> Color { Color(red: Double(v.x), green: Double(v.y), blue: Double(v.z)) }
     static func color(_ hex: UInt32) -> Color { color(rgb(hex)) }
+
+    /// The shared gold "claim/continue" gradient (daily button, CONTINUE, mission CLAIM).
+    static let goldGradient = LinearGradient(colors: [color(0xFFD23D), color(0xFF9F1C)],
+                                             startPoint: .leading, endPoint: .trailing)
+    /// The shared cyan→magenta "action" gradient (PLAY-adjacent buttons, buy pills).
+    static let actionGradient = LinearGradient(colors: [color(0x00F5FF), color(0xFF2BD6)],
+                                               startPoint: .leading, endPoint: .trailing)
+}
+
+/// Press feedback for every tappable neon surface: a quick squeeze + dim, so taps feel physical.
+/// Replaces the inert `.plain` style on PLAY / hub / shop / skin / game-over buttons.
+struct NeonButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
+            .brightness(configuration.isPressed ? -0.06 : 0)
+            .animation(.spring(duration: 0.18, bounce: 0.4), value: configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == NeonButtonStyle {
+    static var neon: NeonButtonStyle { NeonButtonStyle() }
+}
+
+/// Horizontal shake driven by an incrementing trigger — used for "can't afford" feedback on
+/// skin cards / shop rows. One unit of `trigger` = three quick oscillations.
+struct ShakeEffect: GeometryEffect {
+    var travel: CGFloat = 7
+    var trigger: CGFloat   // animate this from N to N+1 to shake once
+
+    var animatableData: CGFloat {
+        get { trigger }
+        set { trigger = newValue }
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        ProjectionTransform(CGAffineTransform(translationX: travel * sin(trigger * .pi * 6), y: 0))
+    }
 }

@@ -18,3 +18,4 @@ xcuserdata/
 reports/shots/*.png
 reports/audio/*.wav
 reports/audio/*.caf
+.build/

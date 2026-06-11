@@ -12,7 +12,9 @@ struct EffectsOverlay: View {
                     PopupText(popup: popup, size: geo.size)
                 }
                 BannerView(id: model.bannerID, name: model.bannerName, ordinal: model.bannerOrdinal)
-                FlashView(id: model.flashID, strength: model.flashStrength)
+                // Read live in body (G3): the Settings toggle takes effect on the very next flash.
+                FlashView(id: model.flashID, strength: model.flashStrength,
+                          reduceFlash: ProfileStore.shared.profile.reduceFlash)
             }
         }
         .allowsHitTesting(false)
@@ -65,15 +67,20 @@ private struct BannerView: View {
             guard id > 0 else { return }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) { shown = true }
             try? await Task.sleep(for: .seconds(1.8))
+            // A new world change restarts this task mid-sleep; the cancelled instance must not
+            // race the fresh one and hide the banner it just showed.
+            guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.5)) { shown = false }
         }
     }
 }
 
-/// White flash frames on death / shield events.
+/// White flash frames on death / shield events. `reduceFlash` (Settings → "Reduce flashing")
+/// scales every flash to 0.15× — photosensitivity accommodation, not a binary off.
 private struct FlashView: View {
     let id: Int
     let strength: Double
+    let reduceFlash: Bool
     @State private var opacity: Double = 0
 
     var body: some View {
@@ -81,7 +88,7 @@ private struct FlashView: View {
             .opacity(opacity)
             .ignoresSafeArea()
             .onChange(of: id) {
-                opacity = strength
+                opacity = strength * (reduceFlash ? 0.15 : 1)
                 withAnimation(.easeOut(duration: 0.35)) { opacity = 0 }
             }
     }

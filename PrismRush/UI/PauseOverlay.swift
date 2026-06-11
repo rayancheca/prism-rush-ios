@@ -39,6 +39,12 @@ struct PauseOverlay: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("quitButton")
+
+                Text("tap anywhere to resume")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .tracking(1.5)
+                    .foregroundStyle(.white.opacity(0.45))
+                    .padding(.top, 2)
             }
             .frame(maxWidth: 320)
             .padding(.horizontal, 40)

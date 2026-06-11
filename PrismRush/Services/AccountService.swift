@@ -16,9 +16,30 @@ final class AccountService {
     init() {
         userID = UserDefaults.standard.string(forKey: Key.id)
         displayName = UserDefaults.standard.string(forKey: Key.name)
+        refreshCredentialState()
     }
 
     var isSignedIn: Bool { userID != nil }
+
+    /// Apple requires checking the credential on launch: the user can revoke the app's Sign in
+    /// with Apple grant from Settings at any time, and a revoked/transferred credential must drop
+    /// us back to the signed-out state (stale IDs would silently break sync trust).
+    func refreshCredentialState() {
+        guard let id = userID else { return }
+        ASAuthorizationAppleIDProvider().getCredentialState(forUserID: id) { [weak self] state, _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                switch state {
+                case .revoked, .notFound, .transferred:
+                    self.signOut()
+                case .authorized:
+                    break
+                @unknown default:
+                    break
+                }
+            }
+        }
+    }
 
     func configure(_ request: ASAuthorizationAppleIDRequest) {
         request.requestedScopes = [.fullName]

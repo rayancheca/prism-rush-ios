@@ -10,8 +10,14 @@ struct MenuView: View {
     let onLevels: () -> Void
     let onProfile: () -> Void
     var rewards: AnyView = AnyView(EmptyView())
+    /// Opens SettingsView (owner routes to `model.open(.settings)` once the case exists —
+    /// see reports/AGENT_meta.md).
+    var onSettings: () -> Void = {}
+    /// Starts today's seeded challenge run (owner seeds + flags it — see reports/AGENT_meta.md).
+    var onDailyChallenge: () -> Void = {}
 
     @State private var pulse = false
+    @ScaledMetric(relativeTo: .footnote) private var taglineSize: CGFloat = 14
 
     private let titleGradient = LinearGradient(
         colors: [Theme.color(0x00F5FF), Theme.color(0xFF2BD6), Theme.color(0xFFB13D)],
@@ -29,9 +35,20 @@ struct MenuView: View {
                         .background(.ultraThinMaterial, in: Circle())
                         .overlay(Circle().strokeBorder(.white.opacity(0.14)))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.neon)
                 .accessibilityIdentifier("profileButton")
                 .accessibilityLabel("Profile")
+                Button(action: onSettings) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .frame(width: 40, height: 40)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(Circle().strokeBorder(.white.opacity(0.14)))
+                }
+                .buttonStyle(.neon)
+                .accessibilityIdentifier("settingsButton")
+                .accessibilityLabel("Settings")
                 Spacer()
                 CoinBadge(amount: coins)
                     .font(.system(size: 15, weight: .bold, design: .rounded))
@@ -53,7 +70,7 @@ struct MenuView: View {
                 .shadow(color: Theme.color(0xFF2BD6).opacity(0.5), radius: 26)
                 .padding(.top, 8)
             Text("Outrun the void. Keep the streak alive.")
-                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .font(.system(size: taglineSize, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.85)).padding(.top, 12)
 
             HStack(spacing: 8) {
@@ -61,10 +78,14 @@ struct MenuView: View {
                 worldChip("02", "Caverns", 0x00FFC8)
                 worldChip("03", "Sands", 0xFFB13D)
             }
-            .padding(.top, 22)
+            .padding(.top, 18)
+
+            DailyChallengeCard(onPlay: onDailyChallenge)
+                .padding(.top, 14)
+                .padding(.horizontal, 4)
 
             rewards
-                .padding(.top, 18)
+                .padding(.top, 10)
                 .padding(.horizontal, 4)
 
             Spacer()
@@ -78,7 +99,7 @@ struct MenuView: View {
                     .shadow(color: Theme.color(0xFF2BD6).opacity(0.45), radius: 24)
                     .scaleEffect(pulse ? 1 : 0.98)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.neon)
             .padding(.horizontal, 8)
             .accessibilityIdentifier("playButton")
 
@@ -126,7 +147,7 @@ struct MenuView: View {
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.14)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.neon)
         .accessibilityIdentifier("\(title.lowercased())Button")
     }
 }
