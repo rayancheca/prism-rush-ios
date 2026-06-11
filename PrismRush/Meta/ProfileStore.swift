@@ -123,11 +123,40 @@ final class ProfileStore {
         mutate { $0.seenSkins.formUnion($0.ownedSkins) }
     }
 
+    /// Worlds the level-select tab DISPLAYS (v1.4: every card visible, locked ones purchasable).
+    static let worldDisplayCount = 12
+
     /// The deepest starting world offered in level select (matches the world cards the UI shows).
-    static let maxStartWorlds = 12
+    static let maxStartWorlds = worldDisplayCount
 
     /// Highest selectable starting world (0-based), capped to one past what's been reached.
     var unlockedWorldCount: Int { max(1, min(Self.maxStartWorlds, profile.maxWorldReached + 1)) }
+
+    // MARK: world purchases (v1.4 — every world card is startable: reach it OR buy it)
+
+    /// Startable = reached OR purchased. Purchases unlock INDIVIDUALLY — a bought world 5 with
+    /// world 4 still locked is fine (each card stands alone; world 0 is always free).
+    func isWorldStartable(_ index: Int) -> Bool {
+        guard index >= 0 else { return false }
+        return index <= profile.maxWorldReached || profile.purchasedWorlds.contains(index)
+    }
+
+    /// Deepest startable world (0-based) — reach or purchase, whichever is further. Display-side
+    /// only: reach-gated systems (achievements, world coin bonus, XP) keep reading `maxWorldReached`.
+    var highestStartableWorld: Int { max(profile.maxWorldReached, profile.purchasedWorlds.max() ?? 0) }
+
+    /// Buy a locked world outright (false if already startable, out of range, or unaffordable).
+    /// Deliberately NEVER touches `maxWorldReached`: achievements / world bonus / XP stay
+    /// REACH-based (rules 9/10) — a purchased start rides the existing `usedCheckpoint` path,
+    /// so the Game Center skip is preserved for free.
+    @discardableResult
+    func unlockWorld(_ index: Int) -> Bool {
+        guard (1..<Self.worldDisplayCount).contains(index),
+              !isWorldStartable(index),
+              spendCoins(XPCurve.worldPrice(index)) else { return false }
+        mutate { $0.purchasedWorlds.insert(index) }
+        return true
+    }
 
     // MARK: retention — daily reward, login streak, timed free chest (all `now`-injectable for tests)
 
@@ -483,6 +512,7 @@ final class ProfileStore {
         merged.coins = max(merged.coins, remote.coins)
         merged.bestScore = max(merged.bestScore, remote.bestScore)
         merged.maxWorldReached = max(merged.maxWorldReached, remote.maxWorldReached)
+        merged.purchasedWorlds.formUnion(remote.purchasedWorlds)
         merged.ownedSkins.formUnion(remote.ownedSkins)
         merged.ownedProducts.formUnion(remote.ownedProducts)
         merged.doubleCoins = merged.doubleCoins || remote.doubleCoins

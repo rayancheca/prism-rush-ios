@@ -16,6 +16,7 @@ struct Profile: Codable, Equatable, Sendable {
     // Progression — highest world ordinal reached (enables level select / checkpoint start).
     var maxWorldReached: Int = 0
     var bestDistanceByWorld: [Int: Double] = [:]   // best distance INTO each world index ("BEST HERE"); cloud-merges per-key max
+    var purchasedWorlds: Set<Int> = []   // worlds bought outright in level select (v1.4) — individual unlocks, NEVER fold into maxWorldReached (achievements/world bonus/XP stay reach-based); cloud-merges as union
 
     // Progression — XP / levels (v1.3). Level is always DERIVED from totalXP via XPCurve, never stored.
     var totalXP: Int = 0              // lifetime XP; cloud-merges as max()
@@ -70,7 +71,7 @@ extension Profile {
         case doubleCoins, ownedProducts, muted, reduceFlash
         case musicVolume, sfxVolume, hapticsEnabled
         case bestDistanceByWorld, totalXP, xpLevelRewarded, seenSkins
-        case weeklyMissionDate, challengeRewardTier
+        case weeklyMissionDate, challengeRewardTier, purchasedWorlds
     }
 
     init(from decoder: Decoder) throws {
@@ -109,5 +110,6 @@ extension Profile {
         seenSkins = try c.decodeIfPresent(Set<String>.self, forKey: .seenSkins) ?? d.seenSkins
         weeklyMissionDate = try c.decodeIfPresent(Date.self, forKey: .weeklyMissionDate) ?? d.weeklyMissionDate
         challengeRewardTier = try c.decodeIfPresent(Int.self, forKey: .challengeRewardTier) ?? d.challengeRewardTier
+        purchasedWorlds = try c.decodeIfPresent(Set<Int>.self, forKey: .purchasedWorlds) ?? d.purchasedWorlds
     }
 }

@@ -70,6 +70,51 @@ final class EconomyTests: XCTestCase {
         XCTAssertEqual(store.profile.coins, 300)
     }
 
+    // MARK: world purchases (v1.4 — the worlds tab shows ALL cards, locked ones buyable)
+
+    func testUnlockWorldSpendsAndUnlocksIndividually() async {
+        let store = ProfileStore(testing: Profile())
+
+        // Insufficient funds: nothing spent, nothing unlocked.
+        XCTAssertFalse(store.unlockWorld(1), "broke players can't buy")
+        XCTAssertTrue(store.profile.purchasedWorlds.isEmpty)
+
+        // Buy world 5 outright while worlds 1–4 are still locked — purchases are INDIVIDUAL.
+        store.addCoins(4_000)
+        XCTAssertTrue(store.unlockWorld(5))
+        XCTAssertEqual(store.profile.coins, 4_000 - 3_200, "spends exactly worldPrice(5)")
+        XCTAssertEqual(store.profile.purchasedWorlds, [5])
+        XCTAssertTrue(store.isWorldStartable(5))
+        XCTAssertFalse(store.isWorldStartable(4), "a purchased world 5 with world 4 locked is fine")
+        XCTAssertEqual(store.highestStartableWorld, 5)
+
+        // The purchase must NOT count as "reached": achievements / world bonus / XP stay
+        // reach-based (rules 9/10) and the legacy reach display is untouched.
+        XCTAssertEqual(store.profile.maxWorldReached, 0, "buying never touches maxWorldReached")
+        XCTAssertEqual(store.unlockedWorldCount, 1)
+
+        // Idempotent: already-purchased and already-reached worlds refuse (no double spend).
+        XCTAssertFalse(store.unlockWorld(5), "already purchased")
+        XCTAssertEqual(store.profile.coins, 800)
+        store.mutate { $0.maxWorldReached = 3 }
+        XCTAssertFalse(store.unlockWorld(2), "already reached — nothing to buy")
+        XCTAssertEqual(store.profile.coins, 800)
+        XCTAssertTrue(store.isWorldStartable(2), "reach alone makes a world startable")
+
+        // Range guards: world 0 is free, the display cap bounds the ladder, garbage refuses.
+        XCTAssertFalse(store.unlockWorld(0))
+        XCTAssertFalse(store.unlockWorld(-1))
+        XCTAssertFalse(store.unlockWorld(ProfileStore.worldDisplayCount))
+        XCTAssertFalse(store.isWorldStartable(-1))
+        XCTAssertEqual(store.profile.purchasedWorlds, [5])
+
+        // Reach + purchase combine: highest startable follows whichever is deeper.
+        store.mutate { $0.maxWorldReached = 7 }
+        XCTAssertEqual(store.highestStartableWorld, 7)
+        XCTAssertEqual(ProfileStore(testing: Profile()).highestStartableWorld, 0,
+                       "fresh profile starts at world 0")
+    }
+
     // MARK: revive (F3)
 
     func testReviveResumesPlayWithGrace() async {
@@ -151,5 +196,6 @@ final class EconomyTests: XCTestCase {
         XCTAssertEqual(p.challengeRewardTier, 0)
         XCTAssertEqual(p.seenSkins, ["default"])
         XCTAssertTrue(p.bestDistanceByWorld.isEmpty)
+        XCTAssertTrue(p.purchasedWorlds.isEmpty, "v1.4 world purchases default empty on legacy saves")
     }
 }

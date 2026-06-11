@@ -65,13 +65,29 @@ enum XPCurve {
         }
     }
 
-    /// Levels that auto-unlock a character (R1: Pebble L3, Blossom L6, Shard L12, Eclipse L25).
+    /// Levels that auto-unlock a character (R1: Pebble L3, Blossom L6, Shard L12, Eclipse L25;
+    /// v1.4 roster adds Circuit L8, Nebula L18 — a beat between every original gap).
     /// Single source of truth — `SkinCatalogTests` asserts the catalog's `.level` skins match.
-    static let xpUnlockLevels: [Int] = [3, 6, 12, 25]
+    static let xpUnlockLevels: [Int] = [3, 6, 8, 12, 18, 25]
 
     /// In-run style coins (the 4th per-death delta in GameView): 2 coins per CLOSE/SLICK, hard
     /// cap 40 events/run; the doubler multiplies because this IS currency (unlike XP).
     static func styleCoins(closes: Int, slicks: Int, multiplier: Int) -> Int {
         min(closes + slicks, 40) * 2 * multiplier
+    }
+
+    /// World-purchase price ladder (v1.4): the worlds tab shows ALL 12 cards; locked ones are
+    /// buyable outright with coins. `worldPrices[i - 1]` is world `i` (1-based — world 0 is free).
+    /// Escalating so early skips stay accessible against the ~2.6k/day casual faucet while deep
+    /// skips remain savings goals. Total sink across the ladder: 59,400 coins.
+    static let worldPrices: [Int] = [
+        400, 800, 1_400, 2_200, 3_200, 4_400, 5_800, 7_400, 9_200, 11_200, 13_400,
+    ]
+
+    /// Coin price to buy starting world `index` outright (0 = the free starting world; indices
+    /// past the ladder clamp to the deepest rung — the display cap means they never render).
+    static func worldPrice(_ index: Int) -> Int {
+        guard index >= 1 else { return 0 }
+        return worldPrices[min(index, worldPrices.count) - 1]
     }
 }

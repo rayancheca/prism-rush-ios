@@ -25,6 +25,7 @@ enum SkinUnlocks {
             switch id {                   // copy pinned per id — never derive from Mission titles
             case "ach.dist":  return "RUN 10,000 M LIFETIME"
             case "ach.close": return "THREAD 100 CLOSE CALLS"
+            case "ach.gems":  return "BANK 1,000 GEMS LIFETIME"
             default:          return "COMPLETE ACHIEVEMENT"
             }
         case .challengeDays(let n):       return "PLAY \(n) DAILY CHALLENGES"

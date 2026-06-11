@@ -3,7 +3,8 @@ import XCTest
 
 /// v1.3 progression: the XP curve + per-run formula, watermarked level grants, weekly missions
 /// (determinism / rollover / rollback), style coins, daily-challenge placement tiers, the
-/// per-world best map (R14), and the six new Profile fields' decode + cloud-merge rules.
+/// per-world best map (R14), the new Profile fields' decode + cloud-merge rules, and the v1.4
+/// world-purchase price ladder.
 @MainActor
 final class ProgressionTests: XCTestCase {
 
@@ -75,7 +76,27 @@ final class ProgressionTests: XCTestCase {
         XCTAssertEqual(XPCurve.xpIntoLevel(for: 749).current, 449)
         XCTAssertEqual(XPCurve.xpIntoLevel(for: 70_000).needed, 0, "cap sentinel — bar renders full")
 
-        XCTAssertEqual(XPCurve.xpUnlockLevels, [3, 6, 12, 25], "R1")
+        XCTAssertEqual(XPCurve.xpUnlockLevels, [3, 6, 8, 12, 18, 25], "R1 + the v1.4 L8/L18 beats")
+    }
+
+    func testWorldPriceLadderPinned() async {
+        XCTAssertEqual(XPCurve.worldPrice(0), 0, "world 0 is the free starting world")
+        XCTAssertEqual(XPCurve.worldPrice(-3), 0, "garbage indices price as free — unlockWorld range-guards anyway")
+        let ladder = [400, 800, 1_400, 2_200, 3_200, 4_400, 5_800, 7_400, 9_200, 11_200, 13_400]
+        XCTAssertEqual(XPCurve.worldPrices, ladder)
+        for (i, price) in ladder.enumerated() {
+            XCTAssertEqual(XPCurve.worldPrice(i + 1), price, "world \(i + 1)")
+        }
+        XCTAssertEqual(XPCurve.worldPrice(99), 13_400, "past the ladder clamps to the deepest rung")
+        XCTAssertEqual(ladder.reduce(0, +), 59_400, "total world sink")
+        XCTAssertEqual(ladder.count, ProfileStore.worldDisplayCount - 1,
+                       "one rung per displayed world past the free one")
+        XCTAssertEqual(ProfileStore.worldDisplayCount, 12)
+        XCTAssertEqual(ProfileStore.maxStartWorlds, 12, "legacy alias keeps the v1.3 UI honest")
+        // Escalating, always (early skips accessible vs the ~2.6k/day casual faucet).
+        for i in 1..<ladder.count {
+            XCTAssertGreaterThan(ladder[i], ladder[i - 1], "ladder must escalate")
+        }
     }
 
     func testXPFormulaFromSummary() async {
@@ -306,8 +327,9 @@ final class ProgressionTests: XCTestCase {
         XCTAssertEqual(p.challengeRewardTier, 0)
         XCTAssertEqual(p.seenSkins, ["default"])
         XCTAssertTrue(p.bestDistanceByWorld.isEmpty)
+        XCTAssertTrue(p.purchasedWorlds.isEmpty, "v1.4 field defaults — old saves never wipe")
 
-        // Round-trip with all six populated (pins the [Int: Double] keyed encoding too).
+        // Round-trip with all the new fields populated (pins the [Int: Double] keyed encoding too).
         var q = Profile()
         q.totalXP = 12_345
         q.xpLevelRewarded = 12
@@ -315,6 +337,7 @@ final class ProgressionTests: XCTestCase {
         q.challengeRewardTier = 2
         q.seenSkins = ["default", "bolt"]
         q.bestDistanceByWorld = [0: 800, 3: 412.5]
+        q.purchasedWorlds = [3, 7]
         let back = try JSONDecoder().decode(Profile.self, from: JSONEncoder().encode(q))
         XCTAssertEqual(back, q)
     }
@@ -338,6 +361,7 @@ final class ProgressionTests: XCTestCase {
         local.bestDistanceByWorld = [0: 800, 1: 200]
         local.weeklyMissionDate = utc(2026, 6, 8)
         local.challengeRewardTier = 2
+        local.purchasedWorlds = [2]
 
         var remote = Profile()
         remote.coins = 50
@@ -346,12 +370,14 @@ final class ProgressionTests: XCTestCase {
         remote.bestDistanceByWorld = [1: 500, 2: 100]
         remote.weeklyMissionDate = utc(2026, 6, 1)
         remote.challengeRewardTier = 3
+        remote.purchasedWorlds = [5]
 
         let m = ProfileStore.merged(local: local, remote: remote)
         XCTAssertEqual(m.totalXP, 8_000, "max wins")
         XCTAssertEqual(m.xpLevelRewarded, 7, "watermark max wins independently")
         XCTAssertEqual(m.seenSkins, ["default", "ember", "bolt"], "monotonic union")
         XCTAssertEqual(m.bestDistanceByWorld, [0: 800, 1: 500, 2: 100], "per-key max")
+        XCTAssertEqual(m.purchasedWorlds, [2, 5], "world purchases union — paid unlocks never vanish")
         XCTAssertEqual(m.weeklyMissionDate, utc(2026, 6, 8), "weekly board is device-local — not merged")
         XCTAssertEqual(m.challengeRewardTier, 2, "challenge tier is device-local — not merged")
         XCTAssertEqual(m.coins, 100)

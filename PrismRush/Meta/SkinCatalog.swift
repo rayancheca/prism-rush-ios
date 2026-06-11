@@ -44,10 +44,12 @@ struct Skin: Identifiable, Sendable {
 }
 
 enum SkinCatalog {
-    /// The 16-character roster (DESIGN_characters §2), ordered rarity → unlock difficulty — the
-    /// select grid renders catalog order inside each rarity section. The legacy 7 keep their ids,
-    /// hexes, and coin costs exactly (pinned by tests); Fang is 2,500 — the week-1 savings goal
-    /// (R4). Rarity census: Common 4 · Rare 6 · Epic 4 · Legendary 2.
+    /// The 24-character roster (DESIGN_characters §2 + the v1.4 eight), ordered rarity → unlock
+    /// difficulty — the select grid renders catalog order inside each rarity section. The legacy
+    /// 16 keep their ids, hexes, and costs exactly (pinned by tests); Fang is 2,500 — the week-1
+    /// savings goal (R4). The v1.4 eight take the parking-lot rungs (2,000/3,500/5,000/7,500),
+    /// the new level beats (8/18), `ach.gems` tier 2, and the 14-day challenge pull.
+    /// Rarity census: Common 4 · Rare 9 · Epic 7 · Legendary 4.
     static let all: [Skin] = [
         // COMMON ──────────────────────────────────────────────────────────────────────────────
         Skin(id: "default", name: "Prism", flavor: "Born of every world, loyal to none.",
@@ -88,6 +90,20 @@ enum SkinCatalog {
              eyeRadius: 0.14, antennaHeightScale: 1.3, antennaTipScale: 1.4,
              idle: .init(bobSpeed: 1.5, bobAmp: 0.06, blinkMin: 2.4, blinkMax: 4.0, sway: 0.30),
              rarity: .rare, unlock: .level(6)),
+        Skin(id: "circuit", name: "Circuit", flavor: "Runs on logic. Mostly.",
+             bodyHex: 0xC97A3D, antennaHex: 0x00B3FF, trailHex: 0xE8A05C,
+             bodyShape: .cube, scale: 0.95, eyeRadius: 0.12,
+             antennaHeightScale: 1.0, antennaTipScale: 0.8,
+             // Servo idle: quick precise ticks, the snappiest blink cadence after Bolt.
+             idle: .init(bobSpeed: 2.4, bobAmp: 0.04, blinkMin: 1.8, blinkMax: 2.8, sway: 0.16),
+             rarity: .rare, unlock: .level(8)),
+        Skin(id: "tide", name: "Tide", flavor: "Comes in. Takes everything.",
+             bodyHex: 0x00E08A, antennaHex: 0x0091FF, trailHex: 0x55F0B0,
+             scale: 1.02, pupilStyle: .wide,
+             antennaHeightScale: 0.9, antennaTipScale: 1.1,
+             // Rolling-swell idle: slow bob with the deepest amplitude in the rare tier.
+             idle: .init(bobSpeed: 1.0, bobAmp: 0.07, blinkMin: 2.6, blinkMax: 4.4, sway: 0.14),
+             rarity: .rare, unlock: .coins(2_000)),
         Skin(id: "fang", name: "Fang", flavor: "Bites first. Blinks never.",
              bodyHex: 0xFF3B30, antennaHex: 0x14141E, trailHex: 0xFF6B4A,
              pupilStyle: .slit,
@@ -99,6 +115,12 @@ enum SkinCatalog {
              antennaHeightScale: 0.8, antennaTipScale: 1.1,
              idle: .init(bobSpeed: 0.9, bobAmp: 0.06, blinkMin: 4.5, blinkMax: 7.0, sway: 0.08),
              rarity: .rare, unlock: .achievement(id: "ach.dist", tier: 1)),
+        Skin(id: "facet", name: "Facet", flavor: "Counts gems in its sleep.",
+             bodyHex: 0xFF2BD6, antennaHex: 0xFFD23D, trailHex: 0xFF7BE9,   // the only magenta body
+             bodyShape: .crystal, scale: 0.92, eyeRadius: 0.12, pupilStyle: .glint,
+             antennaHeightScale: 0.9, antennaTipScale: 1.2,
+             idle: .init(bobSpeed: 1.5, bobAmp: 0.05, blinkMin: 2.2, blinkMax: 4.0, sway: 0.12),
+             rarity: .rare, unlock: .achievement(id: "ach.gems", tier: 2)),
         // EPIC ────────────────────────────────────────────────────────────────────────────────
         Skin(id: "midas", name: "Midas", flavor: "Everything it touches turns to score.",
              bodyHex: 0xFFD23D, antennaHex: 0xFFFFFF, trailHex: 0xFFD23D,
@@ -111,6 +133,25 @@ enum SkinCatalog {
              antennaHeightScale: 1.1, antennaTipScale: 0.8,
              idle: .init(bobSpeed: 1.3, bobAmp: 0.04, blinkMin: 3.0, blinkMax: 5.0, sway: 0.10),
              rarity: .epic, unlock: .level(12)),
+        Skin(id: "nebula", name: "Nebula", flavor: "Stars have to start somewhere.",
+             bodyHex: 0x7B2FE0, antennaHex: 0xFFD23D, trailHex: 0x9B5BFF,   // deep purple, gold star tip
+             scale: 1.05, eyeRadius: 0.14, pupilStyle: .glint,
+             antennaHeightScale: 1.3, antennaTipScale: 1.3,
+             idle: .init(bobSpeed: 0.9, bobAmp: 0.06, blinkMin: 3.4, blinkMax: 5.6, sway: 0.18),
+             rarity: .epic, unlock: .level(18)),
+        Skin(id: "thorn", name: "Thorn", flavor: "Touch. Regret. Repeat.",
+             bodyHex: 0xC41E5C, antennaHex: 0xB4FF5C, trailHex: 0xE84A8A,   // wine body, leaf-green spike
+             pupilStyle: .slit,
+             antennaHeightScale: 1.3, antennaTipScale: 0.7,   // tall and pointy — the thorn
+             idle: .init(bobSpeed: 1.3, bobAmp: 0.04, blinkMin: 3.2, blinkMax: 5.2, sway: 0.08),
+             rarity: .epic, unlock: .coins(3_500)),
+        Skin(id: "golem", name: "Golem", flavor: "Pebble's older brother. Much older.",
+             bodyHex: 0x55657A, antennaHex: 0xFFB13D, trailHex: 0x8FA3BD,   // the sibling cue is the antenna
+             bodyShape: .cube, scale: 1.12, eyeRadius: 0.11, pupilStyle: .wide,
+             antennaHeightScale: 0.7, antennaTipScale: 1.0,
+             // Slowest bob in the roster — out-stills even Pebble. Mass has manners.
+             idle: .init(bobSpeed: 0.6, bobAmp: 0.02, blinkMin: 5.0, blinkMax: 8.0, sway: 0.04),
+             rarity: .epic, unlock: .coins(5_000)),
         Skin(id: "wisp", name: "Wisp", flavor: "Half here. All speed.",
              bodyHex: 0xDFF6FF, antennaHex: 0x9BF0FF, trailHex: 0xCFF8FF,
              scale: 0.90, eyeRadius: 0.12,
@@ -135,6 +176,19 @@ enum SkinCatalog {
              pupilStyle: .slit, antennaTipScale: 1.2,
              idle: .init(bobSpeed: 1.0, bobAmp: 0.03, blinkMin: 4.0, blinkMax: 6.0, sway: 0.06),
              rarity: .legendary, unlock: .level(25)),
+        Skin(id: "monarch", name: "Monarch", flavor: "It does not chase. It is awaited.",
+             bodyHex: 0x2956FF, antennaHex: 0xFFD23D, trailHex: 0x5C82FF,   // royal blue, gold crown orb
+             scale: 1.10, pupilStyle: .glint,
+             antennaHeightScale: 1.2, antennaTipScale: 1.5,   // biggest tip in the roster — the crown jewel
+             idle: .init(bobSpeed: 1.2, bobAmp: 0.05, blinkMin: 3.0, blinkMax: 5.0, sway: 0.10),
+             rarity: .legendary, unlock: .coins(7_500)),
+        Skin(id: "vigil", name: "Vigil", flavor: "Fourteen dawns. Saw them all.",
+             bodyHex: 0xBFC9FF, antennaHex: 0xFF2BD6, trailHex: 0xD4DAFF,   // moonlit periwinkle
+             bodyShape: .crystal, scale: 0.98, eyeRadius: 0.14, pupilStyle: .wide,
+             antennaHeightScale: 1.1, antennaTipScale: 1.0,
+             // Statue-still watcher: the longest stare in the roster — it out-blinks even Fang.
+             idle: .init(bobSpeed: 0.7, bobAmp: 0.02, blinkMin: 6.0, blinkMax: 9.0, sway: 0.05),
+             rarity: .legendary, unlock: .challengeDays(14)),
     ]
 
     static func skin(_ id: String) -> Skin { all.first { $0.id == id } ?? all[0] }
