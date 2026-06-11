@@ -64,8 +64,8 @@ Center leaderboard and chase a score worth bragging about.
 - Looping difficulty curve that keeps every run faster than the last
 - Original 132bpm synthwave score with per-world layers and full SFX
 - Particles, screen shake, speed lines, and haptics for full-body feedback
-- Game Center leaderboard for your best score
-- No ads, no analytics, no network calls, no tracking — ever
+- Game Center leaderboards: all-time best + a recurring daily-challenge board
+- No ads, no analytics, no tracking — ever
 
 ---
 
@@ -87,25 +87,27 @@ far you can go. No ads, no tracking — just speed.
 | Primary Category | Games → Arcade |
 | Age Rating | 4+ |
 | Price | Free |
-| In-App Purchases | None |
+| In-App Purchases | 5 — Pouch of Coins $0.99 · Bag of Coins $4.99 · Vault of Coins $9.99 · Double Coins $2.99 · Aurora Skin $1.99 (see `Products.storekit`) |
 
 ---
 
 ## 7. App Privacy
 
-**Declaration: Data Not Collected.**
+**Declaration: data use must be declared — the shipped build is NOT "Data Not Collected".**
 
-Prism Rush collects no data. There is no tracking, no analytics, no advertising
-SDK, and no network calls of any kind. The only persistent storage is local
-UserDefaults for game settings and your best score (privacy manifest reason
-**CA92.1**), which never leaves the device.
+The v1.1+ build integrates StoreKit 2 in-app purchases, Game Center leaderboards
+(`prismrush.best` + the recurring daily `prismrush.daily`), Sign in with Apple, and
+iCloud key-value save sync (see README §Shipping). There is still no tracking, no
+analytics, and no advertising SDK. Local UserDefaults stores settings/saves
+(privacy manifest reason **CA92.1**).
 
 - **Data used to track you:** None
-- **Data linked to you:** None
+- **Data linked to you:** Purchases (StoreKit); User ID (Game Center identity, Sign in with Apple identifier)
 - **Data not linked to you:** None
 
-*Rationale:* a fully offline, single-player arcade game that stores high score and
-settings on-device only — nothing is transmitted, so nothing is collected.
+*Rationale:* no first-party servers and no third-party SDKs beyond Apple's; the
+declared data is what Apple's own services (IAP, Game Center, SiwA, iCloud) handle.
+Confirm the exact ASC questionnaire answers at submission time.
 
 ---
 

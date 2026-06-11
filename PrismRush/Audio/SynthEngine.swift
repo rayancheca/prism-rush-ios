@@ -97,13 +97,6 @@ final class SynthEngine {
         schedule(buf)
     }
 
-    /// Uncached escape hatch for raw sample buffers. Prefer `play(_:)` — this re-synthesizes and
-    /// allocates per call; it exists only until every call site migrates.
-    func playSFX(_ samples: [Float]) {
-        guard started, !muted, engine.isRunning, !samples.isEmpty, let buf = makeBuffer(samples) else { return }
-        schedule(buf)
-    }
-
     func musicStart() {
         guard started else { return }
         if !engine.isRunning { recoverEngine() }   // self-heal if an interruption beat us here

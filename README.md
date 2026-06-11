@@ -185,12 +185,15 @@ Watch the engine play itself (used for the screenshots above):
 SIMCTL_CHILD_PR_AUTOPLAY=1 xcrun simctl launch booted com.rayancheca.prismrush
 ```
 
-Run the test suite (26 tests incl. the 200-seed solvability bot):
+Run the test suite (89 tests incl. the 200-seed solvability bot and a 10-seed 12,000 m deep soak):
 
 ```bash
 xcodebuild test -project PrismRush.xcodeproj -scheme PrismRush \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' CODE_SIGNING_ALLOWED=NO
 ```
+
+The deterministic core/economy/synth suite also runs anywhere via SwiftPM (no Mac needed — this is
+what CI runs on Linux): `swift test -c release`
 
 Device builds / App Store archiving need an Apple Developer **Team ID** in `project.yml`
 (`DEVELOPMENT_TEAM`); simulator builds need nothing.
@@ -231,8 +234,9 @@ account holder) do these once — the code is already wired for them:
 2. **Capabilities** (Signing & Capabilities, and on developer.apple.com): In-App Purchase, Sign in
    with Apple, Game Center, iCloud (Key-Value storage).
 3. **App Store Connect**: create the app record (bundle `com.rayancheca.prismrush`); add the 5 IAP
-   products from `Products.storekit`; create leaderboard **`prismrush.best`**; check the name "Prism
-   Rush" is available.
+   products from `Products.storekit`; create leaderboard **`prismrush.best`** and the **recurring
+   daily leaderboard `prismrush.daily`** (daily reset — ranks the shared-seed daily challenge);
+   check the name "Prism Rush" is available.
 4. **App Privacy** answers in ASC now declare data use (Game Center identity, purchases) — no longer
    "Data Not Collected".
 5. `xcodebuild archive` + `-exportArchive` (`method: app-store-connect`) and upload.

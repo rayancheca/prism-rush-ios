@@ -40,8 +40,9 @@ final class GameModel {
     /// True while the current run is today's shared challenge (revive is disabled — fair, shared
     /// track; checkpoint starts are structurally impossible, the entry point always seeds world 0).
     private(set) var isChallengeRun = false
-    /// Wall-clock start of the current run (feeds the game-over TIME tile + RunSummary.duration).
-    @ObservationIgnored private var runStartedAt = Date()
+    /// Seconds actually spent in `.play` this run (accumulated in the frame loop; pause, the death
+    /// panel and revive shopping don't count — feeds the game-over TIME tile + RunSummary.duration).
+    @ObservationIgnored private var playTimeThisRun: Double = 0
     /// Run duration captured at death-time, so the panel's TIME tile doesn't keep ticking.
     private(set) var lastRunDuration: Double = 0
     /// Best on record BEFORE this run started (death folds the run into profile.bestScore, so the
@@ -139,6 +140,8 @@ final class GameModel {
                     return   // freeze the simulation while paused; keep music + UI alive
                 }
 
+                if self.core.mode == .play { self.playTimeThisRun += dt }
+
                 if (self.autoplay || self.demo), self.core.mode == .play {
                     Autopilot.drive(self.core)
                 }
@@ -174,7 +177,7 @@ final class GameModel {
         // PLAY / RUN AGAIN must never inherit the challenge flag — `startDailyChallenge` re-sets
         // it AFTER this returns (AGENT_meta.md §3).
         isChallengeRun = false
-        runStartedAt = Date()
+        playTimeThisRun = 0
         previousBest = ProfileStore.shared.profile.bestScore
         overTime = 0
         canRestart = false
@@ -368,7 +371,7 @@ final class GameModel {
     /// awarded as `max(0, cumulative − alreadyAwarded)` deltas, and `totalRuns` counts once per run.
     private func recordRunResults() {
         let store = ProfileStore.shared
-        lastRunDuration = Date().timeIntervalSince(runStartedAt)
+        lastRunDuration = playTimeThisRun
 
         // New best fanfare, once per run, against the best on record BEFORE this death is folded in.
         if core.score > store.profile.bestScore, !newBestCelebrated {
