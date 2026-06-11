@@ -1,9 +1,10 @@
 import SwiftUI
+import UIKit
 
 /// Settings sheet: music/SFX volume, haptics, reduced flashing, How to Play, Restore Purchases,
-/// and the version footer. Persists through `ProfileStore.mutate` and applies live to the engines
-/// (`model.synth` / `model.haptics`). The flash toggle is consumed by EffectsOverlay (wiring spec
-/// in reports/AGENT_meta.md).
+/// and the tappable version row (copies version+build to the pasteboard — support-mail ready,
+/// uiux §5.9). Persists through `ProfileStore.mutate` and applies live to the engines
+/// (`model.synth` / `model.haptics`). The flash toggle is consumed by EffectsOverlay + HUD rings.
 struct SettingsView: View {
     let model: GameModel
 
@@ -14,6 +15,7 @@ struct SettingsView: View {
     @State private var showHowTo = false
     @State private var restoring = false
     @State private var restoreNote: String?
+    @State private var versionCopied = false
 
     init(model: GameModel) {
         self.model = model
@@ -38,9 +40,10 @@ struct SettingsView: View {
                             .background(.ultraThinMaterial, in: Capsule())
                             .transition(.opacity)
                     }
-                    footer
+                    versionRow
                 }
                 .animation(.easeInOut(duration: 0.2), value: restoreNote)
+                .animation(.easeInOut(duration: 0.2), value: versionCopied)
             }
 
             if showHowTo {
@@ -173,13 +176,43 @@ struct SettingsView: View {
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.12)))
     }
 
-    private var footer: some View {
+    /// The version footer, promoted to a tappable row: copies "version (build)" to the pasteboard
+    /// with a "Copied" confirmation — nothing on screen is display-only (uiux §5.9).
+    private var versionRow: some View {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
-        return Text("PRISM RUSH · v\(version) (\(build))")
-            .font(.system(size: 11, weight: .semibold, design: .rounded))
-            .tracking(2)
-            .foregroundStyle(.white.opacity(0.35))
-            .padding(.top, 10)
+        return Button {
+            UIPasteboard.general.string = "Prism Rush v\(version) (\(build))"
+            versionCopied = true
+            Task {
+                try? await Task.sleep(for: .seconds(1.8))
+                versionCopied = false
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text("PRISM RUSH · v\(version) (\(build))")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .tracking(2)
+                    .foregroundStyle(.white.opacity(0.35))
+                Image(systemName: versionCopied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(versionCopied ? Theme.Role.interactive : .white.opacity(0.3))
+                if versionCopied {
+                    Text("Copied")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.Role.interactive)
+                        .transition(.opacity)
+                }
+            }
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.neon)
+        .padding(.top, 4)
+        .accessibilityIdentifier("versionRow")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Version \(version), build \(build).")
+        .accessibilityHint("Copies the version to the clipboard.")
     }
 }

@@ -93,6 +93,39 @@ final class SynthTests: XCTestCase {
         XCTAssertFalse(Synth.SFX.gem(streak: 3).ducksMusic)
     }
 
+    /// v1.3 (R17): the six mechanic SFX render sane, audible, correctly-sized buffers.
+    func testV13MechanicSFXAreSane() {
+        assertSane(Synth.ringPass(), 0.10, 0.14, "ringPass")
+        assertSane(Synth.ringPerfect(), 0.24, 0.28, "ringPerfect")
+        assertSane(Synth.boostStart(), 0.34, 0.38, "boostStart")
+        assertSane(Synth.boostEnd(), 0.32, 0.36, "boostEnd")
+        assertSane(Synth.flowSurgeChime(), 0.50, 0.54, "flowSurge")
+        assertSane(Synth.levelUpFanfare(), 0.83, 0.87, "levelUp")
+        // PERFECT must read as a bigger moment than the plain pass; boost edges must differ.
+        XCTAssertNotEqual(Synth.ringPass(), Synth.ringPerfect())
+        XCTAssertNotEqual(Synth.boostStart(), Synth.boostEnd())
+        XCTAssertNotEqual(Synth.levelUpFanfare(), Synth.newBestFanfare())
+    }
+
+    /// v1.3: the six new SFX cases render finite non-empty buffers (what SynthEngine caches)
+    /// and classify correctly for music ducking (big moments duck; per-ring blips don't).
+    func testV13SFXCasesRenderAndClassify() {
+        let fresh: [Synth.SFX] = [.ringPass, .ringPerfect, .boostStart, .boostEnd, .flowSurge, .levelUp]
+        for sfx in fresh {
+            let s = sfx.samples
+            XCTAssertFalse(s.isEmpty, "\(sfx) empty")
+            XCTAssertFalse(s.contains { $0.isNaN || $0.isInfinite }, "\(sfx) has NaN/Inf")
+            XCTAssertGreaterThan(peak(s), 0.005, "\(sfx) is effectively silent")
+            XCTAssertEqual(sfx.normalized, sfx, "\(sfx) must be its own cache key")
+        }
+        XCTAssertTrue(Synth.SFX.boostStart.ducksMusic)
+        XCTAssertTrue(Synth.SFX.boostEnd.ducksMusic)
+        XCTAssertTrue(Synth.SFX.flowSurge.ducksMusic)
+        XCTAssertTrue(Synth.SFX.levelUp.ducksMusic)
+        XCTAssertFalse(Synth.SFX.ringPass.ducksMusic)
+        XCTAssertFalse(Synth.SFX.ringPerfect.ducksMusic)
+    }
+
     func testMusicStepsAreSaneAcrossWorlds() {
         for world in 0..<3 {
             for beat in 0..<8 {

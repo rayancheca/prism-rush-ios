@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Three swipeable tutorial cards (controls / scoring / power-ups), built entirely from shapes and
-/// SF Symbols — no assets. Shown from Settings, and (once wired — see AGENT_meta.md) before the
-/// first PLAY when `profile.totalRuns == 0`.
+/// Four swipeable tutorial cards (controls / scoring / rings & flow / power-ups), built entirely
+/// from shapes and SF Symbols — no assets. Shown from Settings, and before the first PLAY when
+/// `profile.totalRuns == 0`. The RINGS & FLOW card teaches the three v1.3 mechanics.
 struct HowToPlayView: View {
     let onClose: () -> Void
     /// Label on the final card's dismiss button ("GOT IT" from Settings, "LET'S GO" pre-first-run).
@@ -32,15 +32,16 @@ struct HowToPlayView: View {
             TabView(selection: $page) {
                 controlsCard.tag(0)
                 scoringCard.tag(1)
-                powerUpsCard.tag(2)
+                flowCard.tag(2)
+                powerUpsCard.tag(3)
             }
             .tabViewStyle(.page(indexDisplayMode: .always))
             .indexViewStyle(.page(backgroundDisplayMode: .always))
 
             Button {
-                if page < 2 { withAnimation { page += 1 } } else { onClose() }
+                if page < 3 { withAnimation { page += 1 } } else { onClose() }
             } label: {
-                Text(page < 2 ? "NEXT" : doneLabel)
+                Text(page < 3 ? "NEXT" : doneLabel)
                     .font(.system(size: 17, weight: .heavy, design: .rounded))
                     .tracking(2)
                     .foregroundStyle(.black)
@@ -134,7 +135,28 @@ struct HowToPlayView: View {
         }
     }
 
-    // MARK: card 3 — power-ups
+    // MARK: card 3 — rings, pads & flow (the v1.3 mechanics)
+
+    private var flowCard: some View {
+        card(title: "RINGS & FLOW", accent: 0xB26BFF) {
+            // A prism ring: a glowing torus seen edge-on.
+            Circle()
+                .strokeBorder(
+                    AngularGradient(colors: [Theme.color(0x00F5FF), Theme.color(0xB26BFF),
+                                             Theme.color(0x00F5FF)], center: .center),
+                    lineWidth: 7)
+                .frame(width: 56, height: 56)
+                .shadow(color: Theme.color(0xB26BFF).opacity(0.7), radius: 12)
+                .padding(.bottom, 14)
+                .accessibilityHidden(true)
+
+            instructionRow("circle.dashed", "PRISM RINGS", "dive through for bonus coins — dead-centre pays PERFECT")
+            instructionRow("bolt.fill", "OVERDRIVE PADS", "hit the glowing pad for a one-second speed surge")
+            instructionRow("wind", "FLOW SURGE", "chain 3 near-misses to detonate a gem fountain")
+        }
+    }
+
+    // MARK: card 4 — power-ups
 
     private var powerUpsCard: some View {
         card(title: "POWER-UPS", accent: 0x00FF88) {

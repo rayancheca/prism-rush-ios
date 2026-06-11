@@ -194,6 +194,61 @@ enum Synth {
         return b
     }
 
+    // MARK: v1.3 mechanic SFX (R17) — rings, overdrive pads, flow surges, level-ups
+
+    static func ringPass() -> [Float] {               // airy pass-through: quick up-chirp + hiss
+        var b = blank(0.12)
+        tone(&b, 740, 1180, dur: 0.09, .triangle, vol: 0.14)
+        noise(&b, dur: 0.05, vol: 0.05, cutoff: 4200, highpass: true)
+        return b
+    }
+
+    static func ringPerfect() -> [Float] {            // dead-centre: bright two-tone gold sparkle
+        var b = blank(0.26)
+        tone(&b, 1046, 1052, dur: 0.10, .triangle, vol: 0.15)
+        tone(&b, 1568, 1576, dur: 0.16, .sine, vol: 0.13, offset: Int(0.07 * sampleRate))
+        tone(&b, 2093, 2093, dur: 0.10, .sine, vol: 0.07, offset: Int(0.13 * sampleRate))
+        return b
+    }
+
+    static func boostStart() -> [Float] {             // overdrive ignition: punchy double-octave rise
+        var b = blank(0.36)
+        tone(&b, 320, 1280, dur: 0.30, .square, vol: 0.08)
+        tone(&b, 160, 640, dur: 0.30, .sine, vol: 0.12)
+        noise(&b, dur: 0.30, vol: 0.10, cutoff: 3600, highpass: true, swell: true)
+        return b
+    }
+
+    static func boostEnd() -> [Float] {               // overdrive tail-off: the ignition, mirrored
+        var b = blank(0.34)
+        tone(&b, 1280, 320, dur: 0.28, .square, vol: 0.07)
+        tone(&b, 640, 160, dur: 0.28, .sine, vol: 0.10)
+        noise(&b, dur: 0.26, vol: 0.08, cutoff: 3600, highpass: true)
+        return b
+    }
+
+    static func flowSurgeChime() -> [Float] {         // rising three-note shimmer into the fountain
+        var b = blank(0.52)
+        let arp: [Float] = [659, 784, 988]
+        for (i, f) in arp.enumerated() {
+            tone(&b, f, f * 1.02, dur: 0.12, .triangle, vol: 0.13, offset: Int(Float(i) * 0.08 * sampleRate))
+        }
+        tone(&b, 1318, 1330, dur: 0.22, .sine, vol: 0.10, offset: Int(0.24 * sampleRate))
+        noise(&b, dur: 0.30, vol: 0.06, cutoff: 5200, highpass: true, swell: true, offset: Int(0.10 * sampleRate))
+        return b
+    }
+
+    static func levelUpFanfare() -> [Float] {         // D-major arp + held top — distinct from newBest's C
+        var b = blank(0.85)
+        let arp: [Float] = [587, 740, 880, 1175]
+        for (i, f) in arp.enumerated() {
+            tone(&b, f, f * 1.01, dur: 0.16, .triangle, vol: 0.12, offset: Int(Float(i) * 0.12 * sampleRate))
+        }
+        tone(&b, 1175, 1180, dur: 0.34, .triangle, vol: 0.13, offset: Int(0.48 * sampleRate))
+        tone(&b, 2350, 2360, dur: 0.26, .sine, vol: 0.05, offset: Int(0.52 * sampleRate))
+        return b
+    }
+
     // MARK: Music — one 8th-note step (kick / hat / saw bass / sparkle arp), per the prototype.
 
     static let bpm: Float = 132
@@ -237,6 +292,8 @@ extension Synth {
         case worldSweep, close, startChime
         case laneTick, landThud, purchaseChime, equipClick, uiTick, newBestFanfare, deathSweep
         case frenzyStart, frenzyEnd
+        // v1.3 (R17): exactly six new cases — NEW-CHARACTER toasts reuse `purchaseChime`.
+        case ringPass, ringPerfect, boostStart, boostEnd, flowSurge, levelUp
 
         /// Gem repeats its pitch ladder every 26 streaks — collapse so the cache stays bounded.
         var normalized: SFX {
@@ -248,7 +305,8 @@ extension Synth {
         var ducksMusic: Bool {
             switch self {
             case .crash, .deathSweep, .worldSweep, .shieldPickup, .magnetPickup, .doublerPickup,
-                 .frenzyStart, .frenzyEnd, .newBestFanfare:
+                 .frenzyStart, .frenzyEnd, .newBestFanfare,
+                 .boostStart, .boostEnd, .flowSurge, .levelUp:   // rings are too frequent to duck
                 return true
             default:
                 return false
@@ -277,6 +335,12 @@ extension Synth {
             case .deathSweep: return Synth.deathSweep()
             case .frenzyStart: return Synth.frenzyStart()
             case .frenzyEnd: return Synth.frenzyEnd()
+            case .ringPass: return Synth.ringPass()
+            case .ringPerfect: return Synth.ringPerfect()
+            case .boostStart: return Synth.boostStart()
+            case .boostEnd: return Synth.boostEnd()
+            case .flowSurge: return Synth.flowSurgeChime()
+            case .levelUp: return Synth.levelUpFanfare()
             }
         }
     }
