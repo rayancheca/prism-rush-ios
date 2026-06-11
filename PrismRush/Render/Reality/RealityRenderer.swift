@@ -400,8 +400,8 @@ final class RealityRenderer: RendererPort {
             }
         }
 
-        // Per-world decor.
-        decor.update(distance: snap.distance, world: snap.worldTo, elapsed: elapsed)
+        // Per-world decor + sky atmosphere (the sky's own motion is RM-gated inside).
+        decor.update(distance: snap.distance, world: snap.worldTo, elapsed: elapsed, reduceMotion: reduceMotion)
     }
 
     func fire(_ event: FXEvent) {

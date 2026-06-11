@@ -155,6 +155,11 @@ final class GameModel {
         checkSkinUnlocks()   // launch catch-up: cloud merges/level-ups earned while away grant here
         core.onFX = { [weak self] fx in self?.handleFX(fx) }
         if autoplay || demo { core.startRun(seed: 7) }
+        // Debug: PR_WORLD=n starts the run already inside world n (sky/decor verification on the
+        // simulator — mirrors PR_AUTOPLAY above and combines with it; seed 7 keeps it repeatable).
+        if let w = ProcessInfo.processInfo.environment["PR_WORLD"].flatMap(Int.init), w > 0 {
+            startRun(fromWorld: w, seed: 7)
+        }
         // Debug: jump straight to a meta screen for screenshots.
         switch ProcessInfo.processInfo.environment["PR_SCREEN"] {
         case "characters": activeSheet = .characters

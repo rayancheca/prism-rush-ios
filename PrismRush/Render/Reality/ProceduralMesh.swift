@@ -121,6 +121,98 @@ enum ProceduralMesh {
         return build(p, idx, fallback: w)
     }
 
+    // MARK: v1.4 sky meshes (WorldSky) — flat single-sided cards facing the chase camera (+Z),
+    // wound CCW-from-+Z so back-face culling never hides them from the player.
+
+    /// Filled disc in the XY plane facing +Z (sun + halo, glow motes, lit windows). Unit radius
+    /// is the common case — entities scale it, so ONE mesh serves every disc in the sky.
+    static func disc(radius r: Float = 1, segments n: Int = 22) -> MeshResource {
+        var p: [SIMD3<Float>] = [[0, 0, 0]]
+        p.reserveCapacity(n + 1)
+        var idx: [UInt32] = []
+        idx.reserveCapacity(n * 3)
+        for i in 0..<n {
+            let a = Float(i) / Float(n) * 2 * .pi
+            p.append([cos(a) * r, sin(a) * r, 0])
+        }
+        for i in 0..<n {
+            idx.append(contentsOf: [0, UInt32(1 + i), UInt32(1 + (i + 1) % n)])
+        }
+        return build(p, idx, fallback: r)
+    }
+
+    /// City-skyline silhouette card: one flat quad per `(width, height)` building, baselines at
+    /// y = 0, fixed `gap` between neighbours, the whole row centred on x = 0. A 17-building row
+    /// is 34 triangles in ONE mesh — one draw call per depth band.
+    static func skyline(buildings: [SIMD2<Float>], gap: Float) -> MeshResource {
+        var p: [SIMD3<Float>] = []
+        var idx: [UInt32] = []
+        p.reserveCapacity(buildings.count * 4)
+        idx.reserveCapacity(buildings.count * 6)
+        let total = buildings.reduce(Float(0)) { $0 + $1.x } + gap * Float(buildings.count - 1)
+        var x = -total / 2
+        for b in buildings {
+            let base = UInt32(p.count)
+            p.append(contentsOf: [[x, 0, 0], [x + b.x, 0, 0], [x + b.x, b.y, 0], [x, b.y, 0]])
+            idx.append(contentsOf: [base, base + 1, base + 2, base, base + 2, base + 3])
+            x += b.x + gap
+        }
+        return build(p, idx, fallback: total / 2)
+    }
+
+    /// Rolling silhouette ridge (the Sands dune layers): `heights` sampled uniformly across
+    /// `width`, filled down to the y = 0 baseline.
+    static func ridge(width: Float, heights: [Float]) -> MeshResource {
+        let n = heights.count
+        var p: [SIMD3<Float>] = []
+        var idx: [UInt32] = []
+        p.reserveCapacity(n * 2)
+        idx.reserveCapacity((n - 1) * 6)
+        for (i, h) in heights.enumerated() {
+            let x = -width / 2 + width * Float(i) / Float(n - 1)
+            p.append([x, 0, 0])                  // bottom edge (even indices)
+            p.append([x, max(h, 0.01), 0])       // crest (odd indices)
+        }
+        for i in 0..<(n - 1) {
+            let a = UInt32(i * 2)
+            idx.append(contentsOf: [a, a + 2, a + 3, a, a + 3, a + 1])
+        }
+        return build(p, idx, fallback: width / 2)
+    }
+
+    /// Searchlight beam: a thin trapezoid fanning out from the origin along +Y — anchor it on a
+    /// rooftop and rotate about Z to sweep.
+    static func beam(length: Float, halfWidthNear: Float, halfWidthFar: Float) -> MeshResource {
+        let p: [SIMD3<Float>] = [
+            [-halfWidthNear, 0, 0], [halfWidthNear, 0, 0],
+            [halfWidthFar, length, 0], [-halfWidthFar, length, 0],
+        ]
+        return build(p, [0, 1, 2, 0, 2, 3], fallback: length)
+    }
+
+    /// Wavy horizon band (the Caverns aurora): two-sine top/bottom edges of constant `thickness`
+    /// undulating around y = 0.
+    static func ribbon(width: Float, thickness: Float, amplitude: Float, waves: Float,
+                       phase: Float, samples n: Int = 48) -> MeshResource {
+        var p: [SIMD3<Float>] = []
+        var idx: [UInt32] = []
+        p.reserveCapacity(n * 2)
+        idx.reserveCapacity((n - 1) * 6)
+        for i in 0..<n {
+            let u = Float(i) / Float(n - 1)
+            let x = -width / 2 + width * u
+            let mid = amplitude * sin(u * waves * 2 * .pi + phase)
+                + amplitude * 0.45 * sin(u * waves * 4.7 + phase * 1.7)
+            p.append([x, mid - thickness / 2, 0])
+            p.append([x, mid + thickness / 2, 0])
+        }
+        for i in 0..<(n - 1) {
+            let a = UInt32(i * 2)
+            idx.append(contentsOf: [a, a + 2, a + 3, a, a + 3, a + 1])
+        }
+        return build(p, idx, fallback: width / 2)
+    }
+
     private static func build(_ positions: [SIMD3<Float>], _ indices: [UInt32], fallback: Float) -> MeshResource {
         var d = MeshDescriptor(name: "procedural")
         d.positions = MeshBuffers.Positions(positions)
