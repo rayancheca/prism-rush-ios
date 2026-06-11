@@ -95,6 +95,32 @@ enum ProceduralMesh {
         return build(pos, idx, fallback: R + r)
     }
 
+    /// Flat chevron strip for the overdrive boost pad: `chevrons` V-bands in the XZ plane (y = 0),
+    /// tips pointing toward −z (down the oncoming track). Single-sided, wound for +y — it is a
+    /// floor decal like the lane lines, only ever seen from the chase camera above. Defaults span
+    /// z ≈ ±1.03, visually matching the core's |z| < 1.1 trigger window.
+    static func chevronStrip(halfWidth w: Float = 0.85, chevrons: Int = 3, sweep s: Float = 0.5,
+                             band t: Float = 0.32, spacing: Float = 0.62) -> MeshResource {
+        var p: [SIMD3<Float>] = []
+        var idx: [UInt32] = []
+        p.reserveCapacity(chevrons * 6)
+        idx.reserveCapacity(chevrons * 12)
+        let total = Float(chevrons - 1) * spacing + s + t
+        for k in 0..<chevrons {
+            let z0 = total / 2 - Float(k) * spacing     // rear (camera-side) edge of this chevron
+            let base = UInt32(p.count)
+            p.append(contentsOf: [
+                [-w, 0, z0], [0, 0, z0 - s], [0, 0, z0 - s - t], [-w, 0, z0 - t],  // left arm 0–3
+                [w, 0, z0], [w, 0, z0 - t],                                        // right edge 4–5
+            ])
+            idx.append(contentsOf: [
+                base, base + 1, base + 2,  base, base + 2, base + 3,               // left arm
+                base + 4, base + 2, base + 1,  base + 4, base + 5, base + 2,       // right arm
+            ])
+        }
+        return build(p, idx, fallback: w)
+    }
+
     private static func build(_ positions: [SIMD3<Float>], _ indices: [UInt32], fallback: Float) -> MeshResource {
         var d = MeshDescriptor(name: "procedural")
         d.positions = MeshBuffers.Positions(positions)

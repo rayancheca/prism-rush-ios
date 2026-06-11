@@ -334,6 +334,8 @@ final class GameModel {
             synth.play(.landThud)
         case .laneChanged:
             synth.play(.laneTick)
+        case .ringPassed, .boostStarted, .boostEnded, .flowSurge:
+            break   // v1.3 popups/SFX/haptics land in the wave-5 rewire (renderer already reacts)
         }
     }
 

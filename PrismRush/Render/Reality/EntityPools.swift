@@ -52,6 +52,19 @@ final class EntityPools {
         liveKind.removeAll(keepingCapacity: true)
     }
 
+    /// Pre-build `count` free entities for `kind` so its first live appearance never allocates
+    /// (v1.3 rings/pads warm to the core's live caps — `Tuning.capRing` 4 / `capBoostPad` 2 —
+    /// because they first spawn minutes into a run, mid-steady-state). Idempotent.
+    func prewarm(_ kind: EntityKind, count: Int) {
+        var pool = freeByKind[kind, default: []]
+        while pool.count < count {
+            let e = make(kind)
+            e.isEnabled = false
+            pool.append(e)
+        }
+        freeByKind[kind] = pool
+    }
+
     private func obtain(_ kind: EntityKind) -> Entity {
         if var pool = freeByKind[kind], let e = pool.popLast() {
             freeByKind[kind] = pool

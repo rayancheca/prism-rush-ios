@@ -64,6 +64,8 @@ final class Haptics {
             }
         case .chronoEnded:
             light.impactOccurred(intensity: 0.5)   // soft "time resumes" tap
+        case .ringPassed, .boostStarted, .boostEnded, .flowSurge:
+            break   // v1.3 haptic mapping (R17: ring=light, boost=medium, flow=success) lands in wave 5
         }
     }
 }

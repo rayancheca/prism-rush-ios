@@ -34,17 +34,37 @@ final class RealityRenderer: RendererPort {
     private let doublerMesh: MeshResource   // twin octahedron (coin-doubler pickup, see makeEntity)
     private let chronoMesh: MeshResource    // hourglass (chrono slow-mo pickup)
     private let splitBarSegmentMesh: MeshResource   // one-lane bar segment (two per splitBar)
+    private let ringMesh: MeshResource      // prism-ring gate torus (hole faces the camera, +Z)
+    private let padMesh: MeshResource       // overdrive-pad floor chevron strip (flat, XZ plane)
 
     // Selected character skin (`followsWorld` = the default look that tracks the world accent).
     private var skinBodyHex: UInt32 = 0
     private var skinAntennaHex: UInt32 = 0
     private var skinFollowsWorld = true
 
+    // v1.3 skin rig (set by `applySkin(_ skin:)`; the legacy 3-arg shim leaves these at the
+    // defaults, so pre-wave-5 callers keep today's exact look). All visual-only — the hitbox
+    // (Core's bodyRadius/groundedCenterY) never sees any of this.
+    private var skinTrailColor: UIColor?            // nil = wake follows the world accent (Prism)
+    private var skinBodyShape: Skin.BodyShape = .sphere
+    private var skinScale: Float = 1                // folded into the per-frame pose, 0.85…1.12
+    private var skinEyeRadius: Float = 0.13
+    private var skinEyeTintHex: UInt32 = 0xFFFFFF
+    private var skinPupil: Skin.PupilStyle = .dot
+    private var skinAntennaHeight: Float = 1
+    private var skinAntennaTip: Float = 1
+    private var skinSway: Float = 0                 // radians; 0 = static antenna (legacy shim path)
+    private var skinSwaySpeed: Double = 3.2         // = idle.bobSpeed * 2 once a Skin is applied
+    private var antennaCenterY: Float = 1.42        // stem centre — the sway pivot (set per rig build)
+    private var antennaTipY: Float = 1.675          // tip rest height (set per rig build)
+    private var swayApplied = false                 // restore the rest pose once when sway stops
+
     private var elapsed: Double = 0
     private var blinkT: Double = 3
     private var shake: Float = 0
     private var fovKick: Float = 0          // transient FOV punch (pickup / world change), decays like shake
     private var chronoDip: Float = 0        // smoothed −6° FOV dip while chrono slow-mo is active
+    private var boostFOV: Float = 0         // smoothed +6° FOV punch while the overdrive boost runs
     private var slideRoll: Float = 0        // smoothed camera z-roll while sliding
     private var lastSpeed: Float = 0
     private var lastDt: Float = 1 / 60      // wall-clock dt from advanceVisuals (runs before sync)
@@ -69,6 +89,13 @@ final class RealityRenderer: RendererPort {
     private var skidCursor = 0
     private let skidMaxLife: Float = 0.9
 
+    // Ring-pass shockwave: one dedicated torus that scale-pulses outward on `.ringPassed`
+    // (gold on a PERFECT bullseye). The pooled ring entity itself vanishes the same frame the
+    // core consumes it, so the pulse needs its own entity.
+    private var ringPulse: ModelEntity!
+    private var ringPulseLife: Float = 0
+    private let ringPulseMaxLife: Float = 0.35
+
     // Latest blended obstacle tints, captured for the pools' place closure and particle bursts.
     private var tintAccent = UIColor.cyan
     private var tintAccent2 = UIColor.magenta
@@ -88,12 +115,20 @@ final class RealityRenderer: RendererPort {
         doublerMesh = ProceduralMesh.twinOctahedron(0.26, offset: 0.34)
         chronoMesh = ProceduralMesh.hourglass(halfBase: 0.3, halfHeight: 0.42)
         splitBarSegmentMesh = .generateBox(width: 2.5, height: 0.7, depth: 0.7, cornerRadius: 0.04)
+        // Ring gate: hole radius 0.79 vs body radius 0.62 — threading reads true to the ±0.9
+        // pass window without looking trivially wide. Same generator as the magnet torus.
+        ringMesh = ProceduralMesh.torus(major: 0.88, minor: 0.09, majorSeg: 28, minorSeg: 10)
+        padMesh = ProceduralMesh.chevronStrip()
         matGemGold = UnlitMaterial(color: UIColor(red: 1, green: 210/255.0, blue: 61/255.0, alpha: 1))
         matGemHot = UnlitMaterial(color: UIColor(red: 1, green: 0.95, blue: 0.75, alpha: 1))
         buildScene()
         pools = EntityPools(root: root) { [weak self] kind in
             self?.makeEntity(kind) ?? ModelEntity()
         }
+        // v1.3 pickups: pre-build up to the core's live caps so the first mid-run ring/pad spawn
+        // never allocates (the other kinds warm up within seconds; these appear minutes in).
+        pools.prewarm(.ring, count: Tuning.capRing)
+        pools.prewarm(.boostPad, count: Tuning.capBoostPad)
         decor = WorldDecor(root: root)
         particles = ParticleSystem(parent: root)
 
@@ -145,7 +180,11 @@ final class RealityRenderer: RendererPort {
         // chrono-scaled EFFECTIVE speed, so the speed punch above relaxes with it for free).
         let dipTarget: Float = (!reduceMotion && snap.chronoRemaining > 0 && snap.mode == .play) ? -6 : 0
         chronoDip += (dipTarget - chronoDip) * 0.08
-        camera.camera.fieldOfViewInDegrees = 62 + speedPunch + fovKick + chronoDip
+        // Overdrive boost: ease toward a +6° punch while `boostRemaining` runs and back out when
+        // it ends — driven by the snapshot (not the edge events) so restore can never be missed.
+        let boostTarget: Float = (!reduceMotion && snap.boostRemaining > 0 && snap.mode == .play) ? 6 : 0
+        boostFOV += (boostTarget - boostFOV) * 0.12
+        camera.camera.fieldOfViewInDegrees = 62 + speedPunch + fovKick + chronoDip + boostFOV
         camX += (px * 0.42 - camX) * 0.15
         let shaking = !reduceMotion && shake > 0
         let shakeX = shaking ? Float.random(in: -1...1) * shake * 0.55 : 0
@@ -170,7 +209,7 @@ final class RealityRenderer: RendererPort {
         let sy = Float(snap.playerScaleY)
         var sx = 1 + (1 - sy) * 0.45
         if snap.sliding { sx *= 1.55 }                       // flatten dramatically into a pancake
-        playerRig.scale = SIMD3<Float>(sx, sy, sx)
+        playerRig.scale = SIMD3<Float>(sx, sy, sx) * skinScale   // skin size is pose-only; hitbox untouched
         let bankQ = simd_quatf(angle: Float(snap.bankZ), axis: SIMD3<Float>(0, 0, 1))
         let leanQ = simd_quatf(angle: snap.sliding ? -0.85 : 0, axis: SIMD3<Float>(1, 0, 0))
         playerRig.orientation = bankQ * leanQ
@@ -183,7 +222,7 @@ final class RealityRenderer: RendererPort {
             if n > 0 {
                 dustDebt -= Float(n)
                 particles.burst(x: px + Float.random(in: -0.4...0.4), y: 0.12, z: 0.5,
-                                color: tintAccent, count: n, power: 1.8, spread: 0.18, life: 0.45)
+                                color: skinTrailColor ?? tintAccent, count: n, power: 1.8, spread: 0.18, life: 0.45)
             }
         }
 
@@ -230,24 +269,40 @@ final class RealityRenderer: RendererPort {
                 }
             case .shield, .magnet, .doubler, .chrono:
                 entity.orientation = simd_quatf(angle: Float(s.spin) * 0.9, axis: SIMD3<Float>(0, 1, 0))
+            case .ring:
+                // Gate torus stays face-on (the hole IS the target); a slow scale-pulse keyed off
+                // `spin` (= z, deterministic) signals "collectible" without spinning the hole away.
+                entity.scale = SIMD3<Float>(repeating: 1 + 0.05 * Float(sin(s.spin * 0.8)))
+                (entity as? ModelEntity).map { $0.model?.materials = [mA] }
+            case .boostPad:
+                // Floor chevrons breathe in the ground plane only (it's a decal — never lift y).
+                let pulse = 1 + 0.07 * Float(sin(s.spin * 1.5))
+                entity.scale = SIMD3<Float>(pulse, 1, pulse)
+                (entity as? ModelEntity).map { $0.model?.materials = [mA] }
             }
         }
 
         // Speed trail behind the player — time-based (≈ the old 3/frame at 60 Hz). The emission
-        // rate breathes with chrono slow-mo so the trail thins while the world crawls.
+        // rate breathes with chrono slow-mo so the trail thins while the world crawls. The wake
+        // is the skin's own color (Prism keeps nil → world accent); during an overdrive boost it
+        // thickens and elongates into streaks.
         if snap.mode == .play {
-            trailDebt += 180 * (snap.chronoRemaining > 0 ? Float(Tuning.chronoFactor) : 1) * lastDt
+            let boosting = snap.boostRemaining > 0
+            trailDebt += 180 * (snap.chronoRemaining > 0 ? Float(Tuning.chronoFactor) : 1)
+                             * (boosting ? 1.6 : 1) * lastDt
             let n = Int(trailDebt)
             if n > 0 {
                 trailDebt -= Float(n)
                 particles.burst(x: px + Float.random(in: -0.2...0.2), y: 0.25 + Float(snap.playerY), z: 0.5,
-                                color: tintAccent, count: n, power: 0.9, spread: 0.08, life: 0.45)
+                                color: skinTrailColor ?? tintAccent, count: n, power: 0.9, spread: 0.08,
+                                life: 0.45, velZ: boosting ? 7 : 0, stretchZ: boosting ? 2.4 : 1)
             }
         }
 
-        // Speed lines above ~26 m/s: thin streaks at the screen edges rushing past the camera.
-        if snap.mode == .play, !reduceMotion, lastSpeed > 26 {
-            speedLineDebt += min(70, (lastSpeed - 26) * 6) * lastDt
+        // Speed lines above ~26 m/s — and for the whole of an overdrive boost, whose +30% kick is
+        // the one moment that must FEEL faster even when the raw speed is still below the gate.
+        if snap.mode == .play, !reduceMotion, lastSpeed > 26 || snap.boostRemaining > 0 {
+            speedLineDebt += min(70, max((lastSpeed - 26) * 6, snap.boostRemaining > 0 ? 32 : 0)) * lastDt
             let n = Int(speedLineDebt)
             if n > 0 {
                 speedLineDebt -= Float(n)
@@ -273,7 +328,7 @@ final class RealityRenderer: RendererPort {
             particles.burst(x: Float(x), y: Float(y), z: 0, color: ladder[tier],
                             count: 12 + 4 * tier, power: 3.2, spread: 0.18, life: 0.6)
         case let .landed(x):
-            particles.burst(x: Float(x), y: 0.1, z: 0.2, color: tintAccent, count: 10, power: 2.6, spread: 0.32, life: 0.4)
+            particles.burst(x: Float(x), y: 0.1, z: 0.2, color: skinTrailColor ?? tintAccent, count: 10, power: 2.6, spread: 0.32, life: 0.4)
         case let .slid(x):
             dropSkid(at: Float(x))
         case let .pickup(kind, x, y):
@@ -296,7 +351,8 @@ final class RealityRenderer: RendererPort {
             particles.burst(x: Float(x), y: 1.2, z: 0, color: cWhite, count: 40, power: 6.2, spread: 0.42, life: 0.7)
             shake = max(shake, 0.8)
         case let .died(x):
-            particles.burst(x: Float(x), y: 1, z: 0, color: tintAccent2, count: 120, power: 7.5, spread: 0.55, life: 1.2)
+            // First (colored) burst shatters in the skin's own color; the white flash stays global.
+            particles.burst(x: Float(x), y: 1, z: 0, color: skinTrailColor ?? tintAccent2, count: 120, power: 7.5, spread: 0.55, life: 1.2)
             particles.burst(x: Float(x), y: 1, z: 0, color: cWhite, count: 60, power: 9.5, spread: 0.35, life: 0.9)
             shake = 1.4
         case let .worldChanged(index, _):
@@ -305,8 +361,39 @@ final class RealityRenderer: RendererPort {
             let accent = UIColor(red: CGFloat(a.x), green: CGFloat(a.y), blue: CGFloat(a.z), alpha: 1)
             particles.ring(y: 4.5, z: -42, radius: 9, color: accent, count: 24, velZ: 26, life: 1.1)
             kickFOV()
-        case .jumped, .laneChanged, .nearMiss, .chronoEnded:
-            break   // popups / banner / haptics / audio handled by the UI layer
+        case let .ringPassed(x, y, perfect):
+            // Expanding torus shockwave where the gate was threaded (the pooled ring entity is
+            // already gone this frame). Gold flash on a PERFECT bullseye, world accent otherwise.
+            ringPulse.position = SIMD3<Float>(Float(x), Float(y), 0)
+            ringPulse.scale = .one
+            ringPulse.model?.materials = [perfect ? matGemGold : matAccent]
+            ringPulse.isEnabled = true
+            ringPulseLife = ringPulseMaxLife
+            particles.burst(x: Float(x), y: Float(y), z: 0, color: perfect ? cGold : tintAccent,
+                            count: perfect ? 26 : 14, power: 3.6, spread: 0.5, life: 0.55)
+            if perfect { kickFOV() }
+        case let .boostStarted(x):
+            // Launch flash at the pad. The sustained treatment (+6° FOV, trail streaks, speed
+            // lines) keys off `snapshot.boostRemaining` in sync, so restore can never be missed.
+            particles.burst(x: Float(x), y: 0.15, z: 0.4, color: tintAccent, count: 26, power: 4.6, spread: 0.5, life: 0.6)
+            particles.burst(x: Float(x), y: 0.15, z: 0.4, color: cWhite, count: 10, power: 3.4, spread: 0.3, life: 0.45)
+            kickFOV()
+        case let .flowSurge(level, x):
+            // Aura flash in the player's own wake color, a lane shimmer running ahead, and a
+            // sparkle cascade at the fountain spawn point (masks the 26-unit gem pop-in).
+            let aura = skinTrailColor ?? tintAccent
+            particles.burst(x: Float(x), y: 1.0, z: 0, color: aura,
+                            count: 22 + 4 * min(level, 3), power: 3.0, spread: 0.5, life: 0.7)
+            for k in 1...6 {
+                particles.burst(x: Float(x), y: 0.6, z: -Float(k) * Float(Tuning.fountainLead) / 6,
+                                color: aura, count: 3, power: 1.2, spread: 0.25, life: 0.6)
+            }
+            particles.burst(x: Float(x), y: 0.9, z: -Float(Tuning.fountainLead), color: cGold,
+                            count: 16, power: 2.6, spread: 0.5, life: 0.8)
+            kickFOV()
+        case .jumped, .laneChanged, .nearMiss, .chronoEnded, .boostEnded:
+            break   // popups / banner / haptics / audio handled by the UI layer; boost restore
+                    // is snapshot-driven (see sync), so `.boostEnded` is audio's edge, not ours
         }
     }
 
@@ -319,8 +406,34 @@ final class RealityRenderer: RendererPort {
         if blinkT < -0.12 { blinkT = Double.random(in: 2.2...4.2) }
         let blink: Float = blinkT < 0 ? 0.1 : 1
         for eye in eyes { eye.scale = SIMD3<Float>(1, blink, 1) }
+        // Antenna sway — per-skin idle personality; visual-only, gated by Reduce Motion. The tip
+        // swings on an arm around the stem centre so scaled antennae (Pebble 0.6 … Wisp 1.4)
+        // stay attached. Zero allocations, two transform writes per frame.
+        if !reduceMotion, skinSway > 0 {
+            let a = Float(sin(elapsed * skinSwaySpeed)) * skinSway
+            let arm = antennaTipY - antennaCenterY
+            antenna.orientation = simd_quatf(angle: a, axis: SIMD3<Float>(0, 0, 1))
+            antennaTip.position = SIMD3<Float>(sin(a) * arm, antennaCenterY + cos(a) * arm, 0)
+            swayApplied = true
+        } else if swayApplied {
+            // One-time rest-pose restore when sway stops (Reduce Motion toggled mid-session).
+            antenna.orientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 0, 1))
+            antennaTip.position = SIMD3<Float>(0, antennaTipY, 0)
+            swayApplied = false
+        }
         particles.step(Float(dt), speed: lastSpeed)
         stepSkids(Float(dt))
+        // Ring-pass shockwave: grow ~2× over its life while scrolling past with the world.
+        if ringPulseLife > 0 {
+            ringPulseLife -= Float(dt)
+            if ringPulseLife <= 0 {
+                ringPulse.isEnabled = false
+            } else {
+                let f = 1 - ringPulseLife / ringPulseMaxLife
+                ringPulse.scale = SIMD3<Float>(repeating: 1 + f * 1.1)
+                ringPulse.position.z += lastSpeed * Float(dt)
+            }
+        }
         if shake > 0 { shake = max(0, shake - Float(dt) * 2.2) }
         if fovKick > 0 { fovKick = max(0, fovKick - Float(dt) * 12) }   // +3° decays over ~0.25 s
     }
@@ -331,14 +444,40 @@ final class RealityRenderer: RendererPort {
         shake = 0
         fovKick = 0
         chronoDip = 0
+        boostFOV = 0
         slideRoll = 0
         trailDebt = 0; dustDebt = 0; speedLineDebt = 0
+        ringPulseLife = 0
+        ringPulse.isEnabled = false
         for i in skids.indices { skidLife[i] = 0; skids[i].isEnabled = false }
         // Re-seed decor around 0. Checkpoint starts (distance > 0) self-heal on the first
         // update: the recycle-while loop walks every slot forward and restyles it once.
         decor.reset(distance: 0)
     }
 
+    /// v1.3 skin pipeline: colors + trail tint + rig geometry + idle sway from one `Skin` recipe.
+    /// Rebuilds the character rig — called on equip/launch only, NEVER per frame. Prism
+    /// (`bodyHex == 0`) keeps the followsWorld chameleon behavior: nil trail = world accent.
+    func applySkin(_ skin: Skin) {
+        skinBodyHex = skin.bodyHex
+        skinAntennaHex = skin.antennaHex
+        skinFollowsWorld = skin.followsWorld
+        skinTrailColor = skin.trailHex.map { uiHex($0) }
+        skinBodyShape = skin.bodyShape
+        skinScale = min(max(skin.scale, 0.85), 1.12)   // visual-only cap — never misrepresent the hitbox
+        skinEyeRadius = skin.eyeRadius
+        skinEyeTintHex = skin.eyeTintHex
+        skinPupil = skin.pupilStyle
+        skinAntennaHeight = skin.antennaHeightScale
+        skinAntennaTip = skin.antennaTipScale
+        skinSway = Float(skin.idle.sway)
+        skinSwaySpeed = skin.idle.bobSpeed * 2
+        rebuildCharacter()
+        paletteKey = -1   // force the cached character/world materials to rebuild next sync
+    }
+
+    /// Legacy 3-arg shim — GameView still calls this until the wave-5 rewire (R13); kept compiling
+    /// through v1.3, deleted in v1.4. Colors only: the rig stays whatever it currently is.
     func applySkin(bodyHex: UInt32, antennaHex: UInt32, followsWorld: Bool) {
         skinBodyHex = bodyHex
         skinAntennaHex = antennaHex
@@ -385,33 +524,81 @@ final class RealityRenderer: RendererPort {
             skidLife.append(0)
         }
 
+        // Ring-pass shockwave torus (one-shot flourish; material swapped on fire, never per frame).
+        ringPulse = ModelEntity(mesh: ringMesh, materials: [UnlitMaterial(color: .cyan)])
+        ringPulse.isEnabled = false
+        root.addChild(ringPulse)
+
         buildCharacter()
     }
 
+    /// Tear the character rig down to nothing and rebuild it from the current skin params.
+    /// Only ever runs on equip/launch (~7 small entities) — negligible, and never per frame.
+    private func rebuildCharacter() {
+        playerBody?.removeFromParent()
+        for eye in eyes { eye.removeFromParent() }
+        eyes.removeAll()
+        antenna?.removeFromParent()
+        antennaTip?.removeFromParent()
+        buildCharacter()
+    }
+
+    /// Build the character rig from the stored skin params (defaults reproduce the classic Prism
+    /// sphere). Eyes keep the same world-space face anchor for every body shape so the existing
+    /// blink/squash code needs no per-shape branches. Sizes per DESIGN_characters §1.6.
     private func buildCharacter() {
-        let body = ModelEntity(mesh: .generateSphere(radius: 0.62), materials: [UnlitMaterial(color: .cyan)])
-        body.position = SIMD3<Float>(0, 0.66, 0)
+        let bodyMesh: MeshResource
+        var bodyY: Float = 0.66
+        switch skinBodyShape {
+        case .sphere:  bodyMesh = .generateSphere(radius: 0.62)
+        case .cube:    bodyMesh = .generateBox(width: 1.06, height: 1.06, depth: 1.06, cornerRadius: 0.18)
+        case .crystal: bodyMesh = ProceduralMesh.octahedron(0.78); bodyY = 0.72
+        }
+        let body = ModelEntity(mesh: bodyMesh, materials: [UnlitMaterial(color: .cyan)])
+        body.position = SIMD3<Float>(0, bodyY, 0)
         playerRig.addChild(body)
         playerBody = body
 
-        // Eyes face the chase camera (+Z) with a dark pupil child, so the face reads clearly.
+        // Eyes face the chase camera (+Z) with a pupil child styled per skin, so the face reads.
+        let pupilDark = UnlitMaterial(color: UIColor(white: 0.02, alpha: 1))
+        let eyeMat = UnlitMaterial(color: uiHex(skinEyeTintHex))
         for ex in [Float(-0.22), 0.22] {
-            let eye = ModelEntity(mesh: .generateSphere(radius: 0.13), materials: [UnlitMaterial(color: cWhite)])
+            let eye = ModelEntity(mesh: .generateSphere(radius: skinEyeRadius), materials: [eyeMat])
             eye.position = SIMD3<Float>(ex, 0.82, 0.52)
-            let pupil = ModelEntity(mesh: .generateSphere(radius: 0.06), materials: [UnlitMaterial(color: UIColor(white: 0.02, alpha: 1))])
+            let pupil: ModelEntity
+            switch skinPupil {
+            case .dot:
+                pupil = ModelEntity(mesh: .generateSphere(radius: 0.06), materials: [pupilDark])
+            case .wide:
+                pupil = ModelEntity(mesh: .generateSphere(radius: 0.085), materials: [pupilDark])
+            case .slit:
+                pupil = ModelEntity(mesh: .generateSphere(radius: 0.07), materials: [pupilDark])
+                pupil.scale = SIMD3<Float>(0.45, 1.5, 1)
+            case .glint:
+                pupil = ModelEntity(mesh: .generateSphere(radius: 0.06), materials: [pupilDark])
+                let glint = ModelEntity(mesh: .generateSphere(radius: 0.025), materials: [UnlitMaterial(color: cWhite)])
+                glint.position = SIMD3<Float>(0.025, 0.025, 0.03)
+                pupil.addChild(glint)
+            }
             pupil.position = SIMD3<Float>(0, 0, 0.1)
             eye.addChild(pupil)
             playerRig.addChild(eye)
             eyes.append(eye)
         }
 
-        antenna = ModelEntity(mesh: .generateCylinder(height: 0.42, radius: 0.025), materials: [UnlitMaterial(color: .cyan)])
-        antenna.position = SIMD3<Float>(0, 1.42, 0)
+        // Antenna: stem bottom pinned at y 1.21 whatever the height scale; tip rides on top.
+        // The sway code pivots the tip on an arm around the stem CENTRE, so record both heights.
+        let h = skinAntennaHeight
+        antennaCenterY = 1.21 + 0.21 * h
+        antennaTipY = 1.21 + 0.42 * h + 0.045
+        antenna = ModelEntity(mesh: .generateCylinder(height: 0.42 * h, radius: 0.025), materials: [UnlitMaterial(color: .cyan)])
+        antenna.position = SIMD3<Float>(0, antennaCenterY, 0)
         playerRig.addChild(antenna)
 
-        antennaTip = ModelEntity(mesh: .generateSphere(radius: 0.095), materials: [UnlitMaterial(color: .magenta)])
-        antennaTip.position = SIMD3<Float>(0, 1.66, 0)
+        antennaTip = ModelEntity(mesh: .generateSphere(radius: 0.095 * skinAntennaTip), materials: [UnlitMaterial(color: .magenta)])
+        antennaTip.position = SIMD3<Float>(0, antennaTipY, 0)
         playerRig.addChild(antennaTip)
+        swayApplied = false   // fresh rig is at rest pose by construction
     }
 
     private func makeEntity(_ kind: EntityKind) -> Entity {
@@ -426,6 +613,10 @@ final class RealityRenderer: RendererPort {
         case .magnet:     return ModelEntity(mesh: magnetMesh, materials: [UnlitMaterial(color: .cyan)])
         case .doubler:    return ModelEntity(mesh: doublerMesh, materials: [UnlitMaterial(color: uiHex(0x00FF88))])
         case .chrono:     return ModelEntity(mesh: chronoMesh, materials: [UnlitMaterial(color: uiHex(0x9BF0FF))])
+        // Ring/pad get the live accent material reassigned every frame in the place closure
+        // (same pattern as obstacles), so the creation-time material is just a safe seed.
+        case .ring:       return ModelEntity(mesh: ringMesh, materials: [matAccent])
+        case .boostPad:   return ModelEntity(mesh: padMesh, materials: [matAccent])
         }
     }
 
