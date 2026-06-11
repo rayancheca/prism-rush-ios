@@ -1,7 +1,19 @@
 # PRISM RUSH — Build State
 
 > Single source of truth for session resumability. On any fresh session: read this first, then continue.
-> Last updated: end of the **v1.3 content update** (waves 1–5 complete).
+> Last updated: end of **v1.4 (worlds + tease + missions board)**.
+
+## v1.4 — worlds, purchasable ladder, roster 24, missions board (2026-06-11)
+| Commit | Scope |
+|---|---|
+| `9b77316` | Meta: `purchasedWorlds` (decode-defaulted, formUnion merge), `unlockWorld` (never touches `maxWorldReached`), `XPCurve.worldPrice` ladder (400…13,400; 59,400 sink), roster 16→24 (xpUnlockLevels now [3,6,8,12,18,25]) |
+| `44673e2` | `WorldSky` (in WorldDecor.swift): per-family sky identity — Sands ringed planets + sun halo + dunes, Metropolis layered skyline + blinking windows + blimps + searchlights, Caverns stalactites + rotating crystals + aurora. Pooled, RM-gated, decor-stream seeded. `PR_WORLD` debug env |
+| `ee8ce90` | Worlds tab: full 12-rung ladder, NEXT UNLOCK strip, locked cards w/ price pills, UnlockPanel buy flow (denied shake + GET COINS→Shop), ∞ end-cap; WorldPreviewCanvas per-world signatures |
+| `985859b` | Locked-skin tease (full color @0.45 opacity, animated), select @24 w/ rarity counts + NEXT UNLOCK spotlight; missions board overhaul (summary strip, ring cards, section identities, claim FX, CLAIM ALL stagger) |
+| `1a10908` | Fixer: **B1 purchased-world reach-credit exploit** (GameView `reachAtRunStart` gate + pinned test), B2 G3 grep regression, WorldSky fed `snapshot.worldOrdinal` (cycle richening was dead code), coin fly-up fix, Dynamic Type tokens, 2 permanent XCUITests (buy flow, mission claim) |
+
+**Test status: 142/142** (132 unit + 10 XCUITest) via `./Tools/ci.sh`. Evidence: `reports/shots/v14/`.
+Demo profile (PR_DEMOPROFILE) now pins exact values incl. achievement seeds — sim/screenshot only.
 
 ## Current phase
 **v1.3 CONTENT UPDATE COMPLETE.** Implemented per the binding contract
