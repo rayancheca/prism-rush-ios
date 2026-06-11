@@ -30,22 +30,29 @@ Everything Linux can prove is green; what remains is the **Mac verification pass
 
 ## Next actions (in order)
 
-### A. Mac verification (one session — condensed from `reports/AGENT_wiring.md` §MAC VERIFICATION + `reports/QA.md` flags)
-1. **Build**: `./Tools/build.sh` (xcodegen + simulator build). Highest compile risk under Swift 6
-   `complete`: `MainActor.assumeIsolated` notification observers (SynthEngine ×3, RealityRenderer ×1,
-   ProfileStore ×1, GC auth handler), `.sensoryFeedback(trigger:)` closures, `symbolEffect(.pulse,
-   options:isActive:)`, the haptic double-tap `Task`, GameOverView/MenuView call sites (19/10 args).
-2. **Full suite**: `xcodebuild test -project PrismRush.xcodeproj -scheme PrismRush -destination
-   'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' CODE_SIGNING_ALLOWED=NO` → expect 95 green.
-3. **Visual/audio/UX spot checks** (full detail in AGENT_wiring §3–13):
-   first-run tutorial → run; daily challenge (same track twice per UTC day, NO continue button,
-   card updates); game-over count-up + frozen TIME tile (pause 30 s mid-run, die → TIME excludes it)
-   + coin breakdown sums + Shop over the death panel; revive pays delta only, `totalRuns` +1,
-   fanfare once; missions progress + single CLAIM; settings sliders live + persist + reduce-flash
-   ≈15%; renderer feel (hourglass, splitBar gap, chrono FOV dip, HUD chips vs corner cluster);
-   equip-ring animation; VoiceOver sweep + Dynamic Type XL; menu density on a small phone; watch for
-   "modifying state during view update" near UTC midnight.
+### A. Mac verification — RESULTS (session 2026-06-10, Mac pass after the v1.2 merge)
+1. **Build**: ✅ `./Tools/build.sh` → BUILD OK **first try, zero errors/warnings**. Every QA-flagged
+   Swift 6 risk site (assumeIsolated observers, `.sensoryFeedback`, `symbolEffect`, haptic Task,
+   19/10-arg call sites) compiled clean.
+2. **Full suite**: ✅ `xcodebuild test` → **95/95 green** (89 unit incl. 200-seed bot + 6 XCUITest),
+   iPhone 17 Pro · iOS 26.5 sim.
+3. **Sim spot checks (automated subset)**: ✅ 4-min `PR_AUTOPLAY` watch — no crash, no AVAudioEngine
+   stalls, no "modifying state during view update"; world crossfades + decor swap, MAG chip clear of
+   the corner cluster, SLICK popups. All 8 meta screens captured (`reports/shots/v12/`, commit
+   `9814f2e`): menu+daily card, shop (correct "Store unavailable" fallback under bare simctl — the
+   .storekit config only applies via the Xcode scheme), characters, missions, settings, profile
+   (signed-out GC explainer), worlds, game over (frozen TIME tile 0:06 at the forced 6-s death ✓,
+   coin breakdown sums ✓). GameKit/KVS errlog noise = expected for unsigned sim builds.
+   **Remaining**: the manual on-device feel/audio/VO items (§F.4) — in progress with Rayan.
 4. **Screenshots**: `./Tools/screenshots.sh` (6.9" sim; 6.5" needs a downloaded iPhone 11 Pro Max sim).
+
+### Device build gotcha (2026-06-10)
+The repo lives under iCloud-synced `~/Desktop` — the file provider stamps xattrs on build products
+and **codesigned builds out of the repo-local `.dd` fail** with "resource fork/detritus not allowed".
+Device builds/CLI archives must use `-derivedDataPath` outside the synced tree (used
+`/tmp/prismrush-devicedd`; Xcode GUI archive uses `~/Library/...` and is safe). Sim builds in `.dd`
+are unaffected (no codesign). Device install via `devicectl` verified on the iPhone 17 Pro Max
+(Developer Mode already enabled).
 
 ### B. App Store (after A is green) — full copy-paste detail in `docs/SHIP_CHECKLIST.md`
 1. ASC app record (`com.rayancheca.prismrush`, name "Prism Rush" — check availability).
