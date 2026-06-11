@@ -15,10 +15,16 @@ struct Profile: Codable, Equatable, Sendable {
 
     // Progression — highest world ordinal reached (enables level select / checkpoint start).
     var maxWorldReached: Int = 0
+    var bestDistanceByWorld: [Int: Double] = [:]   // best distance INTO each world index ("BEST HERE"); cloud-merges per-key max
+
+    // Progression — XP / levels (v1.3). Level is always DERIVED from totalXP via XPCurve, never stored.
+    var totalXP: Int = 0              // lifetime XP; cloud-merges as max()
+    var xpLevelRewarded: Int = 1      // highest level whose level-up coin grant was paid (watermark)
 
     // Cosmetics.
     var ownedSkins: Set<String> = ["default"]
     var selectedSkin: String = "default"
+    var seenSkins: Set<String> = ["default"]   // NEW-badge dedupe for auto-granted characters
 
     // Retention / live-ops.
     var lastDailyClaim: Date? = nil   // when the daily bonus was last claimed
@@ -30,11 +36,13 @@ struct Profile: Codable, Equatable, Sendable {
     var claimedMissions: Set<String> = []         // per-run + daily missions claimed (daily resets on rollover)
     var achievementTier: [String: Int] = [:]      // tiered achievement id → tiers already claimed
     var dailyMissionDate: Date? = nil             // UTC day the current daily mission slots belong to
+    var weeklyMissionDate: Date? = nil            // UTC week the current weekly slots belong to
 
     // Daily challenge (shared seeded run, one track per UTC day).
     var dailyChallengeBest: Int = 0               // best score on TODAY'S challenge (resets at UTC midnight)
     var dailyChallengeDate: Date? = nil           // when the challenge was last played
     var challengeDaysPlayed: Set<String> = []     // ISO "yyyy-MM-dd" (UTC) days with ≥1 challenge run
+    var challengeRewardTier: Int = 0              // highest local placement tier paid TODAY (0...3; resets with the UTC day)
 
     // Monetization flags (set by StoreKit purchases).
     var doubleCoins: Bool = false
@@ -61,6 +69,8 @@ extension Profile {
         case dailyChallengeBest, dailyChallengeDate, challengeDaysPlayed
         case doubleCoins, ownedProducts, muted, reduceFlash
         case musicVolume, sfxVolume, hapticsEnabled
+        case bestDistanceByWorld, totalXP, xpLevelRewarded, seenSkins
+        case weeklyMissionDate, challengeRewardTier
     }
 
     init(from decoder: Decoder) throws {
@@ -93,5 +103,11 @@ extension Profile {
         musicVolume = try c.decodeIfPresent(Double.self, forKey: .musicVolume) ?? d.musicVolume
         sfxVolume = try c.decodeIfPresent(Double.self, forKey: .sfxVolume) ?? d.sfxVolume
         hapticsEnabled = try c.decodeIfPresent(Bool.self, forKey: .hapticsEnabled) ?? d.hapticsEnabled
+        bestDistanceByWorld = try c.decodeIfPresent([Int: Double].self, forKey: .bestDistanceByWorld) ?? d.bestDistanceByWorld
+        totalXP = try c.decodeIfPresent(Int.self, forKey: .totalXP) ?? d.totalXP
+        xpLevelRewarded = try c.decodeIfPresent(Int.self, forKey: .xpLevelRewarded) ?? d.xpLevelRewarded
+        seenSkins = try c.decodeIfPresent(Set<String>.self, forKey: .seenSkins) ?? d.seenSkins
+        weeklyMissionDate = try c.decodeIfPresent(Date.self, forKey: .weeklyMissionDate) ?? d.weeklyMissionDate
+        challengeRewardTier = try c.decodeIfPresent(Int.self, forKey: .challengeRewardTier) ?? d.challengeRewardTier
     }
 }

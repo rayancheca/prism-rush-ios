@@ -53,6 +53,7 @@ final class ProfileStore {
         if let t = p.lastChestOpen, t > now { p.lastChestOpen = now }
         if let t = p.dailyMissionDate, t > now { p.dailyMissionDate = now }
         if let t = p.dailyChallengeDate, t > now { p.dailyChallengeDate = now }
+        if let t = p.weeklyMissionDate, t > now { p.weeklyMissionDate = now }
         return p
     }
 
@@ -98,6 +99,29 @@ final class ProfileStore {
     func owns(skin id: String) -> Bool { profile.ownedSkins.contains(id) }
     func unlock(skin id: String) { mutate { $0.ownedSkins.insert(id) } }
     func select(skin id: String) { mutate { $0.selectedSkin = id } }
+
+    /// The ONLY way any consumer reads the player's level (R9) — derived, never stored.
+    var playerLevel: Int { XPCurve.level(for: profile.totalXP) }
+
+    /// Insert every newly-earned skin into ownedSkins; returns the new ones (for the unlock toast).
+    /// ownedSkins insertion IS the dedupe — a skin is "new" exactly once, and the existing
+    /// cloud-merge `formUnion(ownedSkins)` syncs grants across devices for free. Coin/IAP skins
+    /// never auto-grant (`SkinUnlocks.earned` returns false — they go through buy/shop flows).
+    @discardableResult
+    func refreshSkinUnlocks(level: Int) -> [Skin] {
+        let new = SkinCatalog.all.filter {
+            !profile.ownedSkins.contains($0.id) && SkinUnlocks.earned($0, profile: profile, level: level)
+        }
+        guard !new.isEmpty else { return [] }
+        mutate { p in for s in new { p.ownedSkins.insert(s.id) } }
+        return new
+    }
+
+    /// Clear the NEW badges: everything currently owned has now been seen (CharacterSelect onAppear).
+    func markSkinsSeen() {
+        guard !profile.ownedSkins.subtracting(profile.seenSkins).isEmpty else { return }
+        mutate { $0.seenSkins.formUnion($0.ownedSkins) }
+    }
 
     /// The deepest starting world offered in level select (matches the world cards the UI shows).
     static let maxStartWorlds = 12
@@ -209,10 +233,60 @@ final class ProfileStore {
         }
     }
 
-    /// Fold one finished run into per-run, daily, and lifetime mission progress.
-    func applyRunSummary(_ summary: RunSummary, now: Date = Date()) {
-        refreshDailyMissions(now: now)
+    /// This week's 3 weekly mission slots (deterministic per UTC week). Also rolls progress over
+    /// if the stored slots belong to a previous week — mirrors `dailyMissions`.
+    func weeklyMissions(now: Date = Date()) -> [Mission] {
+        refreshWeeklyMissions(now: now)
+        return MissionCatalog.weeklySlots(weeksSinceEpoch: Self.daysSinceEpoch(now) / 7)
+    }
+
+    /// If the UTC week changed since the last visit, wipe weekly progress + claims so the new
+    /// board starts clean. `min(last, now)` is the clock-rollback clamp: setting the clock back
+    /// keeps the current board (and its claims) instead of re-rolling a claimable one.
+    func refreshWeeklyMissions(now: Date = Date()) {
+        let thisWeek = Self.daysSinceEpoch(now) / 7
+        if let last = profile.weeklyMissionDate,
+           Self.daysSinceEpoch(min(last, now)) / 7 == thisWeek { return }
+        let ids = Set(MissionCatalog.weeklyPool.map(\.id))
         mutate {
+            $0.weeklyMissionDate = now
+            for id in ids {
+                $0.missionProgress.removeValue(forKey: id)
+                $0.claimedMissions.remove(id)
+            }
+        }
+    }
+
+    /// Fold one finished run into XP/levels (watermarked coin grants), the per-world best map,
+    /// and per-run / daily / weekly / lifetime mission progress. Called exactly once per run
+    /// (GameView's `statsRecorded` guard) — post-revive deaths never re-enter, so XP inherits
+    /// once-per-run for free (rule 9).
+    @discardableResult
+    func applyRunSummary(_ summary: RunSummary, now: Date = Date()) -> LevelUpResult {
+        refreshDailyMissions(now: now)
+        refreshWeeklyMissions(now: now)
+        let xp = XPCurve.xp(for: summary)
+        let before = XPCurve.level(for: profile.totalXP)
+        let after = XPCurve.level(for: profile.totalXP + xp)
+        // Pay each crossed level once, EVER — watermarked so a cloud merge that raises the level
+        // without a run (totalXP/xpLevelRewarded both merge as max) can never double-pay.
+        var grant = 0
+        let firstUnpaid = max(before, profile.xpLevelRewarded) + 1
+        if firstUnpaid <= after {
+            grant = (firstUnpaid...after).reduce(0) { $0 + XPCurve.coinGrant(forLevel: $1) }
+        }
+        mutate {
+            $0.totalXP += xp
+            if grant > 0 { $0.coins += grant; $0.totalCoinsEarned += grant }
+            $0.xpLevelRewarded = max($0.xpLevelRewarded, after)
+            // Per-world best distance (R14): credit every world index this run traversed with how
+            // far INTO it the run got (absolute position = startWorld·L + distance, L per world).
+            let L = Tuning.worldLength
+            let finalWorld = max(summary.startWorld, summary.worldsCrossed - 1)
+            for w in summary.startWorld...finalWorld {
+                let into = min(L, Double(summary.startWorld) * L + summary.distance - Double(w) * L)
+                $0.bestDistanceByWorld[w] = max($0.bestDistanceByWorld[w] ?? 0, into)
+            }
             for m in MissionCatalog.perRun {
                 // Per-run missions track the best single-run value (the run must do it alone).
                 let v = m.metric.value(in: summary)
@@ -221,10 +295,17 @@ final class ProfileStore {
             for m in MissionCatalog.dailyPool {
                 Self.bump(&$0.missionProgress, id: m.id, metric: m.metric, in: summary)
             }
+            for m in MissionCatalog.weeklyPool {
+                Self.bump(&$0.missionProgress, id: m.id, metric: m.metric, in: summary)
+            }
             for m in MissionCatalog.achievements {
                 Self.bump(&$0.missionProgress, id: m.id, metric: m.metric, in: summary)
             }
         }
+        let unlocked = after > before
+            ? XPCurve.xpUnlockLevels.filter { $0 > before && $0 <= after } : []
+        return LevelUpResult(xpGained: xp, levelBefore: before, levelAfter: after,
+                             coinsGranted: grant, unlockedLevels: unlocked)
     }
 
     private static func bump(_ progress: inout [String: Double], id: String, metric: Mission.Metric, in summary: RunSummary) {
@@ -239,7 +320,8 @@ final class ProfileStore {
 
     /// Bump every mission tracking `metric` by a flat amount (non-run events, e.g. chest opens).
     private static func bump(_ progress: inout [String: Double], metric: Mission.Metric, by amount: Double) {
-        for m in MissionCatalog.perRun + MissionCatalog.dailyPool + MissionCatalog.achievements
+        for m in MissionCatalog.perRun + MissionCatalog.dailyPool + MissionCatalog.weeklyPool
+            + MissionCatalog.achievements
         where m.metric == metric {
             progress[m.id] = (progress[m.id] ?? 0) + amount
         }
@@ -259,7 +341,7 @@ final class ProfileStore {
     func missionState(_ m: Mission, now: Date = Date()) -> MissionState {
         let progress = profile.missionProgress[m.id] ?? 0
         switch m.scope {
-        case .perRun, .daily:
+        case .perRun, .daily, .weekly:
             let claimed = profile.claimedMissions.contains(m.id)
             return MissionState(progress: min(progress, m.target), target: m.target, reward: m.rewardCoins,
                                 claimable: !claimed && progress >= m.target, claimed: claimed,
@@ -275,22 +357,28 @@ final class ProfileStore {
         }
     }
 
-    /// Claim a completed mission → coins. Daily board is refreshed first so a stale claim from
-    /// yesterday's board can't pay out today.
+    /// Claim a completed mission → coins. Daily/weekly boards are refreshed first so a stale
+    /// claim from yesterday's (or last week's) board can't pay out today.
     @discardableResult
     func claimMission(_ id: String, now: Date = Date()) -> Int? {
         refreshDailyMissions(now: now)
+        refreshWeeklyMissions(now: now)
         guard let m = MissionCatalog.mission(id) else { return nil }
         if case .daily = m.scope {
             // Only today's 3 slots are claimable (pool missions still accumulate quietly).
             guard MissionCatalog.dailySlots(daysSinceEpoch: Self.daysSinceEpoch(now))
                 .contains(where: { $0.id == id }) else { return nil }
         }
+        if case .weekly = m.scope {
+            // Only this week's 3 slots are claimable (same rule as the daily board).
+            guard MissionCatalog.weeklySlots(weeksSinceEpoch: Self.daysSinceEpoch(now) / 7)
+                .contains(where: { $0.id == id }) else { return nil }
+        }
         let state = missionState(m, now: now)
         guard state.claimable, state.reward > 0 else { return nil }
         mutate {
             switch m.scope {
-            case .perRun, .daily:
+            case .perRun, .daily, .weekly:
                 $0.claimedMissions.insert(id)
             case .lifetimeTiered:
                 $0.achievementTier[id] = state.tier + 1
@@ -304,7 +392,9 @@ final class ProfileStore {
     /// How many missions/achievement tiers are ready to claim (menu badge).
     func unclaimedCount(now: Date = Date()) -> Int {
         refreshDailyMissions(now: now)
-        let active = MissionCatalog.perRun + dailyMissions(now: now) + MissionCatalog.achievements
+        refreshWeeklyMissions(now: now)
+        let active = MissionCatalog.perRun + dailyMissions(now: now) + weeklyMissions(now: now)
+            + MissionCatalog.achievements
         return active.filter { missionState($0, now: now).claimable }.count
     }
 
@@ -324,10 +414,21 @@ final class ProfileStore {
         return profile.dailyChallengeBest
     }
 
-    /// Record a finished challenge run: keeps the per-UTC-day best and marks the day played.
-    func recordChallengeRun(score: Int, now: Date = Date()) {
+    /// Local placement tiers for the daily challenge: (score threshold, coin increment). Offline-
+    /// friendly — every player gets them without Game Center; ≤500 coins/day, once per tier.
+    static let challengeTiers = [(1_000, 100), (5_000, 150), (15_000, 250)]
+
+    /// Record a finished challenge run: keeps the per-UTC-day best, marks the day played, and
+    /// pays any newly crossed local placement tiers (R16). Returns the payout (0 if none) so
+    /// GameView can toast "CHALLENGE TIER n · +coins". The tier watermark resets with the UTC
+    /// day; `sameDay` routes through `clamped()`, so clock-rollback hardening is inherited.
+    @discardableResult
+    func recordChallengeRun(score: Int, now: Date = Date()) -> Int {
         let today = Self.utcDayKey(now)
         let sameDay = clamped(profile.dailyChallengeDate, now: now).map { Self.utcDayKey($0) == today } ?? false
+        let newTier = Self.challengeTiers.lastIndex { score >= $0.0 }.map { $0 + 1 } ?? 0
+        let paidTier = sameDay ? profile.challengeRewardTier : 0
+        let payout = (paidTier..<max(paidTier, newTier)).reduce(0) { $0 + Self.challengeTiers[$1].1 }
         mutate {
             $0.dailyChallengeBest = sameDay ? max($0.dailyChallengeBest, score) : score
             $0.dailyChallengeDate = now
@@ -337,7 +438,10 @@ final class ProfileStore {
                 let keep = $0.challengeDaysPlayed.sorted().suffix(60)
                 $0.challengeDaysPlayed = Set(keep)
             }
+            $0.challengeRewardTier = sameDay ? max($0.challengeRewardTier, newTier) : newTier
+            if payout > 0 { $0.coins += payout; $0.totalCoinsEarned += payout }
         }
+        return payout
     }
 
     /// Whether the challenge was played on the UTC day `offset` days before today (0 = today).
@@ -365,13 +469,14 @@ final class ProfileStore {
         return Profile()
     }
 
-    #if canImport(Darwin)
-    private func mergeFromCloud() {
-        guard let data = cloud.data(forKey: localKey),
-              let decoded = try? JSONDecoder().decode(Profile.self, from: data) else { return }
-        let remote = ProfileStore.sanitized(decoded)
-        // Conservative merge: keep the higher progression/coins (last-writer-wins would lose coins).
-        var merged = profile
+    /// Conservative two-way profile merge (iCloud): keep the higher progression/coins, union the
+    /// monotonic sets, per-key-max the maps (last-writer-wins would lose coins). Pure + static so
+    /// the merge rules pin in Linux tests. `totalXP`/`xpLevelRewarded` merge as max — paired with
+    /// the grant watermark, a merge that raises level without a run can never double-pay.
+    /// `weeklyMissionDate`/`challengeRewardTier` are deliberately NOT merged: device-local boards
+    /// (missionProgress already merges by max; same accepted risk class as the daily board).
+    static func merged(local: Profile, remote: Profile) -> Profile {
+        var merged = local
         merged.coins = max(merged.coins, remote.coins)
         merged.bestScore = max(merged.bestScore, remote.bestScore)
         merged.maxWorldReached = max(merged.maxWorldReached, remote.maxWorldReached)
@@ -382,6 +487,19 @@ final class ProfileStore {
         merged.claimedMissions.formUnion(remote.claimedMissions)
         merged.achievementTier.merge(remote.achievementTier) { mine, theirs in max(mine, theirs) }
         merged.challengeDaysPlayed.formUnion(remote.challengeDaysPlayed)
+        merged.totalXP = max(merged.totalXP, remote.totalXP)
+        merged.xpLevelRewarded = max(merged.xpLevelRewarded, remote.xpLevelRewarded)
+        merged.seenSkins.formUnion(remote.seenSkins)
+        merged.bestDistanceByWorld.merge(remote.bestDistanceByWorld) { mine, theirs in max(mine, theirs) }
+        return merged
+    }
+
+    #if canImport(Darwin)
+    private func mergeFromCloud() {
+        guard let data = cloud.data(forKey: localKey),
+              let decoded = try? JSONDecoder().decode(Profile.self, from: data) else { return }
+        let remote = ProfileStore.sanitized(decoded)
+        let merged = Self.merged(local: profile, remote: remote)
         if merged != profile { profile = merged; save() }
     }
 

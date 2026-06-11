@@ -140,12 +140,13 @@ final class MissionsTests: XCTestCase {
         let now = utc(2026, 6, 10)
         // ach.gems tiers: 100 / 1,000 / 10,000 → 50 / 200 / 1,000 coins.
         store.applyRunSummary(summary(.gems, 1_200), now: now)
+        let coinsBeforeClaims = store.profile.coins   // v1.3: big runs also pay level-up grants
         XCTAssertEqual(store.claimMission("ach.gems", now: now), 50, "tier 1 pays first")
         XCTAssertEqual(store.profile.achievementTier["ach.gems"], 1)
         XCTAssertEqual(store.claimMission("ach.gems", now: now), 200, "tier 2 unlocked by the same progress")
         XCTAssertEqual(store.profile.achievementTier["ach.gems"], 2)
         XCTAssertNil(store.claimMission("ach.gems", now: now), "tier 3 needs 10,000 lifetime gems")
-        XCTAssertEqual(store.profile.coins, 250)
+        XCTAssertEqual(store.profile.coins, coinsBeforeClaims + 250)
 
         store.applyRunSummary(summary(.gems, 9_000), now: now)   // lifetime 10,200
         XCTAssertEqual(store.claimMission("ach.gems", now: now), 1_000)

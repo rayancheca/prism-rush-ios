@@ -144,5 +144,12 @@ final class EconomyTests: XCTestCase {
         XCTAssertEqual(p.maxWorldReached, 4)
         XCTAssertEqual(p.loginStreak, 0, "missing new field defaults, not throws")
         XCTAssertNil(p.lastChestOpen)
+        // v1.3's six new fields default too — old saves never wipe, never fail (iron rule 7).
+        XCTAssertEqual(p.totalXP, 0)
+        XCTAssertEqual(p.xpLevelRewarded, 1)
+        XCTAssertNil(p.weeklyMissionDate)
+        XCTAssertEqual(p.challengeRewardTier, 0)
+        XCTAssertEqual(p.seenSkins, ["default"])
+        XCTAssertTrue(p.bestDistanceByWorld.isEmpty)
     }
 }

@@ -14,12 +14,15 @@ struct RunSummary: Sendable, Equatable {
     var worldsCrossed: Int = 1    // core.maxWorld + 1 (1-based highest world reached this run)
     var revives: Int = 0          // core.revivesUsed
     var duration: Double = 0      // wall-clock seconds in .play this run
+    var startWorld: Int = 0       // checkpoint start world (0 = full run) — XP world-delta basis
 }
 
-/// A mission: a metric, a target, and a coin reward. Three scopes:
+/// A mission: a metric, a target, and a coin reward. Four scopes:
 /// - `perRun`   — the target must be hit within a single run (progress = best single-run value).
 /// - `daily`    — accumulates across today's runs, resets at UTC midnight. Three slots are picked
 ///                deterministically per UTC day, so everyone sees the same board.
+/// - `weekly`   — accumulates across the UTC week (week key = daysSinceEpoch / 7); 3 slots drawn
+///                deterministically per week, big payouts (the v1.3 long-pull earn loop).
 /// - `lifetimeTiered` — an achievement ladder; each tier pays out once, in order.
 struct Mission: Identifiable, Sendable {
     enum Metric: String, Sendable, CaseIterable {
@@ -55,6 +58,7 @@ struct Mission: Identifiable, Sendable {
     enum Scope: Sendable {
         case perRun
         case daily
+        case weekly
         case lifetimeTiered(targets: [Double], rewards: [Int])
     }
 
@@ -92,6 +96,19 @@ enum MissionCatalog {
         Mission(id: "day.chest2",  title: "Open 2 free chests today",     metric: .chestsOpened, target: 2,    rewardCoins: 80,  scope: .daily),
     ]
 
+    /// Weekly pool — 3 slots are drawn from this per UTC week (see `weeklySlots`). Targets are
+    /// ≈6–7× the daily ones, rewards 600–900; every metric is one the run pipeline already bumps
+    /// (R10 — `wk.chest10` deliberately cut: chest opens don't flow through RunSummary).
+    static let weeklyPool: [Mission] = [
+        Mission(id: "wk.gems1k",   title: "Collect 1,000 gems this week",     metric: .gems,         target: 1_000,  rewardCoins: 700, scope: .weekly),
+        Mission(id: "wk.dist20k",  title: "Travel 20,000 m this week",        metric: .distance,     target: 20_000, rewardCoins: 800, scope: .weekly),
+        Mission(id: "wk.runs30",   title: "Finish 30 runs this week",         metric: .runsFinished, target: 30,     rewardCoins: 600, scope: .weekly),
+        Mission(id: "wk.close75",  title: "Score 75 CLOSE bonuses this week", metric: .nearMisses,   target: 75,     rewardCoins: 900, scope: .weekly),
+        Mission(id: "wk.slick35",  title: "Score 35 SLICK bonuses this week", metric: .slickBonuses, target: 35,     rewardCoins: 900, scope: .weekly),
+        Mission(id: "wk.slide60",  title: "Slide 60 times this week",         metric: .slides,       target: 60,     rewardCoins: 600, scope: .weekly),
+        Mission(id: "wk.streak25", title: "Reach a 25-gem streak this week",  metric: .streakBest,   target: 25,     rewardCoins: 700, scope: .weekly),
+    ]
+
     /// Lifetime achievement ladders (tier N pays once, in order).
     static let achievements: [Mission] = [
         Mission(id: "ach.gems",   title: "Gem Hoarder",     metric: .gems,         target: 0, rewardCoins: 0,
@@ -111,7 +128,7 @@ enum MissionCatalog {
     ]
 
     static func mission(_ id: String) -> Mission? {
-        (perRun + dailyPool + achievements).first { $0.id == id }
+        (perRun + dailyPool + weeklyPool + achievements).first { $0.id == id }
     }
 
     /// Domain-separation tag ("MISSIONS") so the daily-mission stream can never collide with the
@@ -123,6 +140,22 @@ enum MissionCatalog {
     static func dailySlots(daysSinceEpoch: Int) -> [Mission] {
         var rng = SplitMix64(seed: UInt64(bitPattern: Int64(daysSinceEpoch)) ^ dailyTag)
         var pool = dailyPool
+        var picked: [Mission] = []
+        for _ in 0..<min(3, pool.count) {
+            picked.append(pool.remove(at: rng.int(0, pool.count - 1)))
+        }
+        return picked
+    }
+
+    /// Domain-separation tag ("WEEKLY13") — the weekly stream can never collide with the daily
+    /// mission, daily challenge, or run-seed streams. Meta-layer SplitMix64 only: this never
+    /// feeds `startRun(seed:)`, so it has zero layoutVersion implications (rule 2/3).
+    private static let weeklyTag: UInt64 = 0x5745_454B_4C59_3133
+
+    /// The 3 weekly mission slots for a given UTC week — deterministic, mirrors `dailySlots`.
+    static func weeklySlots(weeksSinceEpoch: Int) -> [Mission] {
+        var rng = SplitMix64(seed: UInt64(bitPattern: Int64(weeksSinceEpoch)) ^ weeklyTag)
+        var pool = weeklyPool
         var picked: [Mission] = []
         for _ in 0..<min(3, pool.count) {
             picked.append(pool.remove(at: rng.int(0, pool.count - 1)))
