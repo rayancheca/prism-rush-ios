@@ -210,6 +210,47 @@ final class InteractionUITests: XCTestCase {
                       "GET COINS should route to the Shop")
     }
 
+    /// v1.4.2 — the first-run tutorial gate covers EVERY run entrance (AUDIT D6-1) and the ✕
+    /// never force-starts a run (D6-2). PR_FIRSTRUN pins a zero-run profile regardless of what
+    /// earlier CI cycles banked on this simulator. Three legs, in order:
+    /// (1) FIRST RUN chip is informational — ✕ returns to the menu, no run;
+    /// (2) the rail's DAILY RUSH cell interposes the tutorial — ✕ cancels, no run;
+    /// (3) PLAY interposes the tutorial — LET'S GO (page 5) actually starts the chosen run.
+    func testFirstRunGateCoversEntrancesAndCancelNeverStarts() {
+        let app = launch(["PR_FIRSTRUN": "1"])
+        let close = app.buttons["howToPlayClose"]
+        let play = app.buttons["playButton"]
+
+        // (1) info tap: FIRST RUN chip → tutorial → ✕ → menu, no run started. NOTE: the menu
+        // stays in the hierarchy under the overlay, so "playButton exists" proves nothing —
+        // dismissal is the ✕ disappearing, "no run" is the pause button never materializing.
+        let chip = element(app, id: "bestChip")
+        XCTAssertTrue(chip.waitForExistence(timeout: 8), "zero-run menu should show the FIRST RUN chip")
+        chip.tap()
+        XCTAssertTrue(close.waitForExistence(timeout: 6), "the chip should open the tutorial")
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: 6), "✕ should dismiss the tutorial")
+        XCTAssertFalse(app.buttons["pauseButton"].exists, "the info ✕ must never start a run")
+        XCTAssertTrue(play.isHittable, "the menu should be back in front")
+
+        // (2) Daily Rush on a zero-run profile: tutored first, and ✕ still just cancels.
+        element(app, id: "railDaily").tap()
+        XCTAssertTrue(close.waitForExistence(timeout: 6),
+                      "a zero-run Daily Rush tap should interpose the tutorial")
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: 6), "✕ should cancel the gated tutorial")
+        XCTAssertFalse(app.buttons["pauseButton"].exists, "cancelling the gate must not start the challenge")
+        XCTAssertTrue(play.isHittable, "the menu should be back in front")
+
+        // (3) PLAY: tutorial, then LET'S GO commits to the run (4 × NEXT + the final button).
+        play.tap()
+        let next = app.buttons["howToPlayNext"]
+        XCTAssertTrue(next.waitForExistence(timeout: 6), "zero-run PLAY should interpose the tutorial")
+        for _ in 0..<5 { next.tap() }
+        XCTAssertTrue(app.buttons["pauseButton"].waitForExistence(timeout: 8),
+                      "LET'S GO should start the chosen run")
+    }
+
     /// v1.4 — the missions claim pipeline: CLAIM ALL cascade first (top of the board, sweeps the
     /// three seeded tier-1 achievements + any strays to zero), then the single-claim leg on
     /// ach.chests, which the demo profile pins past BOTH tier targets so exactly one claimable

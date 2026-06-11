@@ -2,8 +2,8 @@ import SwiftUI
 
 /// In-run heads-up display, on a diet (uiux §6.8): score top-left (BEST hidden during play — it
 /// returns only as the ghost-chase chip when you're within 10% of it), the merged gem/multiplier
-/// pill top-right, icon timer rings for the power-ups, flow pips and the boost ring. Reads the
-/// observed `core.snapshot`, refreshes per frame, and stays strictly non-interactive.
+/// pill top-right, icon timer rings for the power-ups, and flow pips. Reads the observed
+/// `core.snapshot`, refreshes per frame, and stays strictly non-interactive.
 struct HUDView: View {
     let core: GameCore
 
@@ -43,10 +43,12 @@ struct HUDView: View {
 
     // MARK: ghost chase — BEST appears only when it's actually a chase
 
-    /// One-shot chase chip when within 10% of the best (and a best exists): "BEST 320 AHEAD" in
-    /// the world accent. It vanishes on crossing — the NEW BEST celebration takes over.
+    /// One-shot chase chip when within 10% of the best: "BEST 320 AHEAD" in the world accent.
+    /// It vanishes on crossing — the NEW BEST celebration takes over. Floored at a 1,000 best
+    /// (AUDIT D6-6): a tiny run-1 best would pop-and-vanish this in seconds during the exact
+    /// window a new player is still learning the controls.
     @ViewBuilder private func ghostChaseChip(_ snap: GameSnapshot) -> some View {
-        if snap.best > 0, snap.score < snap.best,
+        if snap.best >= 1_000, snap.score < snap.best,
            Double(snap.score) >= 0.9 * Double(snap.best) {
             let accent = Theme.color(Theme.worlds[snap.worldTo % 3].accent2)
             Text("BEST \(snap.best - snap.score) AHEAD")
@@ -91,15 +93,13 @@ struct HUDView: View {
 
     // MARK: power-up timer rings (uiux §6.8 — icons in circular depletion strokes, no rainbow)
 
+    /// Overdrive deliberately has NO ring (AUDIT D6-7): `boostDuration` is ~1 s, so its ring was
+    /// unreadable churn next to the OVERDRIVE popup + SFX + speed FX that already announce it.
     @ViewBuilder private func timerRings(_ snap: GameSnapshot) -> some View {
         let anyActive = snap.magnetRemaining > 0 || snap.doublerRemaining > 0
-            || snap.chronoRemaining > 0 || snap.boostRemaining > 0
+            || snap.chronoRemaining > 0
         if anyActive {
             HStack(spacing: 8) {
-                if snap.boostRemaining > 0 {
-                    timerRing("bolt.fill", remaining: snap.boostRemaining,
-                              duration: Tuning.boostDuration, name: "Overdrive")
-                }
                 if snap.magnetRemaining > 0 {
                     timerRing("dot.radiowaves.left.and.right", remaining: snap.magnetRemaining,
                               duration: Tuning.magnetDuration, name: "Magnet")

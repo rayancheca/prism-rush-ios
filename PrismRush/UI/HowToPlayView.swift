@@ -1,14 +1,23 @@
 import SwiftUI
 
-/// Four swipeable tutorial cards (controls / scoring / rings & flow / power-ups), built entirely
-/// from shapes and SF Symbols — no assets. Shown from Settings, and before the first PLAY when
-/// `profile.totalRuns == 0`. The RINGS & FLOW card teaches the three v1.3 mechanics.
+/// Five swipeable tutorial cards (controls / scoring / rings & flow / worlds / power-ups), built
+/// entirely from shapes and SF Symbols — no assets. Shown from Settings, from the menu's FIRST
+/// RUN chip, and before any first run when `profile.totalRuns == 0` (GameModel's gate, AUDIT
+/// D6-1). The RINGS & FLOW card teaches the three v1.3 mechanics; the WORLDS card teaches the
+/// 800 m transition + checkpoints (D6-3). Mechanic numbers derive from `Tuning` so a retune can
+/// never silently turn this copy into a lie (D2-7).
 struct HowToPlayView: View {
+    /// The ✕ — ALWAYS a plain dismissal, never a run start (AUDIT D6-2: backing out of an info
+    /// tap must not be a gameplay commitment).
     let onClose: () -> Void
-    /// Label on the final card's dismiss button ("GOT IT" from Settings, "LET'S GO" pre-first-run).
+    /// Final card's button. nil → behaves like the ✕ (plain dismiss — Settings, FIRST RUN chip);
+    /// the first-run gate passes the deferred run start here, so ONLY "LET'S GO" commits.
+    var onDone: (() -> Void)? = nil
+    /// Label on the final card's button ("GOT IT" info-mode, "LET'S GO" pre-first-run).
     var doneLabel: String = "GOT IT"
 
     @State private var page = 0
+    private static let lastPage = 4
 
     var body: some View {
         VStack(spacing: 0) {
@@ -38,15 +47,16 @@ struct HowToPlayView: View {
                 controlsCard.tag(0)
                 scoringCard.tag(1)
                 flowCard.tag(2)
-                powerUpsCard.tag(3)
+                worldsCard.tag(3)
+                powerUpsCard.tag(4)
             }
             .tabViewStyle(.page(indexDisplayMode: .always))
             .indexViewStyle(.page(backgroundDisplayMode: .always))
 
             Button {
-                if page < 3 { withAnimation { page += 1 } } else { onClose() }
+                if page < Self.lastPage { withAnimation { page += 1 } } else { (onDone ?? onClose)() }
             } label: {
-                Text(page < 3 ? "NEXT" : doneLabel)
+                Text(page < Self.lastPage ? "NEXT" : doneLabel)
                     .font(.system(size: 17, weight: .heavy, design: .rounded))
                     .tracking(2)
                     .foregroundStyle(.black)
@@ -117,14 +127,15 @@ struct HowToPlayView: View {
                 .foregroundStyle(.white.opacity(0.85))
                 .multilineTextAlignment(.center)
 
+            // Ladder derived from Tuning (AUDIT D2-7): a multCap retune can't strand this copy.
             HStack(spacing: 6) {
-                ForEach(1...5, id: \.self) { mult in
+                ForEach(1...Tuning.multCap, id: \.self) { mult in
                     Text("×\(mult)")
                         .font(.system(size: 13, weight: .heavy, design: .rounded))
-                        .foregroundStyle(mult == 5 ? .black : .white.opacity(0.85))
+                        .foregroundStyle(mult == Tuning.multCap ? .black : .white.opacity(0.85))
                         .padding(.horizontal, 10).padding(.vertical, 6)
                         .background(
-                            mult == 5
+                            mult == Tuning.multCap
                                 ? AnyShapeStyle(Theme.goldGradient)
                                 : AnyShapeStyle(.white.opacity(0.06 + Double(mult) * 0.04)),
                             in: Capsule()
@@ -133,7 +144,7 @@ struct HowToPlayView: View {
             }
             .padding(.vertical, 6)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Streak multiplier ladder, times 1 up to times 5")
+            .accessibilityLabel("Streak multiplier ladder, times 1 up to times \(Tuning.multCap)")
 
             instructionRow("scope", "CLOSE", "shave past an obstacle for bonus points")
             instructionRow("water.waves", "SLICK", "slide under a bar at the last instant")
@@ -155,13 +166,49 @@ struct HowToPlayView: View {
                 .padding(.bottom, 14)
                 .accessibilityHidden(true)
 
+            // Numbers derive from Tuning (AUDIT D2-7) — never hardcoded copies of the sim.
             instructionRow("circle.dashed", "PRISM RINGS", "dive through for bonus coins — dead-centre pays PERFECT")
-            instructionRow("bolt.fill", "OVERDRIVE PADS", "hit the glowing pad for a one-second speed surge")
-            instructionRow("wind", "FLOW SURGE", "chain 3 near-misses to detonate a gem fountain")
+            instructionRow("bolt.fill", "OVERDRIVE PADS",
+                           "hit the glowing pad for a \(Tuning.boostDuration.formatted())-second speed surge")
+            instructionRow("wind", "FLOW SURGE",
+                           "chain \(Tuning.flowPerSurge) near-misses to detonate a gem fountain")
         }
     }
 
-    // MARK: card 4 — power-ups
+    // MARK: card 4 — worlds (the v1.4 ladder — AUDIT D6-3: the 800 m crossfade is taught, not sprung)
+
+    private var worldsCard: some View {
+        card(title: "WORLDS", accent: 0xFF5E3A) {
+            // Three world tiles, one constant runner — the scenery shifts, the character doesn't.
+            HStack(spacing: 8) {
+                worldTile(0x00F5FF)
+                worldTile(0xB26BFF)
+                worldTile(0xFF5E3A)
+            }
+            .padding(.bottom, 8)
+            .accessibilityHidden(true)
+
+            instructionRow("globe", "NEW WORLDS",
+                           "every \(Int(Tuning.worldLength))m the scenery transforms mid-run")
+            instructionRow("flag.fill", "CHECKPOINTS", "reach a world once to start from it in the WORLDS tab")
+            instructionRow("checkmark.seal.fill", "YOUR RUNNER", "your character never changes — only the world does")
+        }
+    }
+
+    /// One world swatch with the same cyan runner on every tile (decree 1, made visual).
+    private func worldTile(_ hex: UInt32) -> some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(Theme.color(hex).opacity(0.18))
+            .frame(width: 56, height: 72)
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.color(hex).opacity(0.5)))
+            .overlay {
+                Circle().fill(Theme.color(0x00F5FF))
+                    .frame(width: 16, height: 16)
+                    .shadow(color: Theme.color(0x00F5FF), radius: 6)
+            }
+    }
+
+    // MARK: card 5 — power-ups
 
     private var powerUpsCard: some View {
         card(title: "POWER-UPS", accent: 0x00FF88) {

@@ -85,6 +85,16 @@ struct GameOverView: View {
             if revivesRemain {
                 continueSection
                     .padding(.top, 16)
+            } else if isChallengeRun {
+                // The tutorial promises CONTINUE; a challenge death hides it BY DESIGN — say so
+                // instead of silently omitting the feature (AUDIT D3-2, sells the fair track).
+                Text("NO CONTINUES IN DAILY RUSH — EVERYONE RUNS THE SAME FAIR TRACK")
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .tracking(1.2)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Theme.Role.textTertiary)
+                    .padding(.top, 14)
+                    .accessibilityLabel("No continues in Daily Rush. Everyone runs the same fair track.")
             }
 
             Button(action: onRestart) {
@@ -102,7 +112,7 @@ struct GameOverView: View {
             .disabled(!canRestart)
             .opacity(canRestart ? 1 : 0.55)
             .accessibilityIdentifier("runAgainButton")
-            .padding(.top, revivesRemain ? 12 : 22)
+            .padding(.top, revivesRemain || isChallengeRun ? 12 : 22)
 
             Button(action: onHome) {
                 Text("BACK TO MENU")
@@ -213,7 +223,10 @@ struct GameOverView: View {
             .accessibilityLabel("Earned \(coinsEarned) coins\(doubled ? ", doubled" : "")")
             .accessibilityHint(hasBreakdown ? "Shows the coin breakdown." : "")
 
-            if !doubled, let onGetCoins {
+            // Deferred until run 3 (AUDIT D5-3): the first deaths stay monetization-free — the
+            // upsell lands once the player knows what coins buy (decree 6, calm). Live store
+            // read in body (G3); honest as ever: the Shop really pays ×2.
+            if !doubled, ProfileStore.shared.profile.totalRuns >= 3, let onGetCoins {
                 // The ×2 state taps through to the shop's Double Coins row when not owned.
                 Button(action: onGetCoins) {
                     Text("EARN ×2 WITH DOUBLE COINS →")

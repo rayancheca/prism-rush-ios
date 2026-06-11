@@ -42,18 +42,20 @@ struct RewardsBar: View {
 
     // MARK: cells
 
-    /// DAILY RUSH — starts the seeded daily challenge directly. Sub-line: today's best, or the
-    /// per-minute countdown to the next track (the per-second countdown is demoted, uiux §5.10).
+    /// DAILY RUSH — starts the seeded daily challenge directly. Sub-line: today's best, or
+    /// "PLAY · ENDS H:MM" (AUDIT D6-4: a bare "NEW H:MM" countdown reads as "locked for H:MM" —
+    /// the verb makes playable-NOW unmistakable; the countdown is the track's expiry, per-minute
+    /// tick per uiux §5.10).
     private func dailyCell(store: ProfileStore, now: Date, lit: Bool) -> some View {
         let bestToday = store.todaysChallengeBest(now: now)
-        let sub = bestToday > 0 ? "BEST \(bestToday)" : "NEW \(newTrackCountdown(now: now))"
+        let sub = bestToday > 0 ? "BEST \(bestToday)" : "PLAY · ENDS \(trackEndsCountdown(now: now))"
         return railCell(glyph: "bolt.fill", title: "DAILY RUSH", sub: sub, lit: lit) {
             model.startDailyChallenge()
         }
         .accessibilityIdentifier("railDaily")
         .accessibilityLabel(bestToday > 0
                             ? "Daily Rush. Best today \(bestToday)."
-                            : "Daily Rush, not played yet. New track in \(newTrackA11y(now: now)).")
+                            : "Daily Rush, playable now. Today's track ends in \(trackEndsA11y(now: now)).")
         .accessibilityHint("Starts today's shared challenge run.")
     }
 
@@ -127,12 +129,13 @@ struct RewardsBar: View {
         .accessibilityElement(children: .ignore)
     }
 
-    private func newTrackCountdown(now: Date) -> String {
+    /// H:MM until today's track expires (UTC midnight — the moment the next one begins).
+    private func trackEndsCountdown(now: Date) -> String {
         let secs = Int(ProfileStore.secondsUntilUTCMidnight(now: now))
         return String(format: "%d:%02d", secs / 3600, (secs / 60) % 60)
     }
 
-    private func newTrackA11y(now: Date) -> String {
+    private func trackEndsA11y(now: Date) -> String {
         let mins = Int(ProfileStore.secondsUntilUTCMidnight(now: now)) / 60
         return "\(mins / 60) hours \(mins % 60) minutes"
     }

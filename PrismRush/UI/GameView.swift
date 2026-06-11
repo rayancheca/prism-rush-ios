@@ -55,6 +55,11 @@ final class GameModel {
     /// True while the current run is today's shared challenge (revive is disabled — fair, shared
     /// track; checkpoint starts are structurally impossible, the entry point always seeds world 0).
     private(set) var isChallengeRun = false
+    /// First-run tutorial gate (AUDIT D6-1): non-nil while the tutorial is interposed before a
+    /// run. Holds the ORIGINAL deferred start (menu PLAY, the rail's DAILY RUSH cell, or Worlds'
+    /// PLAY FROM HERE / world cards) so LET'S GO proceeds to the run the player actually chose;
+    /// the ✕ just clears it (D6-2 — an info tap is never a gameplay commitment).
+    private(set) var pendingFirstRunStart: (() -> Void)?
     /// Seconds actually spent in `.play` this run (accumulated in the frame loop; pause, the death
     /// panel and revive shopping don't count — feeds the game-over TIME tile + RunSummary.duration).
     @ObservationIgnored private var playTimeThisRun: Double = 0
@@ -182,7 +187,13 @@ final class GameModel {
         // Debug: PR_WORLD=n starts the run already inside world n (sky/decor verification on the
         // simulator — mirrors PR_AUTOPLAY above and combines with it; seed 7 keeps it repeatable).
         if let w = ProcessInfo.processInfo.environment["PR_WORLD"].flatMap(Int.init), w > 0 {
-            startRun(fromWorld: w, seed: 7)
+            beginRun(fromWorld: w, seed: 7)   // debug path — bypasses the first-run tutorial gate
+        }
+        // Debug/UITest: pin a true zero-run profile (first-run gate + FIRST RUN chip flows),
+        // regardless of what earlier autoplay/CI cycles banked on this simulator.
+        if ProcessInfo.processInfo.environment["PR_FIRSTRUN"] == "1" {
+            ProfileStore.shared.mutate { $0.totalRuns = 0; $0.bestScore = 0 }
+            core.best = 0
         }
         // Debug: jump straight to a meta screen for screenshots.
         switch ProcessInfo.processInfo.environment["PR_SCREEN"] {
@@ -237,7 +248,40 @@ final class GameModel {
     /// Start a run. `fromWorld > 0` is a checkpoint start (not leaderboard-eligible); pass a
     /// `seed` for deterministic runs — e.g. the daily challenge
     /// (`DailyChallenge.seed(year:month:day:)`, date derived in UTC).
+    /// AUDIT D6-1: routes through the first-run tutorial gate, so EVERY live entrance (menu
+    /// PLAY, Worlds' PLAY FROM HERE and world cards) tutors a zero-run player — not just PLAY.
     func startRun(fromWorld: Int = 0, seed: UInt64? = nil) {
+        routeRun { [weak self] in self?.beginRun(fromWorld: fromWorld, seed: seed) }
+    }
+
+    /// ONE first-run gate for every run entrance (AUDIT D6-1). A zero-run player gets the
+    /// tutorial first; LET'S GO (`confirmFirstRunTutorial`) executes the SAME deferred start,
+    /// ✕ (`cancelFirstRunTutorial`) returns to where they were (D6-2). Autoplay/demo drive the
+    /// core directly and skip the gate (CI/screenshot determinism).
+    private func routeRun(_ start: @escaping () -> Void) {
+        if ProfileStore.shared.profile.totalRuns == 0, !autoplay, !demo {
+            pendingFirstRunStart = start
+        } else {
+            start()
+        }
+    }
+
+    /// LET'S GO on the gated tutorial: clear the gate FIRST (the deferred start re-enters
+    /// `startRun` paths via `beginRun`, never re-gates), then run the chosen start.
+    func confirmFirstRunTutorial() {
+        let start = pendingFirstRunStart
+        pendingFirstRunStart = nil
+        start?()
+    }
+
+    /// ✕ on the gated tutorial: drop the deferred start — back to the menu, no run (D6-2).
+    func cancelFirstRunTutorial() {
+        pendingFirstRunStart = nil
+        synth.play(.uiTick)
+    }
+
+    /// The actual run start — everything below the first-run gate.
+    private func beginRun(fromWorld: Int, seed: UInt64?) {
         applyCurrentSkin()
         core.startRun(seed: seed, startDistance: Double(fromWorld) * Tuning.worldLength)
         renderer.resetEntities()
@@ -277,10 +321,15 @@ final class GameModel {
 
     /// Start today's shared challenge run: seeded from the UTC date so the whole world plays the
     /// same track. Revive is disabled for fairness (see `canRevive`); a checkpoint start is
-    /// structurally impossible (`fromWorld` stays 0).
+    /// structurally impossible (`fromWorld` stays 0). First-run gated like every entrance
+    /// (AUDIT D6-1) — the deferred start keeps the challenge flag, so LET'S GO still lands in
+    /// the no-revive ruleset the player tapped (`beginRun` resets the flag; set it after).
     func startDailyChallenge() {
-        startRun(seed: ProfileStore.shared.todaysChallengeSeed())
-        isChallengeRun = true
+        routeRun { [weak self] in
+            guard let self else { return }
+            beginRun(fromWorld: 0, seed: ProfileStore.shared.todaysChallengeSeed())
+            isChallengeRun = true
+        }
     }
 
     /// Pause is only meaningful mid-run. The pause button toggles it; backgrounding forces it on.
@@ -659,7 +708,10 @@ final class GameModel {
 
 struct GameView: View {
     @State private var model = GameModel()
-    @State private var showFirstRunTutorial = false
+    /// Info-mode tutorial (the FIRST RUN chip): browse-and-dismiss only — both ✕ and GOT IT
+    /// return to the menu, never into a run (AUDIT D6-2). The pre-run tutorial is the model's
+    /// `pendingFirstRunStart` gate, a separate flow.
+    @State private var showHowToPlayInfo = false
     @Environment(\.scenePhase) private var scenePhase
 
     @ViewBuilder
@@ -736,17 +788,15 @@ struct GameView: View {
                     // rewards rail — their legacy params are gone from this call site (R13).
                     MenuView(best: model.core.snapshot.best,
                              coins: ProfileStore.shared.profile.coins,
-                             onPlay: {
-                                 // First-ever PLAY routes through the tutorial (AGENT_meta.md §6).
-                                 if ProfileStore.shared.profile.totalRuns == 0 { showFirstRunTutorial = true }
-                                 else { model.startRun() }
-                             },
+                             // First-ever PLAY tutors via the model-level gate (AUDIT D6-1) —
+                             // the SAME gate Daily Rush and Worlds starts route through.
+                             onPlay: { model.startRun() },
                              onCharacters: { model.open(.characters) },
                              onShop: { model.open(.shop) },
                              onLevels: { model.open(.levels) },
                              onProfile: { model.open(.stats) },
                              rewards: AnyView(RewardsBar(model: model, onMissions: { model.open(.missions) })),
-                             onHowToPlay: { showFirstRunTutorial = true })
+                             onHowToPlay: { showHowToPlayInfo = true })
                 }
             case .over:
                 GameOverView(snapshot: model.core.snapshot,
@@ -788,10 +838,18 @@ struct GameView: View {
                 metaSheet(sheet).transition(.move(edge: .bottom))
             }
 
-            // First-run tutorial: shown instead of the first PLAY, then starts the run on dismiss.
-            if showFirstRunTutorial {
-                HowToPlayView(onClose: { showFirstRunTutorial = false; model.startRun() },
+            // First-run tutorial, interposed by the model gate before ANY first run — PLAY,
+            // Daily Rush, or Worlds (AUDIT D6-1). Only LET'S GO commits to the chosen run;
+            // the ✕ cancels back to where the player was (D6-2).
+            if model.pendingFirstRunStart != nil {
+                HowToPlayView(onClose: { model.cancelFirstRunTutorial() },
+                              onDone: { model.confirmFirstRunTutorial() },
                               doneLabel: "LET'S GO")
+                    .transition(.move(edge: .bottom))
+                    .zIndex(2)
+            } else if showHowToPlayInfo {
+                // Info-mode (FIRST RUN chip): ✕ and GOT IT both just return to the menu.
+                HowToPlayView(onClose: { showHowToPlayInfo = false })
                     .transition(.move(edge: .bottom))
                     .zIndex(2)
             }

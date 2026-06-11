@@ -104,9 +104,13 @@ struct MissionsView: View {
                 let queue = claimables
                 // Unstructured on purpose: the claims must finish even if the sheet closes
                 // mid-cascade — they land on the shared store, not on this view.
+                // AUDIT D5-2: every claim resolves against `now`, the SAME clock that built the
+                // rendered board and its advertised "+total". A live Date() per claim let a
+                // UTC-midnight rollover mid-cascade refresh the boards and nil the remaining
+                // daily claims — the player would receive less than the button promised.
                 Task { @MainActor in
                     for mission in queue {
-                        if store.claimMission(mission.id, now: Date()) != nil {
+                        if store.claimMission(mission.id, now: now) != nil {
                             claimPulse += 1
                         }
                         try? await Task.sleep(for: .milliseconds(80))
