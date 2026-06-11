@@ -108,11 +108,7 @@ struct MenuView: View {
     private var heroZone: some View {
         VStack(spacing: Theme.Space.s) {
             // One-line lockup — the wordmark's gradient allowance (same family as PLAY).
-            Text("PRISM RUSH")
-                .font(.system(size: 26, weight: .black, design: .rounded))
-                .tracking(6)
-                .foregroundStyle(Theme.actionGradient)
-                .shadow(color: Theme.color(0xFF2BD6).opacity(0.5), radius: 10)
+            LogoMark(size: 26)
             GeometryReader { geo in
                 heroStageButton(height: min(260, max(140, geo.size.height)))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

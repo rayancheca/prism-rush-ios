@@ -37,6 +37,9 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: Prism Rush
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
+        # App icon lives in PrismRush/Assets.xcassets (modern single-size 1024 — the same PNG
+        # Tools/gen_icon.swift renders for the App Store; the catalog just bundles its output).
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
   PrismRushTests:
     type: bundle.unit-test
     platform: iOS

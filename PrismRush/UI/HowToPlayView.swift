@@ -12,19 +12,24 @@ struct HowToPlayView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Spacer()
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .frame(width: 38, height: 38)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay(Circle().strokeBorder(.white.opacity(0.14)))
+            // Header: the wordmark centred (its gradient is the same family as the NEXT button),
+            // close button trailing.
+            ZStack {
+                LogoMark(size: 15)
+                HStack {
+                    Spacer()
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(width: 38, height: 38)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .overlay(Circle().strokeBorder(.white.opacity(0.14)))
+                    }
+                    .buttonStyle(.neon)
+                    .accessibilityIdentifier("howToPlayClose")
+                    .accessibilityLabel("Close")
                 }
-                .buttonStyle(.neon)
-                .accessibilityIdentifier("howToPlayClose")
-                .accessibilityLabel("Close")
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
