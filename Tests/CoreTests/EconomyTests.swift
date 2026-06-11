@@ -195,6 +195,85 @@ final class EconomyTests: XCTestCase {
         XCTAssertEqual(store.profile.totalIAPPurchases, 2)
     }
 
+    func testGrantCoinPackTransactionReplayIsIdempotent() async {
+        let store = ProfileStore(testing: Profile())
+        store.grantCoinPack(1_200, transactionID: 42)
+        XCTAssertEqual(store.profile.coins, 1_800, "first grant pays base + 50% bonus")
+        XCTAssertEqual(store.profile.totalIAPPurchases, 1)
+
+        // Transaction.updates redelivery (app died between the saved grant and finish()):
+        // SAME id → no-op for base coins, the bonus AND the purchase counter.
+        store.grantCoinPack(1_200, transactionID: 42)
+        XCTAssertEqual(store.profile.coins, 1_800, "replay must not re-pay the base coins")
+        XCTAssertEqual(store.profile.totalIAPPurchases, 1, "replay must not re-bump the counter")
+
+        // A genuinely new transaction still pays (base only — the bonus is spent).
+        store.grantCoinPack(1_200, transactionID: 43)
+        XCTAssertEqual(store.profile.coins, 3_000)
+        XCTAssertEqual(store.profile.totalIAPPurchases, 2)
+        XCTAssertEqual(store.profile.grantedTransactionIDs, [42, 43])
+    }
+
+    func testApplyOncePerTransactionNonConsumablePath() async {
+        let store = ProfileStore(testing: Profile())
+        // IAPCatalog.apply's non-consumable branches route through the same primitive — the
+        // totalIAPPurchases bump must be replay-safe there too.
+        let change: (inout Profile) -> Void = { $0.doubleCoins = true; $0.totalIAPPurchases += 1 }
+        XCTAssertTrue(store.applyOncePerTransaction(7, change))
+        XCTAssertFalse(store.applyOncePerTransaction(7, change), "redelivery is a no-op")
+        XCTAssertEqual(store.profile.totalIAPPurchases, 1)
+        // nil = no StoreKit context (tests / legacy callers): applies unconditionally.
+        XCTAssertTrue(store.applyOncePerTransaction(nil, change))
+        XCTAssertEqual(store.profile.totalIAPPurchases, 2)
+    }
+
+    func testGrantedTransactionLedgerBoundedToNewest() async {
+        var p = Profile()
+        let cap = UInt64(Profile.grantedTransactionIDCap)
+        for id in 1...(cap + 88) { p.recordGrantedTransaction(id) }
+        XCTAssertEqual(p.grantedTransactionIDs.count, Profile.grantedTransactionIDCap)
+        XCTAssertFalse(p.grantedTransactionIDs.contains(1), "oldest ids trim first")
+        XCTAssertTrue(p.grantedTransactionIDs.contains(cap + 88), "newest ids always kept")
+    }
+
+    /// v1.4.1 BLOCKER pin — an iCloud merge can never erase a real-money coin grant. Review
+    /// scenario: iPhone holds 50,000 earned coins; iPad (2,000) buys Pouch of Coins and the
+    /// first-purchase bonus pays 1,200+600. The old coins=max() merge returned 50,000 and
+    /// destroyed the purchase; the per-device G-counter credit keeps every paid coin in BOTH
+    /// merge directions (Decree 5: advertised bonuses are always delivered).
+    func testCloudMergeNeverErasesPurchasedCoins() async {
+        var iPhone = Profile()
+        iPhone.coins = 50_000
+
+        var padStart = Profile(); padStart.coins = 2_000
+        let iPad = ProfileStore(testing: padStart, deviceKey: "ipad")
+        iPad.grantCoinPack(1_200, transactionID: 99)
+        XCTAssertEqual(iPad.profile.coins, 3_800)
+        XCTAssertEqual(iPad.profile.totalCoinsPurchased, 1_800, "G-counter carries the FULL payout")
+
+        let onPhone = ProfileStore.merged(local: iPhone, remote: iPad.profile)
+        let onPad = ProfileStore.merged(local: iPad.profile, remote: iPhone)
+        XCTAssertEqual(onPhone.coins, 51_800, "earned max + the full paid payout (incl. bonus)")
+        XCTAssertEqual(onPad.coins, 51_800, "merge is direction-independent")
+        XCTAssertTrue(onPhone.firstPurchaseBonusUsed, "the delivered bonus stays spent")
+        XCTAssertEqual(onPhone.grantedTransactionIDs, [99], "replay ledger unions across devices")
+
+        // Convergent: re-merging the merged profile with either side credits nothing twice.
+        XCTAssertEqual(ProfileStore.merged(local: onPhone, remote: iPad.profile).coins, 51_800)
+        XCTAssertEqual(ProfileStore.merged(local: onPhone, remote: iPhone).coins, 51_800)
+    }
+
+    func testCloudMergeConcurrentPurchasesOnTwoDevicesBothSurvive() async {
+        // Each device bought separately before any sync — DIFFERENT G-counter slots, so neither
+        // payout can shadow the other under the per-key-max merge.
+        var a = Profile(); a.coins = 1_800; a.coinsPurchasedByDevice = ["a": 1_800]
+        var b = Profile(); b.coins = 10_500; b.coinsPurchasedByDevice = ["b": 10_500]
+        let m = ProfileStore.merged(local: a, remote: b)
+        XCTAssertEqual(m.coins, 12_300, "both real-money payouts survive")
+        XCTAssertEqual(ProfileStore.merged(local: b, remote: a).coins, 12_300)
+        XCTAssertEqual(m.coinsPurchasedByDevice, ["a": 1_800, "b": 10_500])
+    }
+
     func testFirstPurchaseFlagCloudMergeNeverRearms() async {
         var bought = Profile()
         bought.firstPurchaseBonusUsed = true
@@ -293,5 +372,8 @@ final class EconomyTests: XCTestCase {
         // v1.4.1's two IAP-funnel fields default too (decodeIfPresent ?? default — iron rule 7).
         XCTAssertEqual(p.totalIAPPurchases, 0)
         XCTAssertFalse(p.firstPurchaseBonusUsed)
+        // …and the v1.4.1 review fields (purchased-coin G-counter + replay ledger).
+        XCTAssertTrue(p.coinsPurchasedByDevice.isEmpty)
+        XCTAssertTrue(p.grantedTransactionIDs.isEmpty)
     }
 }

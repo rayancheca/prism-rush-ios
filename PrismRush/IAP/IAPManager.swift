@@ -37,6 +37,12 @@ final class IAPManager {
     private(set) var hasLoaded = false
     /// What the Shop should render right now (see `Availability`).
     private(set) var availability: Availability = .loading
+    /// Product ids with an ask-to-buy / SCA purchase awaiting approval THIS SESSION (cleared
+    /// when the approved transaction arrives). In-memory on purpose: StoreKit gives no decline
+    /// signal, so persisting would hide the starter offer forever after a parental "no". The
+    /// Shop hides one-time offers while their purchase is pending, so a "FIRST PURCHASE OFFER"
+    /// can never queue a second pending charge in the same session (v1.4.1 review).
+    private(set) var pendingProductIDs: Set<String> = []
     @ObservationIgnored private var updatesTask: Task<Void, Never>?
     @ObservationIgnored private var retryTask: Task<Void, Never>?
     @ObservationIgnored private var retryAttempt = 0
@@ -81,7 +87,11 @@ final class IAPManager {
         } catch {
             // A THROW is a genuine network/StoreKit failure. Keep any previously-loaded catalog
             // (stale real prices beat fallbacks) and back off before retrying automatically.
-            if products.isEmpty { availability = .offline }
+            // A previously FULL catalog keeps serving (.ready never downgrades mid-session);
+            // anything less — first load OR a partial `.notConfigured` subset — truthfully
+            // becomes `.offline` so the RETRY card + backoff engage. A partial catalog must
+            // never dress a real outage up as "setup pending" (v1.4.1 review).
+            if availability != .ready { availability = .offline }
             lastError = "Couldn't reach the App Store. \(error.localizedDescription)"
             scheduleBackoffRetry()
         }
@@ -130,6 +140,9 @@ final class IAPManager {
     /// Whether a tap on this product can reach StoreKit right now (false pre-ASC / offline).
     func isPurchasable(_ id: String) -> Bool { storeProduct(id) != nil }
 
+    /// True while a purchase of this product awaits ask-to-buy / SCA approval (this session).
+    func isPendingApproval(_ id: String) -> Bool { pendingProductIDs.contains(id) }
+
     @discardableResult
     func purchase(_ id: String) async -> Bool {
         // If products never loaded (offline at launch), retry the load before failing the tap.
@@ -145,13 +158,15 @@ final class IAPManager {
                     lastError = "Purchase couldn't be verified. You have not been charged twice — try Restore Purchases."
                     return false
                 }
-                IAPCatalog.apply(transaction.productID, to: ProfileStore.shared)
+                IAPCatalog.apply(transaction.productID, transactionID: transaction.id, to: ProfileStore.shared)
                 await transaction.finish()
+                pendingProductIDs.remove(id)
                 lastError = nil
                 return true
             case .userCancelled:
                 return false   // a cancellation is not an error worth showing
             case .pending:
+                pendingProductIDs.insert(id)
                 lastError = "Purchase is pending approval — it will unlock automatically."
                 return false
             @unknown default:
@@ -189,9 +204,12 @@ final class IAPManager {
     private func listenForTransactions() -> Task<Void, Never> {
         Task { [weak self] in
             for await result in Transaction.updates {
-                guard self != nil, case .verified(let transaction) = result else { continue }
-                IAPCatalog.apply(transaction.productID, to: ProfileStore.shared)
+                guard let self, case .verified(let transaction) = result else { continue }
+                // The grant is dedup'd per transaction id inside apply — a redelivery of an
+                // unfinished transaction (app died before finish()) can never double-pay.
+                IAPCatalog.apply(transaction.productID, transactionID: transaction.id, to: ProfileStore.shared)
                 await transaction.finish()
+                self.pendingProductIDs.remove(transaction.productID)   // approved ask-to-buy lands
             }
         }
     }

@@ -50,6 +50,8 @@ struct Profile: Codable, Equatable, Sendable {
     var ownedProducts: Set<String> = []
     var totalIAPPurchases: Int = 0          // lifetime VERIFIED purchases (drives the starter offer slot); cloud-merges as max
     var firstPurchaseBonusUsed: Bool = false // one-time +50% coin-pack bonus already paid; cloud-merges as OR
+    var coinsPurchasedByDevice: [String: Int] = [:] // PAID coin-pack payouts per device install (G-counter); cloud-merges per-key max so a merge can never erase real-money coins
+    var grantedTransactionIDs: Set<UInt64> = []     // verified StoreKit transaction ids already granted (replay dedupe); cloud-merges as union, bounded newest-512
 
     // Settings.
     var muted: Bool = false
@@ -59,6 +61,26 @@ struct Profile: Codable, Equatable, Sendable {
     var hapticsEnabled: Bool = true
 
     var coinMultiplier: Int { doubleCoins ? 2 : 1 }
+
+    /// Lifetime real-money coin-pack payouts across every device (sum of the G-counter slots).
+    var totalCoinsPurchased: Int { coinsPurchasedByDevice.values.reduce(0, +) }
+}
+
+// StoreKit replay dedupe: the ledger of already-granted transaction ids, bounded to the newest
+// entries. StoreKit only ever redelivers RECENT unfinished transactions and ids are time-ordered,
+// so trimming the smallest is safe — and keeps the iCloud KVS payload small.
+extension Profile {
+    static let grantedTransactionIDCap = 512
+
+    mutating func recordGrantedTransaction(_ id: UInt64) {
+        grantedTransactionIDs.insert(id)
+        trimGrantedTransactionIDs()
+    }
+
+    mutating func trimGrantedTransactionIDs() {
+        guard grantedTransactionIDs.count > Self.grantedTransactionIDCap else { return }
+        grantedTransactionIDs = Set(grantedTransactionIDs.sorted().suffix(Self.grantedTransactionIDCap))
+    }
 }
 
 // Resilient decoding: every field is optional-with-default, so adding or removing fields never fails
@@ -75,6 +97,7 @@ extension Profile {
         case bestDistanceByWorld, totalXP, xpLevelRewarded, seenSkins
         case weeklyMissionDate, challengeRewardTier, purchasedWorlds
         case totalIAPPurchases, firstPurchaseBonusUsed
+        case coinsPurchasedByDevice, grantedTransactionIDs
     }
 
     init(from decoder: Decoder) throws {
@@ -116,5 +139,7 @@ extension Profile {
         purchasedWorlds = try c.decodeIfPresent(Set<Int>.self, forKey: .purchasedWorlds) ?? d.purchasedWorlds
         totalIAPPurchases = try c.decodeIfPresent(Int.self, forKey: .totalIAPPurchases) ?? d.totalIAPPurchases
         firstPurchaseBonusUsed = try c.decodeIfPresent(Bool.self, forKey: .firstPurchaseBonusUsed) ?? d.firstPurchaseBonusUsed
+        coinsPurchasedByDevice = try c.decodeIfPresent([String: Int].self, forKey: .coinsPurchasedByDevice) ?? d.coinsPurchasedByDevice
+        grantedTransactionIDs = try c.decodeIfPresent(Set<UInt64>.self, forKey: .grantedTransactionIDs) ?? d.grantedTransactionIDs
     }
 }

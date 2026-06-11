@@ -38,19 +38,25 @@ enum IAPCatalog {
     static var allIDs: [String] { products.map(\.id) }
     static func product(_ id: String) -> IAPProduct? { products.first { $0.id == id } }
 
-    /// Apply a *just-purchased* product (grants consumables too). Coin packs route through
-    /// `ProfileStore.grantCoinPack` — the one-time +50% first-purchase bonus is flag-guarded
-    /// there, so a `Transaction.updates` replay can never pay it twice (v1.4.1).
+    /// Apply a *just-purchased* product (grants consumables too). `transactionID` is the
+    /// StoreKit transaction id: EVERY branch routes through
+    /// `ProfileStore.applyOncePerTransaction`, so a `Transaction.updates` redelivery (app died
+    /// between the saved grant and `finish()`) can never re-pay base coins, re-bump
+    /// `totalIAPPurchases`, or re-pay the one-time +50% bonus (v1.4.1 review).
     @MainActor
-    static func apply(_ id: String, to store: ProfileStore) {
+    static func apply(_ id: String, transactionID: UInt64? = nil, to store: ProfileStore) {
         guard let kind = product(id)?.kind else { return }
         switch kind {
         case .coins(let n):
-            store.grantCoinPack(n)
+            store.grantCoinPack(n, transactionID: transactionID)
         case .doubleCoins:
-            store.mutate { $0.doubleCoins = true; $0.ownedProducts.insert(id); $0.totalIAPPurchases += 1 }
+            store.applyOncePerTransaction(transactionID) {
+                $0.doubleCoins = true; $0.ownedProducts.insert(id); $0.totalIAPPurchases += 1
+            }
         case .skin(let s):
-            store.mutate { $0.ownedSkins.insert(s); $0.ownedProducts.insert(id); $0.selectedSkin = s; $0.totalIAPPurchases += 1 }
+            store.applyOncePerTransaction(transactionID) {
+                $0.ownedSkins.insert(s); $0.ownedProducts.insert(id); $0.selectedSkin = s; $0.totalIAPPurchases += 1
+            }
         }
     }
 

@@ -12,19 +12,25 @@ final class ProfileStore {
     private(set) var profile: Profile
 
     @ObservationIgnored private let localKey = "pr.profile.v1"
+    /// Stable per-install slot for the `coinsPurchasedByDevice` G-counter. Device-local on
+    /// purpose (never synced): two devices must never increment the SAME slot, or the per-key-max
+    /// cloud merge would collapse concurrent real-money purchases into one.
+    @ObservationIgnored private let deviceKey: String
     #if canImport(Darwin)
     @ObservationIgnored private let cloud = NSUbiquitousKeyValueStore.default
     #endif
     @ObservationIgnored private let persisting: Bool
 
     /// Test-only: start from a known profile with persistence + cloud disabled.
-    init(testing profile: Profile) {
+    init(testing profile: Profile, deviceKey: String = "test-device") {
         self.profile = profile
         self.persisting = false
+        self.deviceKey = deviceKey
     }
 
     init() {
         persisting = true
+        deviceKey = ProfileStore.persistentDeviceKey()
         #if canImport(Darwin)
         profile = ProfileStore.sanitized(
             ProfileStore.load(localKey: "pr.profile.v1", cloud: NSUbiquitousKeyValueStore.default))
@@ -39,6 +45,16 @@ final class ProfileStore {
         #else
         profile = ProfileStore.sanitized(ProfileStore.loadLocal(localKey: localKey))
         #endif
+    }
+
+    /// Stable per-install id for the purchased-coins G-counter slot (created once, kept in
+    /// device-local UserDefaults — deliberately OUTSIDE the synced profile).
+    private static func persistentDeviceKey() -> String {
+        let key = "pr.device.id"
+        if let existing = UserDefaults.standard.string(forKey: key) { return existing }
+        let fresh = UUID().uuidString
+        UserDefaults.standard.set(fresh, forKey: key)
+        return fresh
     }
 
     // MARK: clock-manipulation hardening
@@ -89,16 +105,34 @@ final class ProfileStore {
         bonusUsed ? base : base + base / 2
     }
 
+    /// Run a verified-purchase grant exactly once per StoreKit transaction. The id is recorded
+    /// in the SAME mutate as the grant (atomic — a crash can't split marker from payout), so a
+    /// `Transaction.updates` redelivery of an unfinished transaction is a no-op: base coins,
+    /// bonus AND `totalIAPPurchases` all replay-safe (v1.4.1 review). `nil` = no StoreKit
+    /// context (tests / legacy callers): applies unconditionally.
+    @discardableResult
+    func applyOncePerTransaction(_ transactionID: UInt64?, _ change: (inout Profile) -> Void) -> Bool {
+        if let id = transactionID, profile.grantedTransactionIDs.contains(id) { return false }
+        mutate {
+            if let id = transactionID { $0.recordGrantedTransaction(id) }
+            change(&$0)
+        }
+        return true
+    }
+
     /// Grant a verified coin-pack purchase — called from `IAPCatalog.apply` ONLY (the single
     /// verified-transaction grant path). The bonus flag flips in the same mutate as the payout,
-    /// so a `Transaction.updates` replay or any later pack can never pay the +50% twice; restores
-    /// never route here (`IAPCatalog.restore` skips consumables). Purchased coins are bought, not
-    /// earned: `totalCoinsEarned` (mission/achievement feed) is deliberately untouched.
-    func grantCoinPack(_ base: Int) {
+    /// so any later pack can never pay the +50% twice, and `transactionID` makes the WHOLE grant
+    /// replay-idempotent via `applyOncePerTransaction`. The payout also lands in the per-device
+    /// `coinsPurchasedByDevice` G-counter, so an iCloud merge can never erase real-money coins
+    /// (see `merged`). Restores never route here (`IAPCatalog.restore` skips consumables).
+    /// Purchased coins are bought, not earned: `totalCoinsEarned` stays untouched.
+    func grantCoinPack(_ base: Int, transactionID: UInt64? = nil) {
         guard base > 0 else { return }
         let payout = Self.coinPackPayout(base: base, bonusUsed: profile.firstPurchaseBonusUsed)
-        mutate {
+        applyOncePerTransaction(transactionID) {
             $0.coins += payout
+            $0.coinsPurchasedByDevice[deviceKey, default: 0] += payout
             $0.firstPurchaseBonusUsed = true
             $0.totalIAPPurchases += 1
         }
@@ -543,9 +577,23 @@ final class ProfileStore {
     /// the grant watermark, a merge that raises level without a run can never double-pay.
     /// `weeklyMissionDate`/`challengeRewardTier` are deliberately NOT merged: device-local boards
     /// (missionProgress already merges by max; same accepted risk class as the daily board).
+    ///
+    /// COINS (v1.4.1 BLOCKER fix): earned coins keep the conservative max(), but the winning
+    /// balance is then credited with every PAID coin-pack payout it has never seen. The
+    /// `coinsPurchasedByDevice` G-counter merges per-key max (each install owns its own slot),
+    /// so the credit is exactly the real-money coins missing from the max() winner — a merge
+    /// can never erase a purchase, and the +50% first-purchase bonus rides the payout
+    /// (Decree 5: advertised bonuses are always delivered). Convergent: once both sides carry
+    /// the merged counter, the credit is zero forever.
     static func merged(local: Profile, remote: Profile) -> Profile {
         var merged = local
-        merged.coins = max(merged.coins, remote.coins)
+        let winnerPurchased = (local.coins >= remote.coins ? local : remote).totalCoinsPurchased
+        merged.coinsPurchasedByDevice = local.coinsPurchasedByDevice
+            .merging(remote.coinsPurchasedByDevice) { max($0, $1) }
+        merged.coins = max(local.coins, remote.coins)
+            + max(0, merged.totalCoinsPurchased - winnerPurchased)
+        merged.grantedTransactionIDs.formUnion(remote.grantedTransactionIDs)
+        merged.trimGrantedTransactionIDs()
         merged.bestScore = max(merged.bestScore, remote.bestScore)
         merged.maxWorldReached = max(merged.maxWorldReached, remote.maxWorldReached)
         merged.purchasedWorlds.formUnion(remote.purchasedWorlds)

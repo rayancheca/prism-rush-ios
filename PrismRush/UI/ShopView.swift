@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// The shop, reframed for conversion (v1.4.1): a HERO offer slot (Double Coins → Starter Bundle →
-/// featured-skin rotation), COIN PACKS as a 2×2 value grid with COMPUTED per-pack badges (price or
-/// coin edits can never desync them), PERKS with owned state, the CHARACTERS rail, and a trust
+/// featured-skin rotation), COIN PACKS as a 2×2 value grid with COMPUTED value badges (price or
+/// coin edits can never desync them; one curated BALANCED PICK tag — no fabricated popularity
+/// claims), PERKS with owned state, the CHARACTERS rail, and a trust
 /// line. Pre-launch store states are honest: loading shimmers over fallback prices, a store that
 /// isn't configured in App Store Connect yet shows a quiet footnote (no red banner, no retry
 /// spam), and only a genuinely unreachable App Store gets the neutral retry card — coin-priced
@@ -111,8 +112,16 @@ struct ShopView: View {
     private var heroOffer: HeroOffer {
         let p = ProfileStore.shared.profile
         if !p.doubleCoins { return .doubler }
-        if p.totalIAPPurchases == 0 { return .starter }
+        if starterOfferAvailable { return .starter }
         return .rotation(featuredID)
+    }
+
+    /// The one-time offer shows only while NO purchase exists AND no starter purchase is sitting
+    /// in ask-to-buy limbo — a "FIRST PURCHASE OFFER" must never queue a second pending charge
+    /// (v1.4.1 review; the rare cross-device pre-iCloud-sync window is accepted).
+    private var starterOfferAvailable: Bool {
+        ProfileStore.shared.profile.totalIAPPurchases == 0
+            && !iap.isPendingApproval(IAPCatalog.starterID)
     }
 
     /// Today's rotation pick: first non-owned skin from a UTC-day-seeded shuffle of the pool —
@@ -226,7 +235,7 @@ struct ShopView: View {
     // MARK: starter offer (own card when the hero slot is taken by Double Coins)
 
     private var showsStarterCard: Bool {
-        ProfileStore.shared.profile.totalIAPPurchases == 0 && heroOffer != .starter
+        starterOfferAvailable && heroOffer != .starter
     }
 
     private var starterBlurb: String {
@@ -292,14 +301,22 @@ struct ShopView: View {
         }
     }
 
-    /// Per-pack value framing, COMPUTED from the catalog + live prices (never hardcoded, so a
-    /// price or coin-amount edit can't desync a badge): the cheapest pack is the baseline,
-    /// the best coins-per-price pack wins BEST VALUE, the designated mid pack is MOST POPULAR,
-    /// everything else better than baseline gets its computed +N% BONUS.
-    private enum PackBadge: Equatable { case none, bonus(Int), mostPopular, bestValue }
+    /// Per-pack value framing, COMPUTED from the catalog + prices (never hardcoded, so a price
+    /// or coin-amount edit can't desync a badge): the cheapest pack is the baseline, the best
+    /// coins-per-price pack wins BEST VALUE, everything else better than baseline gets its
+    /// computed +N% BONUS. The designated mid pack carries the curated BALANCED PICK tag — a
+    /// claim that is true by construction; never a fabricated popularity stat in a pre-launch
+    /// app (Decree 5: monetization is honest, v1.4.1 review).
+    private enum PackBadge: Equatable { case none, bonus(Int), balancedPick, bestValue }
 
+    /// Coins-per-price from a UNIFORM price source per render: live storefront prices only once
+    /// the FULL catalog is loaded (`.ready`), otherwise the USD fallbacks for EVERY pack. A
+    /// partial load on a non-USD storefront must never mix currencies across packs — that could
+    /// crown the wrong BEST VALUE and break the +N% math (v1.4.1 review).
     private func coinsPerUnit(_ p: IAPProduct) -> Double {
-        let price = iap.priceValue(p.id) ?? p.fallbackValue
+        let price = iap.availability == .ready
+            ? (iap.priceValue(p.id) ?? p.fallbackValue)
+            : p.fallbackValue
         return price > 0 ? Double(p.coinAmount) / price : 0
     }
 
@@ -308,7 +325,7 @@ struct ShopView: View {
         guard let baseline = packs.first, pack.id != baseline.id,
               let best = packs.max(by: { coinsPerUnit($0) < coinsPerUnit($1) }) else { return .none }
         if pack.id == best.id { return .bestValue }
-        if pack.id == Self.mediumPackID { return .mostPopular }
+        if pack.id == Self.mediumPackID { return .balancedPick }
         let pct = Int((((coinsPerUnit(pack) / max(coinsPerUnit(baseline), 0.001)) - 1) * 100).rounded())
         return pct > 0 ? .bonus(pct) : .none
     }
@@ -320,8 +337,8 @@ struct ShopView: View {
         case .bonus(let pct):
             tagCapsule("+\(pct)% BONUS", fill: AnyShapeStyle(Theme.Role.surfaceHi),
                        text: Theme.Role.reward, stroked: true)
-        case .mostPopular:
-            tagCapsule("MOST POPULAR", fill: AnyShapeStyle(Theme.Role.surfaceHi),
+        case .balancedPick:
+            tagCapsule("BALANCED PICK", fill: AnyShapeStyle(Theme.Role.surfaceHi),
                        text: Theme.Role.textPrimary, stroked: true)
         case .bestValue:
             tagCapsule("BEST VALUE", fill: AnyShapeStyle(Theme.Role.reward), text: .black)
@@ -378,7 +395,7 @@ struct ShopView: View {
         var parts = ["\(product.title), \(product.coinAmount) coins."]
         switch badge {
         case .bestValue: parts.append("Best value.")
-        case .mostPopular: parts.append("Most popular.")
+        case .balancedPick: parts.append("Balanced pick.")
         case .bonus(let pct): parts.append("\(pct) percent more coins per dollar.")
         case .none: break
         }
