@@ -48,6 +48,9 @@ final class GameModel {
     @ObservationIgnored private var statsRecorded = false
     @ObservationIgnored private var newBestCelebrated = false
     @ObservationIgnored private var runStartWorld = 0
+    /// `maxWorldReached` captured at `startRun` — the basis for `ProfileStore.reachCredit`, so a
+    /// PURCHASED-world start (beyond reach) can never fold its head-start into the reach ladder.
+    @ObservationIgnored private var reachAtRunStart = 0
 
     /// True while the current run is today's shared challenge (revive is disabled — fair, shared
     /// track; checkpoint starts are structurally impossible, the entry point always seeds world 0).
@@ -127,8 +130,12 @@ final class GameModel {
                 }
             })
             ProfileStore.shared.mutate {
-                $0.coins = max($0.coins, 8000)
-                $0.maxWorldReached = max($0.maxWorldReached, 6)
+                // EXACT pins, not max-folds (v1.4): the worlds buy-flow test needs rung 8
+                // affordable (5,800) then rung 9 denied (7,400 > the 2,200 left) — coins banked
+                // or worlds purchased by a prior CI cycle must never flip those outcomes.
+                $0.coins = 8000
+                $0.maxWorldReached = 6
+                $0.purchasedWorlds = []
                 $0.ownedSkins.formUnion(["ember", "void", "bolt"])
                 $0.ownedSkins.subtract(autoGranted)
                 $0.selectedSkin = "default"   // deterministic start state for UI tests/screenshots
@@ -139,6 +146,23 @@ final class GameModel {
                 $0.achievementTier["ach.dist"] = 0    // Drift stays locked
                 $0.achievementTier["ach.close"] = 0   // Wisp stays locked
                 $0.challengeDaysPlayed = []           // Tempo stays locked
+                // Pin the WHOLE achievement ladder (progress banked by earlier autoplay/CI cycles
+                // would otherwise leave stray claimables): the claim-flow UI test opens on exactly
+                // these three, and after its CLAIM ALL sweep exactly ONE re-arms (ach.chests sits
+                // past BOTH tier targets, 10 then 100 — the single-claim leg). ach.gems' skin
+                // needs tier 2, so claiming tier 1 here can never auto-grant a character.
+                $0.missionProgress["ach.chests"] = 110
+                $0.missionProgress["ach.gems"] = 100
+                $0.missionProgress["ach.slick"] = 50
+                $0.missionProgress["ach.dist"] = 0
+                $0.missionProgress["ach.close"] = 0
+                $0.missionProgress["ach.runs"] = 0
+                $0.missionProgress["ach.worlds"] = 0
+                $0.achievementTier["ach.chests"] = 0
+                $0.achievementTier["ach.gems"] = 0
+                $0.achievementTier["ach.slick"] = 0
+                $0.achievementTier["ach.runs"] = 0
+                $0.achievementTier["ach.worlds"] = 0
             }
         }
         // One-shot launch reads (not a body snapshot — G3 applies to SwiftUI body observation).
@@ -222,6 +246,7 @@ final class GameModel {
         isChallengeRun = false
         playTimeThisRun = 0
         previousBest = ProfileStore.shared.profile.bestScore
+        reachAtRunStart = ProfileStore.shared.profile.maxWorldReached
         overTime = 0
         canRestart = false
         restartCountdown = 0
@@ -518,6 +543,14 @@ final class GameModel {
         let gemsDelta = max(0, core.gemCount - gemsRecordedThisRun)
         gemsRecordedThisRun += gemsDelta
 
+        // Reach stays EARNED-by-play: a purchased-world start (runStartWorld beyond the reach at
+        // launch) must not fold `core.maxWorld` into `maxWorldReached` or the reach-based
+        // `ach.worlds` feed below — one bought-deep death would otherwise unlock every cheaper
+        // rung for free (see ProfileStore.reachCredit; rules 9/10). Legit starts are unchanged.
+        let reachWorld = ProfileStore.reachCredit(maxWorldThisRun: core.maxWorld,
+                                                  startWorld: runStartWorld,
+                                                  reachAtStart: reachAtRunStart)
+
         if statsRecorded {
             // Post-revive death: pay only what's new; totalRuns was already counted for this run.
             store.mutate {
@@ -527,12 +560,12 @@ final class GameModel {
                 $0.totalDistance += distanceDelta
                 $0.totalGems += gemsDelta
                 $0.bestStreak = max($0.bestStreak, core.bestStreak)
-                $0.maxWorldReached = max($0.maxWorldReached, core.maxWorld)
+                $0.maxWorldReached = max($0.maxWorldReached, reachWorld)
             }
         } else {
             statsRecorded = true
             store.recordRun(score: core.score, distance: distanceDelta, gems: gemsDelta,
-                            bestStreak: core.bestStreak, maxWorld: core.maxWorld, coinsEarned: coinsDelta)
+                            bestStreak: core.bestStreak, maxWorld: reachWorld, coinsEarned: coinsDelta)
 
             // Missions feed: exactly once per run (`runsFinished` counts 1 per call, so post-revive
             // deaths must NOT call again — AGENT_meta.md §8's recommended shape). The first death
@@ -546,7 +579,8 @@ final class GameModel {
             summary.slides = slidesThisRun
             summary.bestStreak = core.bestStreak           // max-style: engine maxes
             summary.bestMult = min(Tuning.multCap, 1 + core.bestStreak / Tuning.streakPerMult)
-            summary.worldsCrossed = core.maxWorld + 1      // 1-based, matches ach.worlds targets
+            summary.worldsCrossed = reachWorld + 1         // 1-based reach CREDIT (gated above) —
+                                                           // ach.worlds stays reach-based (rule 9/10)
             summary.startWorld = runStartWorld             // checkpoint start: zeroes skipped-world XP
             summary.revives = core.revivesUsed
             summary.duration = lastRunDuration

@@ -400,8 +400,10 @@ final class RealityRenderer: RendererPort {
             }
         }
 
-        // Per-world decor + sky atmosphere (the sky's own motion is RM-gated inside).
-        decor.update(distance: snap.distance, world: snap.worldTo, elapsed: elapsed, reduceMotion: reduceMotion)
+        // Per-world decor + sky atmosphere (the sky's own motion is RM-gated inside). Fed the
+        // ABSOLUTE ordinal, not the 0–2 family — WorldSky's per-world seed + cycle richening
+        // (world / 3 element counts) are dead at a family index (v1.4 review fix).
+        decor.update(distance: snap.distance, world: snap.worldOrdinal, elapsed: elapsed, reduceMotion: reduceMotion)
     }
 
     func fire(_ event: FXEvent) {

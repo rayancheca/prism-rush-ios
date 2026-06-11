@@ -115,6 +115,48 @@ final class EconomyTests: XCTestCase {
                        "fresh profile starts at world 0")
     }
 
+    /// v1.4 review BLOCKER pin — the RUN pipeline must not undo `unlockWorld`'s invariant.
+    /// Exploit chain: buy ONLY world 11 (13,400), start there, die instantly. GameView routes the
+    /// fold through `ProfileStore.reachCredit`, so `maxWorldReached` and the reach-based
+    /// `ach.worlds` ladder must both stay untouched (rules 9/10) — and a LEGIT start at the reach
+    /// that pushes deeper must still advance it.
+    func testPurchasedWorldStartNeverFoldsIntoReach() async {
+        let store = ProfileStore(testing: Profile())
+        store.addCoins(13_400)
+        XCTAssertTrue(store.unlockWorld(11))
+
+        // Instant death on the purchased start: deepest world this run == start world == 11,
+        // reach at launch 0 → the run credits NOTHING new toward reach.
+        let credit = ProfileStore.reachCredit(maxWorldThisRun: 11, startWorld: 11, reachAtStart: 0)
+        XCTAssertEqual(credit, 0, "a start beyond reach credits nothing new")
+        store.recordRun(score: 100, distance: 12, gems: 1, bestStreak: 1,
+                        maxWorld: credit, coinsEarned: 1)
+        XCTAssertEqual(store.profile.maxWorldReached, 0,
+                       "the run fold must not launder a purchase into reach")
+        XCTAssertFalse(store.isWorldStartable(10), "worlds 1–10 stay paid rungs — the ladder holds")
+        XCTAssertEqual(store.unlockedWorldCount, 1)
+
+        // ach.worlds ('World Walker', tiers 3/6/12) reads worldsCrossed — the gated feed is
+        // credit + 1, so the bought-deep death pins progress at 1 and pays no tier.
+        var s = RunSummary()
+        s.distance = 12
+        s.worldsCrossed = credit + 1
+        s.startWorld = 11
+        store.applyRunSummary(s, now: date(2026, 6, 10))
+        XCTAssertEqual(store.profile.missionProgress["ach.worlds"] ?? 0, 1)
+        let walker = MissionCatalog.achievements.first { $0.id == "ach.worlds" }!
+        XCTAssertFalse(store.missionState(walker, now: date(2026, 6, 10)).claimable,
+                       "World Walker must not fire off a purchased start")
+
+        // Legit start AT the reach pushing 2 worlds deeper: the full fold still advances reach.
+        store.mutate { $0.maxWorldReached = 2 }
+        let legit = ProfileStore.reachCredit(maxWorldThisRun: 4, startWorld: 2, reachAtStart: 2)
+        XCTAssertEqual(legit, 4)
+        store.recordRun(score: 100, distance: 12, gems: 1, bestStreak: 1,
+                        maxWorld: legit, coinsEarned: 1)
+        XCTAssertEqual(store.profile.maxWorldReached, 4, "earned reach keeps folding as before")
+    }
+
     // MARK: revive (F3)
 
     func testReviveResumesPlayWithGrace() async {

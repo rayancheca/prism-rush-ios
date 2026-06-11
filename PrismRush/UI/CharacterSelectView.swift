@@ -237,10 +237,13 @@ struct CharacterSelectView: View {
     /// the player can buy RIGHT NOW; else the lowest level-gate still ahead; else the cheapest
     /// coin pull to save toward. Achievement/challenge/iap skins are journeys, not next steps.
     private var nextUnlockSkin: Skin? {
-        let profile = ProfileStore.shared.profile
-        let locked = SkinCatalog.all.filter { !profile.ownedSkins.contains($0.id) }
+        // Store reads stay inline at point of use (G3 — no snapshot let): evaluated from
+        // `nextUnlockRow` during body, so observation keeps tracking ownedSkins/coins.
+        let locked = SkinCatalog.all.filter { !ProfileStore.shared.profile.ownedSkins.contains($0.id) }
         let coinSkins = locked.filter { $0.cost > 0 }.sorted { $0.cost < $1.cost }
-        if let affordable = coinSkins.first(where: { $0.cost <= profile.coins }) { return affordable }
+        if let affordable = coinSkins.first(where: { $0.cost <= ProfileStore.shared.profile.coins }) {
+            return affordable
+        }
         let levelGates = locked.compactMap { skin -> (skin: Skin, level: Int)? in
             if case .level(let n) = skin.unlock { (skin, n) } else { nil }
         }
@@ -404,7 +407,8 @@ private struct ShelfCard: View {
                 AnimatedCharacterSwatch(skin: skin, size: 56, silhouette: !owned)
                     .frame(height: 84)
                 Text(skin.name)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .typeScale(.body)
+                    .fontWeight(.bold)
                     .foregroundStyle(owned ? Theme.Role.textPrimary : Theme.Role.textSecondary)
                 status
             }

@@ -61,6 +61,9 @@ struct GameSnapshot: Sendable {
     var worldFrom: Int
     var worldTo: Int
     var worldBlend: Double          // 0 → fully `worldFrom`, 1 → fully `worldTo`
+    var worldOrdinal: Int           // ABSOLUTE world index (core.maxWorld) — worldFrom/To are the
+                                    // 0–2 palette family; the sky's per-world identity + cycle
+                                    // richening (WorldSky) need the real ordinal
     var shieldActive: Bool
     var magnetRemaining: Double
     var doublerRemaining: Double    // > 0 → gems pay double coins (HUD shows the timer)
@@ -89,6 +92,7 @@ struct GameSnapshot: Sendable {
         worldFrom: 0,
         worldTo: 0,
         worldBlend: 1,
+        worldOrdinal: 0,
         shieldActive: false,
         magnetRemaining: 0,
         doublerRemaining: 0,

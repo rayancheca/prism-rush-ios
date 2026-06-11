@@ -73,8 +73,8 @@ struct MissionsView: View {
             Text(count > 0
                  ? "\(count) CLAIMABLE · \(waiting.formatted()) COINS WAITING"
                  : "ALL CLEAR · NEW BOARD IN \(dailyCountdown(now: now))")
-                .font(.system(size: 11, weight: .heavy, design: .rounded))
-                .tracking(1)
+                .typeScale(.caption)
+                .fontWeight(.heavy)
                 .monospacedDigit()
             Spacer(minLength: 0)
             if count > 0 { CoinGlyph(size: 13) }
@@ -115,8 +115,8 @@ struct MissionsView: View {
             } label: {
                 HStack(spacing: 6) {
                     Text("CLAIM ALL +\(total)")
-                        .font(.system(size: 13, weight: .heavy, design: .rounded))
-                        .tracking(1)
+                        .typeScale(.body)
+                        .fontWeight(.heavy)
                         .monospacedDigit()
                     CoinGlyph(size: 13)
                 }
@@ -175,7 +175,7 @@ struct MissionsView: View {
             }
             .frame(width: headerRingSize, height: headerRingSize)
             Text("TODAY")
-                .font(.system(size: 13, weight: .heavy, design: .rounded)).tracking(2)
+                .typeScale(.caption).fontWeight(.heavy)
                 .foregroundStyle(Self.todayTint)
             Text("· RESETS \(dailyCountdown(now: now))")
                 .typeScale(.micro)
@@ -203,7 +203,7 @@ struct MissionsView: View {
                 }
             }
             Text("THIS WEEK")
-                .font(.system(size: 13, weight: .heavy, design: .rounded)).tracking(2)
+                .typeScale(.caption).fontWeight(.heavy)
                 .foregroundStyle(Self.weekTint)
             Text("· RESETS \(weeklyCountdown(now: now))")
                 .typeScale(.micro)
@@ -222,7 +222,7 @@ struct MissionsView: View {
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Self.featTint)
             Text("CHALLENGES")
-                .font(.system(size: 13, weight: .heavy, design: .rounded)).tracking(2)
+                .typeScale(.caption).fontWeight(.heavy)
                 .foregroundStyle(Self.featTint)
             Text("· ONE-RUN FEATS")
                 .typeScale(.micro)
@@ -240,7 +240,7 @@ struct MissionsView: View {
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Self.ladderTint)
             Text("ACHIEVEMENTS")
-                .font(.system(size: 13, weight: .heavy, design: .rounded)).tracking(2)
+                .typeScale(.caption).fontWeight(.heavy)
                 .foregroundStyle(Self.ladderTint)
             Text("· EVERY TIER PAYS")
                 .typeScale(.micro)
@@ -295,6 +295,16 @@ private struct MissionCard: View {
                 activeCard
             }
         }
+        // The fly-up lives OUT here, not on `activeCard`: a final claim flips `state.claimed` in
+        // the same transaction, so an overlay on the active card would die with it mid-rise —
+        // daily/weekly/per-run claims would never show the "+N". Here it survives the
+        // active → receipt swap (review fix).
+        .overlay(alignment: .topTrailing) {
+            if flyAmount > 0 {
+                CoinFlyUp(amount: flyAmount, trigger: flyTrigger)
+                    .padding(.trailing, 18)
+            }
+        }
         .accessibilityIdentifier("missionCard_\(mission.id)")
     }
 
@@ -305,13 +315,15 @@ private struct MissionCard: View {
             progressRing
             VStack(alignment: .leading, spacing: 5) {
                 Text(mission.title)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .typeScale(.body)
+                    .fontWeight(.bold)
                     .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
                     if mission.isTiered { tierLadder }
                     Text("\(compactCount(state.progress))/\(compactCount(state.target))")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .typeScale(.caption)
+                        .fontWeight(.bold)
                         .monospacedDigit()
                         .foregroundStyle(.white.opacity(0.6))
                 }
@@ -326,12 +338,6 @@ private struct MissionCard: View {
                 .strokeBorder(state.claimable ? Theme.Role.reward.opacity(0.55) : .white.opacity(0.12),
                               lineWidth: state.claimable ? 1.5 : 1)
         )
-        .overlay(alignment: .topTrailing) {
-            if flyAmount > 0 {
-                CoinFlyUp(amount: flyAmount, trigger: flyTrigger)
-                    .padding(.trailing, 18)
-            }
-        }
         .onAppear { appeared = true }   // ring fills 0 → fraction (the .animation below rides it)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(rowA11y)
@@ -381,7 +387,8 @@ private struct MissionCard: View {
             Button(action: claim) {
                 HStack(spacing: 4) {
                     Text("CLAIM +\(state.reward)")
-                        .font(.system(size: 12, weight: .heavy, design: .rounded))
+                        .typeScale(.caption)
+                        .fontWeight(.heavy)
                         .monospacedDigit()
                     CoinGlyph(size: 12)
                 }
@@ -396,7 +403,8 @@ private struct MissionCard: View {
         } else {
             HStack(spacing: 4) {
                 Text("+\(state.reward)")
-                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                    .typeScale(.caption)
+                    .fontWeight(.heavy)
                     .monospacedDigit()
                 CoinGlyph(size: 11)
             }
@@ -428,7 +436,8 @@ private struct MissionCard: View {
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Theme.color(0x00FF88).opacity(0.8))
             Text(mission.title)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .typeScale(.body)
+                .fontWeight(.semibold)
                 .foregroundStyle(.white.opacity(0.45))
                 .strikethrough(true, color: .white.opacity(0.3))
             Spacer()

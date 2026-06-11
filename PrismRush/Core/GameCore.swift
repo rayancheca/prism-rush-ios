@@ -599,6 +599,8 @@ final class GameCore {
             mode: mode, distance: distance, speed: effectiveSpeed, rampSpeed: speed,
             playerX: px, playerY: jumpY, playerScaleY: sy, bankZ: bankZ,
             worldFrom: worldFrom, worldTo: worldTo, worldBlend: worldBlend,
+            worldOrdinal: maxWorld,   // flips on the same tick as worldTo (stepWorld) — the sky
+                                      // swap beat still lands on the arrival flourish frame
             shieldActive: shield, magnetRemaining: magnetT, doublerRemaining: doublerT,
             chronoRemaining: chronoT,
             boostRemaining: boostT, flowStreak: flowStreak,

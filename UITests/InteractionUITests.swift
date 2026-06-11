@@ -167,4 +167,80 @@ final class InteractionUITests: XCTestCase {
         let xp = app.descendants(matching: .any).matching(identifier: "xpLine").firstMatch
         XCTAssertTrue(xp.waitForExistence(timeout: 6), "the XP line should render on game over")
     }
+
+    /// v1.4 — the worlds ladder buy flow, the only coin-spend surface outside StoreKit (permanent
+    /// coverage, replacing the temp XCUITest deleted after wave 3). The demo profile pins coins
+    /// 8,000 / reach 6 / no purchases, so: the NEXT UNLOCK strip routes to rung 8's panel,
+    /// 5,800 buys it (card flips OWNED, strip advances), rung 9 (7,400 > the 2,200 left) denies
+    /// and arms GET COINS, which routes to the Shop.
+    func testWorldsBuyFlowPurchaseDenyAndGetCoins() {
+        let app = launch(["PR_DEMOPROFILE": "1"])
+        XCTAssertTrue(app.buttons["worldsButton"].waitForExistence(timeout: 6))
+        app.buttons["worldsButton"].tap()
+
+        let strip = element(app, id: "nextUnlockStrip")
+        XCTAssertTrue(strip.waitForExistence(timeout: 6), "NEXT UNLOCK strip should sit above the fold")
+        strip.tap()
+        let buy8 = app.buttons["unlockButton_8"]
+        XCTAssertTrue(buy8.waitForExistence(timeout: 4), "the strip should open the unlock panel")
+        buy8.tap()   // 8,000 ≥ 5,800 → celebration, the panel dismisses itself ~1.1 s later
+
+        // The strip re-derives from the SAME isWorldStartable flip that turns card 8 OWNED — and
+        // unlike the card (below the LazyVGrid fold, so absent from the a11y tree) it's always
+        // instantiated. The panel's `.isModal` hides it until the celebration auto-dismisses,
+        // so this label wait doubles as the deterministic panel-dismissal wait (no timers).
+        XCTAssertTrue(waitForLabel(app, id: "nextUnlockStrip", contains: "world 9"),
+                      "a successful purchase should advance the strip to the next locked rung")
+
+        // Re-tap until rung 9's panel opens: taps during the celebration beat land on the modal
+        // scrim and are deliberately swallowed, so converge by retrying (not by a fixed timer).
+        let buy9 = app.buttons["unlockButton_9"]
+        var panelOpen = false
+        for _ in 0..<15 {
+            element(app, id: "nextUnlockStrip").tap()
+            if buy9.waitForExistence(timeout: 1) { panelOpen = true; break }
+        }
+        XCTAssertTrue(panelOpen, "the strip should re-open the unlock panel for the next rung")
+
+        buy9.tap()   // 7,400 > 2,200 → denial must arm NEED n MORE + GET COINS, never spend
+        let getCoins = app.buttons["unlockGetCoins"]
+        XCTAssertTrue(getCoins.waitForExistence(timeout: 4), "an unaffordable buy should arm GET COINS")
+        getCoins.tap()
+        XCTAssertTrue(app.staticTexts["Shop"].waitForExistence(timeout: 6),
+                      "GET COINS should route to the Shop")
+    }
+
+    /// v1.4 — the missions claim pipeline: CLAIM ALL cascade first (top of the board, sweeps the
+    /// three seeded tier-1 achievements + any strays to zero), then the single-claim leg on
+    /// ach.chests, which the demo profile pins past BOTH tier targets so exactly one claimable
+    /// re-arms after the sweep (CLAIM ALL needs ≥ 2, so its pill must be gone by then).
+    func testMissionsClaimAllCascadeAndSingleClaim() {
+        let app = launch(["PR_DEMOPROFILE": "1"])
+        let rail = element(app, id: "railMissions")
+        XCTAssertTrue(rail.waitForExistence(timeout: 6), "missions rail cell should exist on the menu")
+        rail.tap()
+
+        XCTAssertTrue(element(app, id: "missionsSummary").waitForExistence(timeout: 6),
+                      "the summary strip should render on the board")
+        let claimAll = app.buttons["claimAllButton"]
+        XCTAssertTrue(claimAll.waitForExistence(timeout: 6), "≥2 seeded claimables should surface CLAIM ALL")
+
+        claimAll.tap()   // cascade: one claim per 80 ms beat until the board is swept
+        XCTAssertTrue(app.buttons["claim_ach.gems"].waitForNonExistence(timeout: 8),
+                      "the cascade should retire Gem Hoarder's claim")
+        XCTAssertTrue(app.buttons["claim_ach.slick"].waitForNonExistence(timeout: 8),
+                      "the cascade should retire Limbo Legend's claim")
+        XCTAssertTrue(claimAll.waitForNonExistence(timeout: 8),
+                      "CLAIM ALL should disappear once fewer than 2 claims remain")
+
+        // Single claim: ach.chests re-armed at tier 2 (progress 110 ≥ 100). It lives at the
+        // bottom of the ACHIEVEMENTS ladder — scroll it into reach first.
+        let single = app.buttons["claim_ach.chests"]
+        XCTAssertTrue(single.waitForExistence(timeout: 6), "Chest Hunter tier 2 should re-arm after the sweep")
+        for _ in 0..<10 where !single.isHittable { app.swipeUp() }
+        XCTAssertTrue(single.isHittable, "the ladder should scroll the claim into reach")
+        single.tap()
+        XCTAssertTrue(single.waitForNonExistence(timeout: 6),
+                      "the final tier's claim should retire the button (receipt row)")
+    }
 }

@@ -144,8 +144,11 @@ struct LevelSelectView: View {
             .neonCard(radius: Theme.Radius.l)
         }
         .buttonStyle(.neon)
-        .accessibilityIdentifier("nextUnlockStrip")
+        // `children: .ignore` FIRST, then the identifier (the rail-cell ordering): the combined
+        // element carries identifier + crafted label together — identifier-after-element splits
+        // them across two AX nodes, so VoiceOver/XCUITest read the raw derived label instead.
         .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("nextUnlockStrip")
         .accessibilityLabel("Next unlock: world \(world + 1), \(palette.name)."
                             + " Unlock for \(price) coins, or reach \(reachM) meters.")
         .accessibilityHint("Shows unlock options.")
@@ -325,7 +328,8 @@ private struct UnlockPricePill: View {
             Text("UNLOCK · \(price.formatted())")
                 .monospacedDigit()
                 .lineLimit(1)
-                .fixedSize()        // the price never wraps — neighbors shrink instead
+                .minimumScaleFactor(0.65)   // never wraps; at AX sizes the price SHRINKS instead
+                                            // of overflowing the 160 pt grid cards (review fix)
         }
         .typeScale(.caption)
         .fontWeight(.heavy)

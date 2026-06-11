@@ -158,6 +158,18 @@ final class ProfileStore {
         return true
     }
 
+    /// The world ordinal a finished run may fold into `maxWorldReached` (and feed the reach-based
+    /// `ach.worlds` ladder via `RunSummary.worldsCrossed`). A run started WITHIN the reach at
+    /// launch credits everything it crossed — pushing past your deepest world still advances
+    /// reach. A run started BEYOND it (a PURCHASED world) credits nothing new: otherwise one
+    /// bought-deep death would fold the start world into `maxWorldReached`, flip every cheaper
+    /// rung startable for free (collapsing the 59,400 ladder to its deepest rung), and pay
+    /// reach achievements for never passing world 0 — exactly the fold the `purchasedWorlds`
+    /// invariant forbids (rules 9/10). Pure + static so the gate pins in Linux tests.
+    static func reachCredit(maxWorldThisRun: Int, startWorld: Int, reachAtStart: Int) -> Int {
+        startWorld <= reachAtStart ? maxWorldThisRun : reachAtStart
+    }
+
     // MARK: retention — daily reward, login streak, timed free chest (all `now`-injectable for tests)
 
     static let dailyTiers = [100, 150, 200, 300, 400, 500, 1000]
