@@ -9,14 +9,21 @@ enum ProceduralMesh {
 
     /// Diamond/gem shape: 6 vertices, 8 faces.
     static func octahedron(_ r: Float) -> MeshResource {
+        octahedron(rx: r, ry: r, rz: r)
+    }
+
+    /// Anisotropic octahedron — per-axis half-extents. The crystal character body uses this so
+    /// the vertical elongation DESIGN_characters §4.1 documents (and every preview draws) is
+    /// real in 3D too, instead of preview-only (AUDIT D2-5).
+    static func octahedron(rx: Float, ry: Float, rz: Float) -> MeshResource {
         let p: [SIMD3<Float>] = [
-            [r, 0, 0], [-r, 0, 0], [0, r, 0], [0, -r, 0], [0, 0, r], [0, 0, -r],
+            [rx, 0, 0], [-rx, 0, 0], [0, ry, 0], [0, -ry, 0], [0, 0, rz], [0, 0, -rz],
         ]
         let idx: [UInt32] = [
             2, 4, 0,  2, 0, 5,  2, 5, 1,  2, 1, 4,   // top fan
             3, 0, 4,  3, 5, 0,  3, 1, 5,  3, 4, 1,   // bottom fan
         ]
-        return build(p, idx, fallback: r)
+        return build(p, idx, fallback: max(rx, max(ry, rz)))
     }
 
     /// Two octahedra side by side in one mesh (the coin-doubler pickup): the gem vertex set
@@ -219,4 +226,27 @@ enum ProceduralMesh {
         d.primitives = .triangles(indices)
         return (try? MeshResource.generate(from: [d])) ?? .generateSphere(radius: fallback)
     }
+}
+
+/// ONE source of truth for the character body-silhouette proportions, shared by the 3D rig
+/// meshes (`RealityRenderer.buildCharacter`) and the 2D Canvas previews
+/// (`AnimatedCharacterSwatch.bodyPath`) — so the select/shop silhouette math and the in-run
+/// mesh/scale agree by construction (decree 2, AUDIT D2-5; pinned by CharacterParityTests).
+/// Everything is expressed relative to the sphere body: `sphereRadius` in rig world units;
+/// the preview's `bodyR` (points) plays exactly the same role.
+enum CharacterProportions {
+    /// Rig sphere body radius (world units) — the shipped v1.3 value, unchanged.
+    static let sphereRadius: Float = 0.62
+    /// Cube edge as a fraction of the sphere DIAMETER (rig 1.06 / 1.24 ≈ 0.855 — the preview
+    /// previously drew the cube at 100% of the footprint, ~17% wider than the rig renders).
+    static let cubeEdgeRatio: Float = 1.06 / 1.24
+    /// Cube corner radius as a fraction of the cube edge (rig 0.18 / 1.06).
+    static let cubeCornerRatio: Float = 0.18 / 1.06
+    /// Crystal (octahedron) half-width as a fraction of the sphere radius — the documented
+    /// DESIGN_characters §4.1 silhouette the previews have always sold.
+    static let crystalHalfWidthRatio: Float = 0.95
+    /// Crystal half-height as a fraction of the sphere radius — §4.1's vertical elongation.
+    /// The rig previously shipped a SYMMETRIC octahedron(0.78): ~26% wider than the sphere
+    /// where the preview promised 95%, with the elongation existing only in 2D.
+    static let crystalHalfHeightRatio: Float = 1.15
 }

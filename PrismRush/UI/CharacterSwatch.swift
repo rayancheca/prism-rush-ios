@@ -24,6 +24,11 @@ struct AnimatedCharacterSwatch: View {
     /// Tease fade for locked renders: grid cards 0.45; the hero stage lifts to 0.6 so the
     /// buy/requirement button below it feels within reach.
     var teaseOpacity: Double = 0.45
+    /// Trail wisp (AUDIT D2-4): a short stream of fading puffs in the skin's `trailHex` behind
+    /// the body — the paid-for trail identity (Aurora's two-tone money look) visible at every
+    /// buy moment (shop cards, select stage/grid, menu hero). Static frames freeze the wisp
+    /// in place (Reduce Motion = static wisp, never a missing one).
+    var showsTrail = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -84,6 +89,14 @@ struct AnimatedCharacterSwatch: View {
                  with: .radialGradient(Gradient(colors: [bodyColor.opacity(0.45), .clear]),
                                        center: center, startRadius: bodyR * 0.4, endRadius: bodyR * 1.6))
 
+        // Trail wisp behind everything but the glow: the same color the in-run wake, slide
+        // ribbon, jump/land puffs, flow aura, and death shatter burn (Prism's rides the live
+        // shimmer hue, exactly like its in-run trail). Drawn before the body so the puffs
+        // emerge from behind the lower flank and sink toward the ground.
+        if showsTrail {
+            drawTrailWisp(&ctx, t: t, center: center, bodyR: bodyR)
+        }
+
         // Antenna behind the body: stem + tip rotate around the stem base (per-skin sway).
         drawAntenna(&ctx, t: t, center: center, bodyR: bodyR, scale: scale)
 
@@ -93,22 +106,30 @@ struct AnimatedCharacterSwatch: View {
         drawEyes(&ctx, t: t, center: center, scale: scale)
     }
 
+    /// Body silhouette — every proportion derives from `CharacterProportions`, the SAME
+    /// constants `RealityRenderer.buildCharacter` sizes its meshes from, so the preview and
+    /// the in-run rig agree by construction (AUDIT D2-5: the cube used to span 100% of the
+    /// footprint here while rendering at ~85% in 3D; relative sizes flipped across the seam).
     private func bodyPath(center: CGPoint, bodyR: CGFloat) -> Path {
         switch skin.bodyShape {
         case .sphere:
             return Path(ellipseIn: CGRect(x: center.x - bodyR, y: center.y - bodyR,
                                           width: bodyR * 2, height: bodyR * 2))
         case .cube:
-            return Path(roundedRect: CGRect(x: center.x - bodyR, y: center.y - bodyR,
-                                            width: bodyR * 2, height: bodyR * 2),
-                        cornerRadius: size * 0.22 * CGFloat(skin.scale))
+            let half = bodyR * CGFloat(CharacterProportions.cubeEdgeRatio)
+            return Path(roundedRect: CGRect(x: center.x - half, y: center.y - half,
+                                            width: half * 2, height: half * 2),
+                        cornerRadius: half * 2 * CGFloat(CharacterProportions.cubeCornerRatio))
         case .crystal:
-            // Square rotated 45°, slightly elongated vertically (DESIGN_characters §4.1).
+            // Square rotated 45°, elongated vertically (DESIGN_characters §4.1) — the rig's
+            // octahedron now carries the same half-extents in 3D.
+            let hw = bodyR * CGFloat(CharacterProportions.crystalHalfWidthRatio)
+            let hh = bodyR * CGFloat(CharacterProportions.crystalHalfHeightRatio)
             var p = Path()
-            p.move(to: CGPoint(x: center.x, y: center.y - bodyR * 1.15))
-            p.addLine(to: CGPoint(x: center.x + bodyR * 0.95, y: center.y))
-            p.addLine(to: CGPoint(x: center.x, y: center.y + bodyR * 1.15))
-            p.addLine(to: CGPoint(x: center.x - bodyR * 0.95, y: center.y))
+            p.move(to: CGPoint(x: center.x, y: center.y - hh))
+            p.addLine(to: CGPoint(x: center.x + hw, y: center.y))
+            p.addLine(to: CGPoint(x: center.x, y: center.y + hh))
+            p.addLine(to: CGPoint(x: center.x - hw, y: center.y))
             p.closeSubpath()
             return p
         }
@@ -156,6 +177,29 @@ struct AnimatedCharacterSwatch: View {
             let off = CGPoint(x: p.x + size * 0.02 * scale, y: p.y - size * 0.02 * scale)
             ctx.fill(Path(ellipseIn: CGRect(x: off.x - g / 2, y: off.y - g / 2, width: g, height: g)),
                      with: .color(.white))
+        }
+    }
+
+    /// The trail wisp (AUDIT D2-4): five puffs looping from behind the body's lower flank down
+    /// toward the ground, shrinking and fading — a miniature of the in-run wake. Color comes
+    /// from the same rule the renderer applies: `trailHex`, or the live shimmer hue when nil
+    /// (Prism), so the promise IS the in-run trail (decree 2). At `t == 0` (Reduce Motion,
+    /// static grids) the loop freezes into a staggered static streak — present, just still.
+    private func drawTrailWisp(_ ctx: inout GraphicsContext, t: TimeInterval, center: CGPoint,
+                               bodyR: CGFloat) {
+        let tint = skin.trailHex.map { Theme.color($0) } ?? prismaticTint(at: t)
+        let head = CGPoint(x: center.x - bodyR * 0.52, y: center.y + bodyR * 0.72)
+        let tail = CGPoint(x: size * 0.07, y: center.y + bodyR * 1.18)
+        let puffs = 5
+        for i in 0..<puffs {
+            // Each puff travels head→tail over ~1.5 s, offset a fifth of a loop apart.
+            let phase = (t * 0.66 + Double(i) / Double(puffs)).truncatingRemainder(dividingBy: 1)
+            let x = head.x + (tail.x - head.x) * CGFloat(phase)
+                + sin(t * 2.6 + phase * 6) * size * 0.018   // gentle swim along the way
+            let y = head.y + (tail.y - head.y) * CGFloat(phase)
+            let r = bodyR * (0.13 - 0.085 * CGFloat(phase))
+            ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
+                     with: .color(tint.opacity(0.55 * (1 - phase))))
         }
     }
 

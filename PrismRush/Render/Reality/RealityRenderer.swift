@@ -56,7 +56,16 @@ final class RealityRenderer: RendererPort {
     private var skinAntennaHeight: Float = 1
     private var skinAntennaTip: Float = 1
     private var skinSway: Float = 0                 // radians; set per skin by applySkin
-    private var skinSwaySpeed: Double = 3.2         // = idle.bobSpeed * 2 once a Skin is applied
+    /// Idle sway angular speed (rad/s) = `idle.bobSpeed · 2π · 0.8` — the EXACT formula the
+    /// preview animates (`CharacterSwatch.drawAntenna`), so Tempo's metronome whip reads at
+    /// full stage speed in-run (AUDIT D2-3; the old `bobSpeed * 2` ran ~2.5× slower). The
+    /// default is Prism's catalog bobSpeed 1.6 Hz for the pre-`applySkin` frame.
+    private var skinSwaySpeed: Double = 1.6 * 2 * .pi * 0.8
+    // Per-skin blink cadence (catalog `idle.blinkMin/Max`) — the personality the previews sell
+    // (Fang "Blinks never", Tempo's 3 s beat) now holds in-run too (AUDIT D2-2). Defaults are
+    // Prism's catalog range for the pre-`applySkin` frame.
+    private var skinBlinkMin: Double = 2.2
+    private var skinBlinkMax: Double = 4.2
     private var antennaCenterY: Float = 1.42        // stem centre — the sway pivot (set per rig build)
     private var antennaTipY: Float = 1.675          // tip rest height (set per rig build)
     private var swayApplied = false                 // restore the rest pose once when sway stops
@@ -521,8 +530,11 @@ final class RealityRenderer: RendererPort {
                 playerBody.model?.materials = [UnlitMaterial(color: shimmer)]
             }
         }
+        // Re-arm from the skin's OWN catalog range, not a global constant: Fang stares ~5–8 s,
+        // Tempo blinks exactly on its 3 s beat — in-run, not just on the select stage (D2-2).
+        // Renderer-side randomness is fine here: visual-only, never touches the Core sim.
         blinkT -= dt
-        if blinkT < -0.12 { blinkT = Double.random(in: 2.2...4.2) }
+        if blinkT < -0.12 { blinkT = Double.random(in: skinBlinkMin...skinBlinkMax) }
         // Squint while sliding (motion-free, so never RM-gated): paired with the camera drop it
         // makes a slide readable in a single still frame. A blink wins when both close the lids.
         let lid: Float = blinkT < 0 ? 0.1 : (lastSliding ? 0.3 : 1)
@@ -604,11 +616,11 @@ final class RealityRenderer: RendererPort {
         decor.reset(distance: 0)
     }
 
-    /// v1.3 skin pipeline: colors + trail tint + rig geometry + idle sway from one `Skin` recipe.
-    /// Rebuilds the character rig — called on equip/launch only, NEVER per frame. Character
-    /// colors are authored per skin and world-blind (decree 1): Prism (`isPrismatic`) shimmers
-    /// on the shared 8 s clock — fixed and identical in every world; its nil trail = "ride the
-    /// live shimmer hue". The eyes and antenna keep constant authored hexes everywhere.
+    /// v1.3 skin pipeline: colors + trail tint + rig geometry + idle sway/blink cadence from one
+    /// `Skin` recipe. Rebuilds the character rig — called on equip/launch only, NEVER per frame.
+    /// Character colors are authored per skin and world-blind (decree 1): Prism (`isPrismatic`)
+    /// shimmers on the shared 8 s clock — fixed and identical in every world; its nil trail =
+    /// "ride the live shimmer hue". The eyes and antenna keep constant authored hexes everywhere.
     func applySkin(_ skin: Skin) {
         skinBodyHex = skin.bodyHex
         skinAntennaHex = skin.antennaHex
@@ -622,7 +634,9 @@ final class RealityRenderer: RendererPort {
         skinAntennaHeight = skin.antennaHeightScale
         skinAntennaTip = skin.antennaTipScale
         skinSway = Float(skin.idle.sway)
-        skinSwaySpeed = skin.idle.bobSpeed * 2
+        skinSwaySpeed = skin.idle.bobSpeed * 2 * .pi * 0.8   // preview parity — see skinSwaySpeed doc
+        skinBlinkMin = skin.idle.blinkMin
+        skinBlinkMax = skin.idle.blinkMax
         rebuildCharacter()
         applyCharacterColors()
         shimmerStep = .min   // prismatic body/trail re-derive on the next advanceVisuals tick
@@ -630,13 +644,15 @@ final class RealityRenderer: RendererPort {
 
     /// Paint the rig from the authored skin hexes — on equip/rig rebuild only, never per frame
     /// and never from the world palette. The prismatic body is then re-painted ~30 Hz by the
-    /// shimmer step in `advanceVisuals`; the stem stays pinned to the authored `bodyHex` so the
-    /// antenna never moves hue with anything — world or clock.
+    /// shimmer step in `advanceVisuals`; the antenna — stem AND tip — pins to the authored
+    /// `antennaHex`, exactly what the preview strokes (AUDIT D2-1: the swatch is the purchase
+    /// promise — a body-colored stem erased Mono's black spike and Thorn's leaf-green cue),
+    /// and never moves hue with anything — world or clock.
     private func applyCharacterColors() {
-        let bodyMat = UnlitMaterial(color: uiHex(skinBodyHex))
-        playerBody.model?.materials = [bodyMat]
-        antenna.model?.materials = [bodyMat]
-        antennaTip.model?.materials = [UnlitMaterial(color: uiHex(skinAntennaHex))]
+        playerBody.model?.materials = [UnlitMaterial(color: uiHex(skinBodyHex))]
+        let antennaMat = UnlitMaterial(color: uiHex(skinAntennaHex))
+        antenna.model?.materials = [antennaMat]
+        antennaTip.model?.materials = [antennaMat]
     }
 
     // MARK: scene construction
@@ -703,16 +719,30 @@ final class RealityRenderer: RendererPort {
 
     /// Build the character rig from the stored skin params (defaults reproduce the classic Prism
     /// sphere). Eyes keep the same world-space face anchor for every body shape so the existing
-    /// blink/squash code needs no per-shape branches. Sizes per DESIGN_characters §1.6.
+    /// blink/squash code needs no per-shape branches. Sizes per DESIGN_characters §1.6, all
+    /// derived from `CharacterProportions` — the SAME constants the preview's silhouette math
+    /// reads, so swatch and rig proportions agree by construction (AUDIT D2-5). Sphere/cube
+    /// reproduce the shipped 0.62 / 1.06 exactly; the crystal gains §4.1's real 3D elongation.
     private func buildCharacter() {
         let bodyMesh: MeshResource
         var bodyY: Float = 0.66
+        let bodyR = CharacterProportions.sphereRadius
         switch skinBodyShape {
-        case .sphere:  bodyMesh = .generateSphere(radius: 0.62)
-        case .cube:    bodyMesh = .generateBox(width: 1.06, height: 1.06, depth: 1.06, cornerRadius: 0.18)
-        case .crystal: bodyMesh = ProceduralMesh.octahedron(0.78); bodyY = 0.72
+        case .sphere:
+            bodyMesh = .generateSphere(radius: bodyR)
+        case .cube:
+            let edge = bodyR * 2 * CharacterProportions.cubeEdgeRatio
+            bodyMesh = .generateBox(width: edge, height: edge, depth: edge,
+                                    cornerRadius: edge * CharacterProportions.cubeCornerRatio)
+        case .crystal:
+            bodyMesh = ProceduralMesh.octahedron(rx: bodyR * CharacterProportions.crystalHalfWidthRatio,
+                                                 ry: bodyR * CharacterProportions.crystalHalfHeightRatio,
+                                                 rz: bodyR * CharacterProportions.crystalHalfWidthRatio)
+            bodyY = 0.72
         }
-        let body = ModelEntity(mesh: bodyMesh, materials: [UnlitMaterial(color: .cyan)])
+        // Seed materials from the stored skin hexes (not fixed cyan/magenta) so even the
+        // pre-first-`applyCharacterColors` frame shows the equipped identity (AUDIT D2-1).
+        let body = ModelEntity(mesh: bodyMesh, materials: [UnlitMaterial(color: uiHex(skinBodyHex))])
         body.position = SIMD3<Float>(0, bodyY, 0)
         playerRig.addChild(body)
         playerBody = body
@@ -749,11 +779,12 @@ final class RealityRenderer: RendererPort {
         let h = skinAntennaHeight
         antennaCenterY = 1.21 + 0.21 * h
         antennaTipY = 1.21 + 0.42 * h + 0.045
-        antenna = ModelEntity(mesh: .generateCylinder(height: 0.42 * h, radius: 0.025), materials: [UnlitMaterial(color: .cyan)])
+        let antennaMat = UnlitMaterial(color: uiHex(skinAntennaHex))   // stem + tip: D2-1 seed
+        antenna = ModelEntity(mesh: .generateCylinder(height: 0.42 * h, radius: 0.025), materials: [antennaMat])
         antenna.position = SIMD3<Float>(0, antennaCenterY, 0)
         playerRig.addChild(antenna)
 
-        antennaTip = ModelEntity(mesh: .generateSphere(radius: 0.095 * skinAntennaTip), materials: [UnlitMaterial(color: .magenta)])
+        antennaTip = ModelEntity(mesh: .generateSphere(radius: 0.095 * skinAntennaTip), materials: [antennaMat])
         antennaTip.position = SIMD3<Float>(0, antennaTipY, 0)
         playerRig.addChild(antennaTip)
         swayApplied = false   // fresh rig is at rest pose by construction
