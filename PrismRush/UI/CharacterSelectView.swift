@@ -2,9 +2,11 @@ import SwiftUI
 
 /// Characters as "the stage and the shelf" (R7): the hero stage previews the FOCUSED skin
 /// (defaults to equipped on open); tapping any card focuses it; commitment happens on the state
-/// button (EQUIP / BUY / requirement). Locked skins render as silhouettes with pinned requirement
-/// copy, and every locked tap leads somewhere (DESIGN_characters §3.4 routing). All profile state
-/// is read from `ProfileStore.shared` at the point of use inside `body` (G3 — no snapshot `let`).
+/// button (EQUIP / BUY / requirement). Locked skins render as full-color TEASES (v1.4 — reduced
+/// opacity + lock chip, so players see what they're missing) with pinned requirement copy, and
+/// every locked tap leads somewhere (DESIGN_characters §3.4 routing). A NEXT UNLOCK spotlight
+/// above the 24-skin grid names the nearest goal. All profile state is read from
+/// `ProfileStore.shared` at the point of use inside `body` (G3 — no snapshot `let`).
 struct CharacterSelectView: View {
     let model: GameModel
     /// Pre-focus the stage on this skin (shop rail / featured-card routing — uiux §4.1
@@ -37,6 +39,7 @@ struct CharacterSelectView: View {
                            onCoins: { model.open(.shop) }) {
             VStack(spacing: Theme.Space.l) {
                 heroSection
+                nextUnlockRow
                 ForEach([Skin.Rarity.common, .rare, .epic, .legendary], id: \.rawValue) { rarity in
                     raritySection(rarity)
                 }
@@ -73,8 +76,10 @@ struct CharacterSelectView: View {
 
     private var heroSection: some View {
         let skin = focusedSkin
+        // Locked focus stages the 0.6-opacity tease (v1.4) — read live at point of use (G3).
+        let locked = !ProfileStore.shared.profile.ownedSkins.contains(skin.id)
         return VStack(spacing: Theme.Space.s) {
-            CharacterHeroStage(skin: skin, height: 192, showsNamePill: false)
+            CharacterHeroStage(skin: skin, height: 192, showsNamePill: false, locked: locked)
                 .frame(maxWidth: .infinity)
                 .id(skin.id)   // crossfade between characters, not in-place morph
             HStack(spacing: Theme.Space.s) {
@@ -226,20 +231,105 @@ struct CharacterSelectView: View {
         }
     }
 
+    // MARK: the next-unlock spotlight
+
+    /// The roster's nearest goal (v1.4 — 24 skins need a "start here"): the cheapest locked skin
+    /// the player can buy RIGHT NOW; else the lowest level-gate still ahead; else the cheapest
+    /// coin pull to save toward. Achievement/challenge/iap skins are journeys, not next steps.
+    private var nextUnlockSkin: Skin? {
+        let profile = ProfileStore.shared.profile
+        let locked = SkinCatalog.all.filter { !profile.ownedSkins.contains($0.id) }
+        let coinSkins = locked.filter { $0.cost > 0 }.sorted { $0.cost < $1.cost }
+        if let affordable = coinSkins.first(where: { $0.cost <= profile.coins }) { return affordable }
+        let levelGates = locked.compactMap { skin -> (skin: Skin, level: Int)? in
+            if case .level(let n) = skin.unlock { (skin, n) } else { nil }
+        }
+        if let nearest = levelGates.min(by: { $0.level < $1.level }) { return nearest.skin }
+        return coinSkins.first
+    }
+
+    /// Subtle spotlight row above the grid — tap focuses the hero on that skin (preview, never
+    /// commit). The reward pill goes gold only when the coins are already in the bank.
+    @ViewBuilder private var nextUnlockRow: some View {
+        if let skin = nextUnlockSkin {
+            let affordable = skin.cost > 0 && ProfileStore.shared.profile.coins >= skin.cost
+            Button { stateAction(focus: skin) } label: {
+                HStack(spacing: Theme.Space.m) {
+                    AnimatedCharacterSwatch(skin: skin, size: 36, silhouette: true, animated: false)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("NEXT UNLOCK")
+                            .typeScale(.micro)
+                            .foregroundStyle(affordable ? Theme.Role.reward : Theme.Role.textTertiary)
+                        Text(skin.name)
+                            .typeScale(.heading)
+                            .foregroundStyle(Theme.Role.textPrimary)
+                    }
+                    Spacer()
+                    nextUnlockTag(skin, affordable: affordable)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Theme.Role.textTertiary)
+                }
+                .padding(.horizontal, Theme.Space.m).padding(.vertical, Theme.Space.s)
+            }
+            .buttonStyle(.neon)
+            .neonCard(raised: affordable)
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m)
+                .strokeBorder(affordable ? Theme.Role.reward.opacity(0.5) : .clear, lineWidth: 1.5))
+            .accessibilityIdentifier("nextUnlockRow")
+            .accessibilityLabel("Next unlock: \(skin.name). \(nextUnlockA11y(skin, affordable: affordable))")
+            .accessibilityHint("Shows it on the stage")
+        }
+    }
+
+    @ViewBuilder private func nextUnlockTag(_ skin: Skin, affordable: Bool) -> some View {
+        if case .level(let n) = skin.unlock {
+            Text("REACH LVL \(n)")
+                .typeScale(.micro)
+                .foregroundStyle(Theme.Role.lock)
+        } else {
+            HStack(spacing: 4) {
+                CoinGlyph(size: 12)
+                Text("\(skin.cost)").monospacedDigit()
+            }
+            .font(.system(size: 12, weight: .heavy, design: .rounded))
+            .foregroundStyle(affordable ? .black : Theme.Role.textSecondary)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(affordable ? AnyShapeStyle(Theme.goldGradient) : AnyShapeStyle(Theme.Role.surfaceHi),
+                        in: Capsule())
+        }
+    }
+
+    private func nextUnlockA11y(_ skin: Skin, affordable: Bool) -> String {
+        if case .level(let n) = skin.unlock { return "Reach level \(n)." }
+        return affordable ? "\(skin.cost) coins — you can afford it." : "\(skin.cost) coins."
+    }
+
+    /// Spotlight tap = focus the stage on that skin (same contract as a first shelf-card tap).
+    private func stateAction(focus skin: Skin) {
+        focusedID = skin.id
+    }
+
     // MARK: the shelf
 
     private func raritySection(_ rarity: Skin.Rarity) -> some View {
         let skins = SkinCatalog.all.filter { $0.rarity == rarity }
+        // Owned-count read lives here, per render, straight off the live store (G3).
+        let ownedCount = skins.count { ProfileStore.shared.profile.ownedSkins.contains($0.id) }
         return VStack(alignment: .leading, spacing: Theme.Space.s + 4) {
             HStack(spacing: Theme.Space.s) {
                 Text(rarityName(rarity))
                     .font(.system(size: 11, weight: .heavy, design: .rounded))
                     .tracking(2)
                     .foregroundStyle(rarityColor(rarity))
+                Text("· \(ownedCount)/\(skins.count)")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.Role.textTertiary)
                 Rectangle().fill(rarityColor(rarity).opacity(0.25)).frame(height: 1)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(rarityName(rarity)) characters")
+            .accessibilityLabel("\(rarityName(rarity)) characters, \(ownedCount) of \(skins.count) owned")
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 12)], spacing: 12) {
                 ForEach(skins) { skin in
                     shelfCard(skin)
@@ -309,15 +399,10 @@ private struct ShelfCard: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
+                // Tease render (v1.4): full color at 0.45 opacity — the swatch overlays its own
+                // lock chip, so the old per-card lock glyph is gone.
                 AnimatedCharacterSwatch(skin: skin, size: 56, silhouette: !owned)
                     .frame(height: 84)
-                    .overlay(alignment: .bottomTrailing) {
-                        if !owned, skin.cost == 0, !skin.premium {
-                            Image(systemName: "lock.fill")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(Theme.Role.lock)
-                        }
-                    }
                 Text(skin.name)
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .foregroundStyle(owned ? Theme.Role.textPrimary : Theme.Role.textSecondary)

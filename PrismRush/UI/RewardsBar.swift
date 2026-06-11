@@ -79,7 +79,9 @@ struct RewardsBar: View {
                            : "Shows the daily bonus and chest timers.")
     }
 
-    /// MISSIONS — gold count badge while anything is claimable.
+    /// MISSIONS — gold count badge while anything is claimable. The count comes from
+    /// `unclaimedCount`, the SAME source MissionsView's v1.4 summary strip reads — the menu cell
+    /// and the in-sheet "N CLAIMABLE" strip can never disagree.
     private func missionsCell(unclaimed: Int, lit: Bool) -> some View {
         railCell(glyph: "target", title: "MISSIONS",
                  sub: unclaimed > 0 ? "CLAIM \(unclaimed)" : "BOARD",

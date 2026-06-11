@@ -1,14 +1,31 @@
 import SwiftUI
 
-/// Missions hub: today's 3 daily slots, THIS WEEK's 3 big-payout weekly slots (v1.3), the per-run
-/// skill missions, and the tiered lifetime achievements (tier ticks live ON the progress bar).
-/// CLAIM ALL appears when ≥2 rewards are ready. Claims pay coins through
-/// `ProfileStore.claimMission`; reads `ProfileStore.shared` directly in `body` (G3).
+/// Missions hub, v1.4 re-skin. Same mechanics as v1.3 — claim-once through
+/// `ProfileStore.claimMission` (which refreshes the daily/weekly boards before paying), 3 daily +
+/// 3 weekly deterministic slots, per-run feats, tiered achievement ladders, CLAIM ALL at ≥2 —
+/// wrapped in a board that sells the work: a summary strip up top ("3 CLAIMABLE · 1,240 COINS
+/// WAITING", gold only while something waits), four sections with their own identity (TODAY =
+/// gold timer ring, THIS WEEK = purple day-dots, CHALLENGES = cyan one-run feats, ACHIEVEMENTS =
+/// green tier ladders), and ring-progress cards that fill on appear and collapse on claim with a
+/// coin fly-up. Reads `ProfileStore.shared` directly in `body` (G3); Reduce Motion renders every
+/// ring static and skips the fly-up.
 struct MissionsView: View {
     let model: GameModel
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var claimPulse = 0   // drives success haptics on claim
-    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 10
+    // Dynamic Type: rings and dots scale with the user's text size (a fixed 44 pt ring next to
+    // XL text reads as a misprint).
+    @ScaledMetric(relativeTo: .body) private var ringSize: CGFloat = 44
+    @ScaledMetric(relativeTo: .caption) private var headerRingSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption2) private var dayDotSize: CGFloat = 6
+
+    /// Section identity tints (uiux §2: cyan = tap accent, gold = money; purple/green carry the
+    /// week + lifetime ladders so the four boards scan apart at a glance).
+    private static let todayTint = Theme.color(0xFFB13D)
+    private static let weekTint = Theme.color(0xB26BFF)
+    private static let featTint = Theme.color(0x00F5FF)
+    private static let ladderTint = Theme.color(0x00FF88)
 
     var body: some View {
         let store = ProfileStore.shared
@@ -17,21 +34,25 @@ struct MissionsView: View {
             // Countdowns tick per minute, not per second (uiux §5.10 — the demoted countdown).
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 let now = context.date
+                let claimables = claimableMissions(store: store, now: now)
                 VStack(spacing: 22) {
-                    claimAllRow(store: store, now: now)
-                    dailySection(store: store, now: now)
-                    weeklySection(store: store, now: now)
-                    section("CHALLENGES", subtitle: "One run, one feat — claim once, forever.") {
-                        ForEach(MissionCatalog.perRun) { mission in
-                            missionRow(mission, store: store, now: now)
-                        }
-                    }
-                    section("ACHIEVEMENTS", subtitle: "Lifetime ladders — every tier pays out.") {
-                        ForEach(MissionCatalog.achievements) { mission in
-                            missionRow(mission, store: store, now: now)
-                        }
-                    }
+                    summaryStrip(claimables: claimables, store: store, now: now)
+                    claimAllRow(claimables: claimables, store: store, now: now)
+                    sectionBlock(missions: store.dailyMissions(now: now), tint: Self.todayTint,
+                                 store: store, now: now) { todayHeader(now: now) }
+                    sectionBlock(missions: store.weeklyMissions(now: now), tint: Self.weekTint,
+                                 store: store, now: now) { weekHeader(now: now) }
+                    sectionBlock(missions: MissionCatalog.perRun, tint: Self.featTint,
+                                 store: store, now: now) { featsHeader }
+                    sectionBlock(missions: MissionCatalog.achievements, tint: Self.ladderTint,
+                                 store: store, now: now) { laddersHeader }
                 }
+                // Claim choreography: both values change exactly when a claim lands, so claimed
+                // rows collapse (and CLAIM ALL cascades, one row per 80 ms beat) with a spring.
+                .animation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.15),
+                           value: store.profile.claimedMissions)
+                .animation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.15),
+                           value: store.profile.achievementTier)
             }
         }
         .sensoryFeedback(trigger: claimPulse) { _, _ in
@@ -39,22 +60,57 @@ struct MissionsView: View {
         }
     }
 
+    // MARK: summary strip
+
+    /// One-line board status: claimable count + coins waiting. Gold ONLY while something waits
+    /// (Role rules — gold means money); otherwise a neutral "all clear" with the next reset.
+    private func summaryStrip(claimables: [Mission], store: ProfileStore, now: Date) -> some View {
+        let count = claimables.count
+        let waiting = claimables.reduce(0) { $0 + store.missionState($1, now: now).reward }
+        return HStack(spacing: Theme.Space.s) {
+            Image(systemName: count > 0 ? "sparkles" : "checkmark.circle")
+                .font(.system(size: 12, weight: .bold))
+            Text(count > 0
+                 ? "\(count) CLAIMABLE · \(waiting.formatted()) COINS WAITING"
+                 : "ALL CLEAR · NEW BOARD IN \(dailyCountdown(now: now))")
+                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                .tracking(1)
+                .monospacedDigit()
+            Spacer(minLength: 0)
+            if count > 0 { CoinGlyph(size: 13) }
+        }
+        .foregroundStyle(count > 0 ? Theme.Role.reward : Theme.Role.textTertiary)
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(count > 0 ? Theme.Role.reward.opacity(0.08) : Theme.Role.surface,
+                    in: RoundedRectangle(cornerRadius: Theme.Radius.m))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m)
+            .strokeBorder(count > 0 ? Theme.Role.reward.opacity(0.4) : Theme.Role.hairline))
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("missionsSummary")
+        .accessibilityLabel(count > 0
+                            ? "\(count) rewards claimable, \(waiting) coins waiting."
+                            : "All clear. New board in \(dailyCountdownSpoken(now: now)).")
+    }
+
     // MARK: claim all
 
-    /// Gold CLAIM ALL pill when ≥2 rewards are ready (uiux §6.5). One tap claims everything;
-    /// feedback is a single chime + haptic (the per-claim stagger is parked, V13_SPEC §P).
-    @ViewBuilder private func claimAllRow(store: ProfileStore, now: Date) -> some View {
-        let claimables = claimableMissions(store: store, now: now)
+    /// Gold CLAIM ALL pill when ≥2 rewards are ready (uiux §6.5). v1.4: one chime, then the
+    /// claims land one per 80 ms — a haptic per landing, rows collapsing in cascade.
+    @ViewBuilder private func claimAllRow(claimables: [Mission], store: ProfileStore, now: Date) -> some View {
         if claimables.count >= 2 {
             let total = claimables.reduce(0) { $0 + store.missionState($1, now: now).reward }
             Button {
-                var paid = 0
-                for mission in claimables {
-                    paid += store.claimMission(mission.id, now: Date()) ?? 0
-                }
-                if paid > 0 {
-                    claimPulse += 1
-                    model.synth.play(.purchaseChime)
+                model.synth.play(.purchaseChime)
+                let queue = claimables
+                // Unstructured on purpose: the claims must finish even if the sheet closes
+                // mid-cascade — they land on the shared store, not on this view.
+                Task { @MainActor in
+                    for mission in queue {
+                        if store.claimMission(mission.id, now: Date()) != nil {
+                            claimPulse += 1
+                        }
+                        try? await Task.sleep(for: .milliseconds(80))
+                    }
                 }
             } label: {
                 HStack(spacing: 6) {
@@ -84,205 +140,118 @@ struct MissionsView: View {
 
     // MARK: sections
 
-    private func dailySection(store: ProfileStore, now: Date) -> some View {
+    /// One section: identity header + ring cards. Claims route back through `registerClaim` so
+    /// the haptic/chime stay centralized (same `.sensoryFeedback` pattern as v1.3).
+    private func sectionBlock(missions: [Mission], tint: Color, store: ProfileStore, now: Date,
+                              @ViewBuilder header: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("TODAY")
-                    .font(.system(size: 13, weight: .heavy, design: .rounded)).tracking(2)
-                    .foregroundStyle(Theme.color(0xFFB13D))
-                // The countdown joins the kicker line at micro weight, per-minute (uiux §6.5).
-                Text("· RESETS \(dailyCountdown(now: now))")
-                    .typeScale(.micro)
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.Role.textTertiary)
-                Spacer()
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Today's missions. New board in \(dailyCountdownSpoken(now: now)).")
-            ForEach(store.dailyMissions(now: now)) { mission in
-                missionRow(mission, store: store, now: now)
+            header()
+            ForEach(missions) { mission in
+                MissionCard(mission: mission,
+                            state: store.missionState(mission, now: now),
+                            tint: tint,
+                            ringSize: ringSize,
+                            onClaim: { registerClaim() })
             }
         }
     }
 
-    /// THIS WEEK — 3 deterministic weekly slots, 6–7× daily targets, 600–900 coin payouts.
-    private func weeklySection(store: ProfileStore, now: Date) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("THIS WEEK")
-                    .font(.system(size: 13, weight: .heavy, design: .rounded)).tracking(2)
-                    .foregroundStyle(Theme.color(0xB26BFF))
-                Text("· RESETS \(weeklyCountdown(now: now))")
-                    .typeScale(.micro)
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.Role.textTertiary)
-                Spacer()
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("This week's missions. New board in \(weeklyCountdown(now: now)).")
-            ForEach(store.weeklyMissions(now: now)) { mission in
-                missionRow(mission, store: store, now: now)
-            }
-        }
+    /// Per-claim feedback (single claims; CLAIM ALL drives its own cascade).
+    private func registerClaim() {
+        claimPulse += 1
+        model.synth.play(.purchaseChime)
     }
 
-    private func section(_ title: String, subtitle: String, @ViewBuilder rows: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
+    /// TODAY — gold, with a live timer ring draining toward UTC midnight (per-minute tick).
+    private func todayHeader(now: Date) -> some View {
+        let remaining = max(0, min(1, ProfileStore.secondsUntilUTCMidnight(now: now) / 86_400))
+        return HStack(spacing: Theme.Space.s) {
+            ZStack {
+                Circle().stroke(Theme.Role.reward.opacity(0.18), lineWidth: 2.5)
+                Circle()
+                    .trim(from: 0, to: remaining)
+                    .stroke(Theme.Role.reward, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: headerRingSize, height: headerRingSize)
+            Text("TODAY")
                 .font(.system(size: 13, weight: .heavy, design: .rounded)).tracking(2)
-                .foregroundStyle(.white.opacity(0.85))
-            Text(subtitle)
-                .font(.system(size: captionSize + 1, weight: .medium, design: .rounded))
-                .foregroundStyle(.white.opacity(0.5))
-                .padding(.top, -6)
-            rows()
-        }
-    }
-
-    // MARK: rows
-
-    @ViewBuilder
-    private func missionRow(_ mission: Mission, store: ProfileStore, now: Date = Date()) -> some View {
-        let state = store.missionState(mission, now: now)
-        if state.claimed {
-            claimedRow(mission, state: state)
-        } else {
-            activeRow(mission, state: state, store: store, now: now)
-        }
-    }
-
-    /// Fully exhausted mission — collapses to a slim, dim receipt line (history, not noise).
-    private func claimedRow(_ mission: Mission, state: ProfileStore.MissionState) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Theme.color(0x00FF88).opacity(0.8))
-            Text(mission.title)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.45))
-                .strikethrough(true, color: .white.opacity(0.3))
+                .foregroundStyle(Self.todayTint)
+            Text("· RESETS \(dailyCountdown(now: now))")
+                .typeScale(.micro)
+                .monospacedDigit()
+                .foregroundStyle(Theme.Role.textTertiary)
             Spacer()
-            if mission.isTiered {
-                Text("ALL TIERS")
-                    .font(.system(size: captionSize, weight: .heavy, design: .rounded)).tracking(1)
-                    .foregroundStyle(.white.opacity(0.35))
-            }
         }
-        .padding(.horizontal, 14).padding(.vertical, 9)
-        .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(mission.title). Completed and claimed.")
+        .accessibilityLabel("Today's missions. New board in \(dailyCountdownSpoken(now: now)).")
     }
 
-    private func activeRow(_ mission: Mission, state: ProfileStore.MissionState,
-                           store: ProfileStore, now: Date) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 10) {
-                Text(mission.title)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                Spacer()
-                if state.claimable {
-                    Button {
-                        if store.claimMission(mission.id, now: Date()) != nil {
-                            claimPulse += 1
-                            model.synth.play(.purchaseChime)
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text("CLAIM +\(state.reward)")
-                                .font(.system(size: 12, weight: .heavy, design: .rounded))
-                            CoinGlyph(size: 12)
-                        }
-                        .foregroundStyle(.black)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(Theme.goldGradient, in: Capsule())
-                        .shadow(color: Theme.Role.reward.opacity(0.45), radius: 10)
-                    }
-                    .buttonStyle(.neon)
-                    .accessibilityIdentifier("claim_\(mission.id)")
-                    .accessibilityLabel("Claim \(state.reward) coins for \(mission.title)")
-                } else {
-                    HStack(spacing: 4) {
-                        Text("+\(state.reward)")
-                            .font(.system(size: 13, weight: .heavy, design: .rounded))
-                        CoinGlyph(size: 12)
-                    }
-                    .foregroundStyle(.white.opacity(0.55))
+    /// THIS WEEK — purple, with seven day-dots walking the UTC week (today ringed in white).
+    private func weekHeader(now: Date) -> some View {
+        let dayIndex = ProfileStore.daysSinceEpoch(now) % 7   // 0…6 inside the UTC week key
+        return HStack(spacing: Theme.Space.s) {
+            HStack(spacing: 3) {
+                ForEach(0..<7, id: \.self) { day in
+                    Circle()
+                        .fill(day <= dayIndex
+                              ? Self.weekTint.opacity(day == dayIndex ? 1 : 0.45)
+                              : Color.white.opacity(0.14))
+                        .frame(width: dayDotSize, height: dayDotSize)
+                        .overlay(Circle().strokeBorder(
+                            day == dayIndex ? Color.white.opacity(0.75) : .clear, lineWidth: 1))
                 }
             }
-            // Tiered ladders print TIER n/m once, right-aligned above the bar; the ticks live ON
-            // the bar (uiux §6.5 — the redundant subtitle label is deleted).
-            if mission.isTiered {
-                HStack {
-                    Spacer()
-                    Text("TIER \(min(state.tier + 1, state.tierCount))/\(state.tierCount)")
-                        .typeScale(.micro)
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.color(0xB26BFF))
-                }
-                .padding(.bottom, -4)
-            }
-            progressBar(mission, state: state, store: store)
+            Text("THIS WEEK")
+                .font(.system(size: 13, weight: .heavy, design: .rounded)).tracking(2)
+                .foregroundStyle(Self.weekTint)
+            Text("· RESETS \(weeklyCountdown(now: now))")
+                .typeScale(.micro)
+                .monospacedDigit()
+                .foregroundStyle(Theme.Role.textTertiary)
+            Spacer()
         }
-        .padding(14)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .strokeBorder(state.claimable ? Theme.Role.reward.opacity(0.55) : .white.opacity(0.12),
-                              lineWidth: state.claimable ? 1.5 : 1)
-        )
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(rowA11y(mission, state: state))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("This week's missions. Day \(dayIndex + 1) of 7. New board in \(weeklyCountdown(now: now)).")
     }
 
-    /// Progress bar; for tiered achievements the bar spans the FINAL tier with tick marks at
-    /// every tier boundary, so one glance shows the whole ladder.
-    private func progressBar(_ mission: Mission, state: ProfileStore.MissionState,
-                             store: ProfileStore) -> some View {
-        let tierTargets: [Double] = {
-            if case .lifetimeTiered(let targets, _) = mission.scope { return targets }
-            return []
-        }()
-        let finalTarget = tierTargets.last ?? state.target
-        let rawProgress = mission.isTiered
-            ? (store.profile.missionProgress[mission.id] ?? 0) : state.progress
-        let fraction = finalTarget > 0 ? min(1, rawProgress / finalTarget) : 0
-
-        return HStack(spacing: 10) {
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.1))
-                    Capsule()
-                        .fill(state.claimable
-                              ? AnyShapeStyle(Theme.goldGradient)
-                              : AnyShapeStyle(Theme.actionGradient))
-                        .frame(width: max(6, geo.size.width * fraction))
-                    // Tier ticks (all but the final target, which is the bar's end).
-                    ForEach(tierTargets.dropLast(), id: \.self) { target in
-                        Rectangle()
-                            .fill(.white.opacity(0.55))
-                            .frame(width: 1.5, height: 7)
-                            .offset(x: geo.size.width * (target / max(finalTarget, 1)))
-                    }
-                }
-            }
-            .frame(height: 7)
-            Text("\(compact(min(rawProgress, finalTarget)))/\(compact(mission.isTiered ? finalTarget : state.target))")
-                .font(.system(size: 11, weight: .bold, design: .rounded)).monospacedDigit()
-                .foregroundStyle(.white.opacity(0.65))
-                .fixedSize()
+    /// CHALLENGES — cyan one-run feats (claim once, forever).
+    private var featsHeader: some View {
+        HStack(spacing: Theme.Space.s) {
+            Image(systemName: "bolt.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Self.featTint)
+            Text("CHALLENGES")
+                .font(.system(size: 13, weight: .heavy, design: .rounded)).tracking(2)
+                .foregroundStyle(Self.featTint)
+            Text("· ONE-RUN FEATS")
+                .typeScale(.micro)
+                .foregroundStyle(Theme.Role.textTertiary)
+            Spacer()
         }
-        .accessibilityHidden(true)   // folded into the row's combined label
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Challenges. One-run feats — claim once, forever.")
+    }
+
+    /// ACHIEVEMENTS — green lifetime ladders; each card highlights its current tier.
+    private var laddersHeader: some View {
+        HStack(spacing: Theme.Space.s) {
+            Image(systemName: "trophy.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Self.ladderTint)
+            Text("ACHIEVEMENTS")
+                .font(.system(size: 13, weight: .heavy, design: .rounded)).tracking(2)
+                .foregroundStyle(Self.ladderTint)
+            Text("· EVERY TIER PAYS")
+                .typeScale(.micro)
+                .foregroundStyle(Theme.Role.textTertiary)
+            Spacer()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Achievements. Lifetime ladders — every tier pays out.")
     }
 
     // MARK: helpers
-
-    private func compact(_ v: Double) -> String {
-        if v >= 10_000 { return String(format: "%.0fk", v / 1_000) }
-        if v >= 1_000 { return String(format: "%.1fk", v / 1_000) }
-        return "\(Int(v))"
-    }
 
     private func dailyCountdown(now: Date) -> String {
         let secs = Int(ProfileStore.secondsUntilUTCMidnight(now: now))
@@ -299,12 +268,243 @@ struct MissionsView: View {
         let days = 7 - ProfileStore.daysSinceEpoch(now) % 7
         return days <= 1 ? dailyCountdown(now: now) : "\(days)D"
     }
+}
 
-    private func rowA11y(_ mission: Mission, state: ProfileStore.MissionState) -> String {
+/// One mission as a ring card: circular progress (animated fill on appear; Reduce Motion =
+/// static), title, tier ladder for achievements (current tier highlighted), and the reward pill /
+/// gold CLAIM button. A landed claim fires a coin fly-up; a fully exhausted mission collapses to
+/// a slim receipt row (the card keeps its ForEach identity, so the collapse animates in place).
+/// Renders entirely from the `state` value its parent recomputes off the live store each pass.
+private struct MissionCard: View {
+    let mission: Mission
+    let state: ProfileStore.MissionState
+    let tint: Color
+    let ringSize: CGFloat
+    let onClaim: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false      // drives the on-appear ring fill (0 → fraction)
+    @State private var flyAmount = 0         // last claim's reward, shown by the fly-up
+    @State private var flyTrigger = 0        // re-fires the fly-up per claim
+
+    var body: some View {
+        Group {
+            if state.claimed {
+                receiptRow
+            } else {
+                activeCard
+            }
+        }
+        .accessibilityIdentifier("missionCard_\(mission.id)")
+    }
+
+    // MARK: active
+
+    private var activeCard: some View {
+        HStack(spacing: 12) {
+            progressRing
+            VStack(alignment: .leading, spacing: 5) {
+                Text(mission.title)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 6) {
+                    if mission.isTiered { tierLadder }
+                    Text("\(compactCount(state.progress))/\(compactCount(state.target))")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+            }
+            Spacer(minLength: Theme.Space.s)
+            claimControl
+        }
+        .padding(14)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .strokeBorder(state.claimable ? Theme.Role.reward.opacity(0.55) : .white.opacity(0.12),
+                              lineWidth: state.claimable ? 1.5 : 1)
+        )
+        .overlay(alignment: .topTrailing) {
+            if flyAmount > 0 {
+                CoinFlyUp(amount: flyAmount, trigger: flyTrigger)
+                    .padding(.trailing, 18)
+            }
+        }
+        .onAppear { appeared = true }   // ring fills 0 → fraction (the .animation below rides it)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(rowA11y)
+    }
+
+    /// Circular progress ring: section-tinted while in progress, gold once claimable (a claim
+    /// bursts it to full before the row collapses). Center carries the metric's glyph.
+    private var progressRing: some View {
+        let fraction = state.target > 0 ? min(1, state.progress / state.target) : 0
+        let shown = appeared ? fraction : 0
+        return ZStack {
+            Circle().stroke(.white.opacity(0.1), lineWidth: 4)
+            Circle()
+                .trim(from: 0, to: shown)
+                .stroke(state.claimable ? AnyShapeStyle(Theme.goldGradient) : AnyShapeStyle(tint),
+                        style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Image(systemName: metricGlyph)
+                .font(.system(size: ringSize * 0.3, weight: .semibold))
+                .foregroundStyle(state.claimable ? Theme.Role.reward : .white.opacity(0.7))
+        }
+        .frame(width: ringSize, height: ringSize)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.7), value: shown)
+        .accessibilityLabel("Progress")
+        .accessibilityValue("\(Int(state.progress.rounded())) of \(Int(state.target.rounded()))")
+    }
+
+    /// Achievement ladder pips: paid tiers gold, the CURRENT tier wide + tinted, the rest dim.
+    private var tierLadder: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<state.tierCount, id: \.self) { tier in
+                Capsule()
+                    .fill(tier < state.tier ? Theme.Role.reward.opacity(0.8)
+                          : tier == state.tier ? tint
+                          : Color.white.opacity(0.14))
+                    .frame(width: tier == state.tier ? 16 : 8, height: 4)
+            }
+            Text("T\(min(state.tier + 1, state.tierCount))")
+                .typeScale(.micro)
+                .monospacedDigit()
+                .foregroundStyle(tint)
+        }
+    }
+
+    @ViewBuilder private var claimControl: some View {
+        if state.claimable {
+            Button(action: claim) {
+                HStack(spacing: 4) {
+                    Text("CLAIM +\(state.reward)")
+                        .font(.system(size: 12, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                    CoinGlyph(size: 12)
+                }
+                .foregroundStyle(.black)
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(Theme.goldGradient, in: Capsule())
+                .shadow(color: Theme.Role.reward.opacity(0.45), radius: 10)
+            }
+            .buttonStyle(.neon)
+            .accessibilityIdentifier("claim_\(mission.id)")
+            .accessibilityLabel("Claim \(state.reward) coins for \(mission.title)")
+        } else {
+            HStack(spacing: 4) {
+                Text("+\(state.reward)")
+                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                CoinGlyph(size: 11)
+            }
+            .foregroundStyle(.white.opacity(0.55))
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Color.white.opacity(0.05), in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.Role.hairline))
+        }
+    }
+
+    /// The claim lands on the store FIRST (mechanics over choreography — a mid-animation
+    /// dismissal must never lose coins), then the FX ride the resulting state change.
+    private func claim() {
+        let reward = state.reward
+        guard ProfileStore.shared.claimMission(mission.id, now: Date()) != nil else { return }
+        onClaim()
+        if !reduceMotion {
+            flyAmount = reward
+            flyTrigger += 1
+        }
+    }
+
+    // MARK: receipt
+
+    /// Fully exhausted mission — collapses to a slim, dim receipt line (history, not noise).
+    private var receiptRow: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Theme.color(0x00FF88).opacity(0.8))
+            Text(mission.title)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.45))
+                .strikethrough(true, color: .white.opacity(0.3))
+            Spacer()
+            if mission.isTiered {
+                Text("ALL TIERS")
+                    .typeScale(.micro)
+                    .foregroundStyle(.white.opacity(0.35))
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 9)
+        .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(mission.title). Completed and claimed.")
+    }
+
+    // MARK: helpers
+
+    private var metricGlyph: String {
+        switch mission.metric {
+        case .gems: "diamond.fill"
+        case .distance: "arrow.forward"
+        case .nearMisses: "wind"
+        case .slides: "arrow.down.to.line"
+        case .slickBonuses: "sparkles"
+        case .runsFinished: "flag.checkered"
+        case .streakBest: "flame.fill"
+        case .worldReached: "globe"
+        case .chestsOpened: "gift.fill"
+        case .revives: "heart.fill"
+        case .multiplierHit: "multiply"
+        }
+    }
+
+    private var rowA11y: String {
         let tierPart = mission.isTiered ? " Tier \(state.tier + 1) of \(state.tierCount)." : ""
         let status = state.claimable
             ? "Complete — \(state.reward) coins ready to claim."
             : "Progress \(Int(state.progress)) of \(Int(state.target)). Reward \(state.reward) coins."
         return "\(mission.title).\(tierPart) \(status)"
+    }
+
+    private func compactCount(_ v: Double) -> String {
+        if v >= 10_000 { return String(format: "%.0fk", v / 1_000) }
+        if v >= 1_000 { return String(format: "%.1fk", v / 1_000) }
+        return "\(Int(v))"
+    }
+}
+
+/// "+N ⬤" rising off a just-claimed card — re-fired per claim via `.id(trigger)`, invisible once
+/// the rise completes. Purely decorative (hidden from a11y, no hit testing).
+private struct CoinFlyUp: View {
+    let amount: Int
+    let trigger: Int
+
+    var body: some View {
+        FlyUpBody(amount: amount)
+            .id(trigger)   // a fresh claim restarts the rise from scratch
+    }
+
+    private struct FlyUpBody: View {
+        let amount: Int
+        @State private var risen = false
+
+        var body: some View {
+            HStack(spacing: 3) {
+                Text("+\(amount)")
+                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                CoinGlyph(size: 12)
+            }
+            .foregroundStyle(Theme.Role.reward)
+            .offset(y: risen ? -38 : -4)
+            .opacity(risen ? 0 : 1)
+            .onAppear { withAnimation(.easeOut(duration: 0.8)) { risen = true } }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 }

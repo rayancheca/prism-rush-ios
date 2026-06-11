@@ -1,32 +1,50 @@
 import SwiftUI
 
 /// Live procedural character preview — Canvas + TimelineView at 30 Hz (no per-card RealityViews;
-/// 16 RealityKit instances in a grid is a memory/stutter trap). Draws the same `Skin` recipe the
+/// 24 RealityKit instances in a grid is a memory/stutter trap). Draws the same `Skin` recipe the
 /// renderer rebuilds in 3D: body shape/scale, eye tint + pupil style, antenna height/tip, and the
 /// idle personality (bob, deterministic per-skin blink, antenna sway). Zero binary assets.
 struct AnimatedCharacterSwatch: View {
     let skin: Skin
     var size: CGFloat = 62
-    var silhouette = false          // locked state — shapes only, eyes closed, no glow
+    /// Locked state — v1.4 TEASE: the full-color character at reduced opacity with a lock chip,
+    /// still gently animated. The old dark cutout hid what players were missing; the tease sells
+    /// it ("see them, want them"). The parameter keeps its v1.3 spelling so every call site
+    /// compiles unchanged (R13 — `silhouette` now reads as "locked tease").
+    var silhouette = false
     var animated = true             // hero/grid: true; Reduce Motion forces a static frame
+    /// Tease fade for locked renders: grid cards 0.45; the hero stage lifts to 0.6 so the
+    /// buy/requirement button below it feels within reach.
+    var teaseOpacity: Double = 0.45
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Locked silhouettes are a flat fill so only the shape reads (DESIGN_characters §3.4).
-    private static let silhouetteColor = Theme.color(0x202036)
-
     var body: some View {
         Group {
-            if animated && !reduceMotion && !silhouette {
+            if animated && !reduceMotion {
                 TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { tl in
                     swatchCanvas(t: tl.date.timeIntervalSinceReferenceDate)
                 }
             } else {
-                swatchCanvas(t: 0)   // single static frame (Reduce Motion / silhouette / grids off-screen)
+                swatchCanvas(t: 0)   // single static frame (Reduce Motion / grids off-screen)
             }
+        }
+        .opacity(silhouette ? teaseOpacity : 1)    // the tease fade — the lock chip stays solid
+        .overlay(alignment: .bottom) {
+            if silhouette { lockChip }
         }
         .frame(width: size, height: size * 1.5)   // antenna headroom + bob never clips
         .accessibilityHidden(true)                 // containers carry the meaning (name/state labels)
+    }
+
+    /// Solid lock chip riding the teased render's feet — the one element that does NOT fade.
+    private var lockChip: some View {
+        Image(systemName: "lock.fill")
+            .font(.system(size: max(8, size * 0.16), weight: .bold))
+            .foregroundStyle(.white.opacity(0.92))
+            .padding(max(4, size * 0.1))
+            .background(Color.black.opacity(0.55), in: Circle())
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.22)))
     }
 
     private func swatchCanvas(t: TimeInterval) -> some View {
@@ -44,26 +62,23 @@ struct AnimatedCharacterSwatch: View {
         let yOff = sin(t * skin.idle.bobSpeed * 2 * .pi) * skin.idle.bobAmp * size
         let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2 + yOff)
 
-        let bodyColor: Color = silhouette ? Self.silhouetteColor : Theme.color(skin.bodyHex)
+        let bodyColor = Theme.color(skin.bodyHex)
 
-        // Glow (dropped entirely in silhouette mode).
-        if !silhouette {
-            let glowColor = skin.followsWorld ? Theme.color(0x00F5FF) : bodyColor
-            let glowRect = CGRect(x: center.x - bodyR * 1.6, y: center.y - bodyR * 1.6,
-                                  width: bodyR * 3.2, height: bodyR * 3.2)
-            ctx.fill(Path(ellipseIn: glowRect),
-                     with: .radialGradient(Gradient(colors: [glowColor.opacity(0.45), .clear]),
-                                           center: center, startRadius: bodyR * 0.4, endRadius: bodyR * 1.6))
-        }
+        // Glow — teased renders keep it: the whole canvas fades as one, so the glow reads as a
+        // dimmed version of the owned look rather than a different art style.
+        let glowColor = skin.followsWorld ? Theme.color(0x00F5FF) : bodyColor
+        let glowRect = CGRect(x: center.x - bodyR * 1.6, y: center.y - bodyR * 1.6,
+                              width: bodyR * 3.2, height: bodyR * 3.2)
+        ctx.fill(Path(ellipseIn: glowRect),
+                 with: .radialGradient(Gradient(colors: [glowColor.opacity(0.45), .clear]),
+                                       center: center, startRadius: bodyR * 0.4, endRadius: bodyR * 1.6))
 
         // Antenna behind the body: stem + tip rotate around the stem base (per-skin sway).
         drawAntenna(&ctx, t: t, center: center, bodyR: bodyR, scale: scale)
 
         // Body shape: sphere → circle, cube → rounded rect, crystal → vertical diamond.
         let bodyPath = bodyPath(center: center, bodyR: bodyR)
-        if silhouette {
-            ctx.fill(bodyPath, with: .color(Self.silhouetteColor))
-        } else if skin.followsWorld {
+        if skin.followsWorld {
             // Prism keeps the rainbow — the chameleon IS its identity.
             ctx.fill(bodyPath, with: .conicGradient(
                 Gradient(colors: [Theme.color(0x00F5FF), Theme.color(0xFF2BD6),
@@ -101,19 +116,6 @@ struct AnimatedCharacterSwatch: View {
         let eyeY = center.y - size * 0.05 * scale
         let eyeDX = size * 0.19 * scale
         let eyeD = size * 0.2 * CGFloat(skin.eyeRadius / 0.13) * scale
-
-        if silhouette {
-            // Eyes drawn closed: two short dark arcs, no sclera.
-            for dx in [-eyeDX, eyeDX] {
-                var arc = Path()
-                arc.addArc(center: CGPoint(x: center.x + dx, y: eyeY),
-                           radius: eyeD * 0.4, startAngle: .degrees(20), endAngle: .degrees(160),
-                           clockwise: false)
-                ctx.stroke(arc, with: .color(Theme.color(0x0A0A14)),
-                           style: StrokeStyle(lineWidth: max(1, size * 0.035), lineCap: .round))
-            }
-            return
-        }
 
         // Blink: deterministic, no state — per-skin period means Tempo visibly blinks on its 3 s
         // beat next to Fang's long stare. Static frames (t == 0) always render eyes open.
@@ -157,9 +159,7 @@ struct AnimatedCharacterSwatch: View {
 
     private func drawAntenna(_ ctx: inout GraphicsContext, t: TimeInterval, center: CGPoint,
                              bodyR: CGFloat, scale: CGFloat) {
-        let antennaColor: Color = silhouette
-            ? Self.silhouetteColor
-            : (skin.followsWorld ? Theme.color(0xFF2BD6) : Theme.color(skin.antennaHex))
+        let antennaColor: Color = skin.followsWorld ? Theme.color(0xFF2BD6) : Theme.color(skin.antennaHex)
         let baseY = skin.bodyShape == .crystal ? center.y - bodyR * 1.1 : center.y - bodyR * 0.92
         let base = CGPoint(x: center.x, y: baseY)
         let stemLen = size * 0.28 * CGFloat(skin.antennaHeightScale) * scale
@@ -189,8 +189,14 @@ struct CharacterHeroStage: View {
     let height: CGFloat
     /// The select screen prints the name as its own title row — it hides the pill.
     var showsNamePill = true
+    /// v1.4: a focused LOCKED skin stages as a 0.6-opacity tease (full color + lock chip) —
+    /// bright enough to want, dim enough that the buy/requirement button reads as the way in.
+    var locked = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Hero-stage tease opacity (grid cards use the swatch default 0.45).
+    private static let stageTeaseOpacity = 0.6
 
     private var swatchSize: CGFloat { height * 0.5 }   // menu ≈240 → 120; select 192 → 96 (R5)
     private var discTint: Color {
@@ -203,16 +209,19 @@ struct CharacterHeroStage: View {
                 glowDisc
                     .frame(width: swatchSize * 1.7, height: swatchSize * 0.42)
                     .offset(y: swatchSize * 0.12)
+                    .opacity(locked ? 0.55 : 1)   // dimmed pedestal under a teased skin
                 // Floor reflection at 18% (skipped under Reduce Motion: one Canvas, not two).
                 // Offset so the mirrored feet meet the real feet; the stage frame clips the rest.
+                // Locked: plain render faded harder (0.18 × 0.6) — a mirrored lock chip is noise.
                 if !reduceMotion {
                     AnimatedCharacterSwatch(skin: skin, size: swatchSize)
                         .scaleEffect(x: 1, y: -1)
-                        .opacity(0.18)
+                        .opacity(locked ? 0.11 : 0.18)
                         .mask(LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .center))
                         .offset(y: swatchSize)
                 }
-                AnimatedCharacterSwatch(skin: skin, size: swatchSize)
+                AnimatedCharacterSwatch(skin: skin, size: swatchSize,
+                                        silhouette: locked, teaseOpacity: Self.stageTeaseOpacity)
             }
             .frame(height: swatchSize * 1.5)
             .clipped()
