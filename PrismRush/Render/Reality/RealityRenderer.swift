@@ -37,15 +37,17 @@ final class RealityRenderer: RendererPort {
     private let ringMesh: MeshResource      // prism-ring gate torus (hole faces the camera, +Z)
     private let padMesh: MeshResource       // overdrive-pad floor chevron strip (flat, XZ plane)
 
-    // Selected character skin (`followsWorld` = the default look that tracks the world accent).
-    private var skinBodyHex: UInt32 = 0
-    private var skinAntennaHex: UInt32 = 0
-    private var skinFollowsWorld = true
+    // Selected character skin — authored hexes only, NEVER world-driven (owner decree 1).
+    // Defaults reproduce Prism's fixed prismatic identity for the pre-`applySkin` frame.
+    private var skinBodyHex: UInt32 = 0x00F5FF
+    private var skinAntennaHex: UInt32 = 0xFF2BD6
+    private var skinIsPrismatic = true              // Prism: body+trail ride the shared 8 s shimmer
+    private var shimmerStep = Int.min               // quantized shimmer clock (~30 Hz material swaps)
 
-    // v1.3 skin rig (set by `applySkin(_ skin:)`; the legacy 3-arg shim leaves these at the
-    // defaults, so pre-wave-5 callers keep today's exact look). All visual-only — the hitbox
+    // v1.3 skin rig (set by `applySkin(_ skin:)`). All visual-only — the hitbox
     // (Core's bodyRadius/groundedCenterY) never sees any of this.
-    private var skinTrailColor: UIColor?            // nil = wake follows the world accent (Prism)
+    private var skinTrailColor =                    // always the skin's OWN color, never the world
+        UIColor(red: 0, green: 245 / 255.0, blue: 1, alpha: 1)   // (prismatic: the live shimmer hue)
     private var skinBodyShape: Skin.BodyShape = .sphere
     private var skinScale: Float = 1                // folded into the per-frame pose, 0.85…1.12
     private var skinEyeRadius: Float = 0.13
@@ -53,7 +55,7 @@ final class RealityRenderer: RendererPort {
     private var skinPupil: Skin.PupilStyle = .dot
     private var skinAntennaHeight: Float = 1
     private var skinAntennaTip: Float = 1
-    private var skinSway: Float = 0                 // radians; 0 = static antenna (legacy shim path)
+    private var skinSway: Float = 0                 // radians; set per skin by applySkin
     private var skinSwaySpeed: Double = 3.2         // = idle.bobSpeed * 2 once a Skin is applied
     private var antennaCenterY: Float = 1.42        // stem centre — the sway pivot (set per rig build)
     private var antennaTipY: Float = 1.675          // tip rest height (set per rig build)
@@ -177,17 +179,14 @@ final class RealityRenderer: RendererPort {
             tintAccent2 = pal.accent2
             matAccent = UnlitMaterial(color: pal.accent)
             matAccent2 = UnlitMaterial(color: pal.accent2)
-            let bodyColor = skinFollowsWorld ? pal.accent : uiHex(skinBodyHex)
-            let antennaColor = skinFollowsWorld ? pal.accent2 : uiHex(skinAntennaHex)
             backdrop.model?.materials = [UnlitMaterial(color: pal.bg)]
             let gridMat = UnlitMaterial(color: pal.grid)   // ONE instance shared by every rung
             for r in rungs { r.model?.materials = [gridMat] }
             let laneMat = UnlitMaterial(color: pal.lane)   // pushed toward white mid-crossfade
             for l in laneLines { l.model?.materials = [laneMat] }
-            let bodyMat = UnlitMaterial(color: bodyColor)
-            playerBody.model?.materials = [bodyMat]
-            antenna.model?.materials = [bodyMat]
-            antennaTip.model?.materials = [UnlitMaterial(color: antennaColor)]
+            // The character is deliberately ABSENT here: its colors are authored per skin
+            // (applied in applySkin / the shimmer step in advanceVisuals) and never react to
+            // a world crossfade — owner decree 1.
         }
 
         // Camera follow + speed FOV + decaying screen shake (kept off the follow position so it
@@ -307,7 +306,7 @@ final class RealityRenderer: RendererPort {
             if n > 0 {
                 dustDebt -= Float(n)
                 particles.burst(x: px + Float.random(in: -0.55...0.55), y: 0.12, z: 0.5,
-                                color: skinTrailColor ?? tintAccent, count: n, power: 2.1, spread: 0.2, life: 0.5)
+                                color: skinTrailColor, count: n, power: 2.1, spread: 0.2, life: 0.5)
             }
         }
 
@@ -369,8 +368,8 @@ final class RealityRenderer: RendererPort {
 
         // Speed trail behind the player — time-based (≈ the old 3/frame at 60 Hz). The emission
         // rate breathes with chrono slow-mo so the trail thins while the world crawls. The wake
-        // is the skin's own color (Prism keeps nil → world accent); during an overdrive boost it
-        // thickens and elongates into streaks.
+        // is always the skin's own color (Prism's rides the live shimmer hue, never the world
+        // accent); during an overdrive boost it thickens and elongates into streaks.
         if snap.mode == .play {
             let boosting = snap.boostRemaining > 0
             trailDebt += 180 * (snap.chronoRemaining > 0 ? Float(Tuning.chronoFactor) : 1)
@@ -379,7 +378,7 @@ final class RealityRenderer: RendererPort {
             if n > 0 {
                 trailDebt -= Float(n)
                 particles.burst(x: px + Float.random(in: -0.2...0.2), y: 0.25 + Float(snap.playerY), z: 0.5,
-                                color: skinTrailColor ?? tintAccent, count: n, power: 0.9, spread: 0.08,
+                                color: skinTrailColor, count: n, power: 0.9, spread: 0.08,
                                 life: 0.45, velZ: boosting ? 7 : 0, stretchZ: boosting ? 2.4 : 1)
             }
         }
@@ -419,17 +418,17 @@ final class RealityRenderer: RendererPort {
             // (the airborne stretch in sync carries the rest of the arc).
             if !reduceMotion {
                 jumpStretchT = 0.12
-                particles.burst(x: Float(x), y: 0.1, z: 0.3, color: skinTrailColor ?? tintAccent,
+                particles.burst(x: Float(x), y: 0.1, z: 0.3, color: skinTrailColor,
                                 count: 7, power: 2.0, spread: 0.26, life: 0.35)
             }
         case let .landed(x):
-            particles.burst(x: Float(x), y: 0.1, z: 0.2, color: skinTrailColor ?? tintAccent, count: 10, power: 2.6, spread: 0.32, life: 0.4)
+            particles.burst(x: Float(x), y: 0.1, z: 0.2, color: skinTrailColor, count: 10, power: 2.6, spread: 0.32, life: 0.4)
             if !reduceMotion { landSquashT = 0.18 }   // body squash sells the existing dust ring
         case let .laneChanged(x):
             // Skid kick where the dodge started — the antenna whip + camera lateral spring
             // (both velocity-driven in sync/advanceVisuals) carry the rest of the motion.
             if !reduceMotion {
-                particles.burst(x: Float(x), y: 0.12, z: 0.4, color: skinTrailColor ?? tintAccent,
+                particles.burst(x: Float(x), y: 0.12, z: 0.4, color: skinTrailColor,
                                 count: 10, power: 2.4, spread: 0.3, life: 0.38)
             }
         case let .slid(x):
@@ -455,7 +454,7 @@ final class RealityRenderer: RendererPort {
             shake = max(shake, 0.8)
         case let .died(x):
             // First (colored) burst shatters in the skin's own color; the white flash stays global.
-            particles.burst(x: Float(x), y: 1, z: 0, color: skinTrailColor ?? tintAccent2, count: 120, power: 7.5, spread: 0.55, life: 1.2)
+            particles.burst(x: Float(x), y: 1, z: 0, color: skinTrailColor, count: 120, power: 7.5, spread: 0.55, life: 1.2)
             particles.burst(x: Float(x), y: 1, z: 0, color: cWhite, count: 60, power: 9.5, spread: 0.35, life: 0.9)
             shake = 1.4
         case let .worldChanged(index, _):
@@ -484,7 +483,7 @@ final class RealityRenderer: RendererPort {
         case let .flowSurge(level, x):
             // Aura flash in the player's own wake color, a lane shimmer running ahead, and a
             // sparkle cascade at the fountain spawn point (masks the 26-unit gem pop-in).
-            let aura = skinTrailColor ?? tintAccent
+            let aura = skinTrailColor
             particles.burst(x: Float(x), y: 1.0, z: 0, color: aura,
                             count: 22 + 4 * min(level, 3), power: 3.0, spread: 0.5, life: 0.7)
             for k in 1...6 {
@@ -505,6 +504,23 @@ final class RealityRenderer: RendererPort {
     func advanceVisuals(_ dt: Double) {
         elapsed += dt
         lastDt = Float(dt)
+        // Prism shimmer — body + trail hue ride the SHARED pure clock→color function
+        // (`SkinCatalog.prismaticColor`) on the reference-date wall clock, the same clock the
+        // SwiftUI previews sample, so the menu hero and the in-run body agree at any instant
+        // (decree 2). Time-based and world-blind (decree 1): a world crossfade cannot touch it.
+        // Quantized to ~30 Hz so the material swap costs at most one UnlitMaterial per step,
+        // Prism only. Reduce Motion holds phase 0 — the static authored cyan body (0x00F5FF).
+        if skinIsPrismatic {
+            let t = reduceMotion ? 0 : Date().timeIntervalSinceReferenceDate
+            let step = Int(t * 30)
+            if step != shimmerStep {
+                shimmerStep = step
+                let c = SkinCatalog.prismaticColor(at: t)
+                let shimmer = UIColor(red: c.r, green: c.g, blue: c.b, alpha: 1)
+                skinTrailColor = shimmer
+                playerBody.model?.materials = [UnlitMaterial(color: shimmer)]
+            }
+        }
         blinkT -= dt
         if blinkT < -0.12 { blinkT = Double.random(in: 2.2...4.2) }
         // Squint while sliding (motion-free, so never RM-gated): paired with the camera drop it
@@ -589,13 +605,15 @@ final class RealityRenderer: RendererPort {
     }
 
     /// v1.3 skin pipeline: colors + trail tint + rig geometry + idle sway from one `Skin` recipe.
-    /// Rebuilds the character rig — called on equip/launch only, NEVER per frame. Prism
-    /// (`bodyHex == 0`) keeps the followsWorld chameleon behavior: nil trail = world accent.
+    /// Rebuilds the character rig — called on equip/launch only, NEVER per frame. Character
+    /// colors are authored per skin and world-blind (decree 1): Prism (`isPrismatic`) shimmers
+    /// on the shared 8 s clock — fixed and identical in every world; its nil trail = "ride the
+    /// live shimmer hue". The eyes and antenna keep constant authored hexes everywhere.
     func applySkin(_ skin: Skin) {
         skinBodyHex = skin.bodyHex
         skinAntennaHex = skin.antennaHex
-        skinFollowsWorld = skin.followsWorld
-        skinTrailColor = skin.trailHex.map { uiHex($0) }
+        skinIsPrismatic = skin.isPrismatic
+        skinTrailColor = skin.trailHex.map { uiHex($0) } ?? uiHex(skin.bodyHex)
         skinBodyShape = skin.bodyShape
         skinScale = min(max(skin.scale, 0.85), 1.12)   // visual-only cap — never misrepresent the hitbox
         skinEyeRadius = skin.eyeRadius
@@ -606,16 +624,19 @@ final class RealityRenderer: RendererPort {
         skinSway = Float(skin.idle.sway)
         skinSwaySpeed = skin.idle.bobSpeed * 2
         rebuildCharacter()
-        paletteKey = -1   // force the cached character/world materials to rebuild next sync
+        applyCharacterColors()
+        shimmerStep = .min   // prismatic body/trail re-derive on the next advanceVisuals tick
     }
 
-    /// Legacy 3-arg shim — GameView still calls this until the wave-5 rewire (R13); kept compiling
-    /// through v1.3, deleted in v1.4. Colors only: the rig stays whatever it currently is.
-    func applySkin(bodyHex: UInt32, antennaHex: UInt32, followsWorld: Bool) {
-        skinBodyHex = bodyHex
-        skinAntennaHex = antennaHex
-        skinFollowsWorld = followsWorld
-        paletteKey = -1   // force the cached character/world materials to rebuild next sync
+    /// Paint the rig from the authored skin hexes — on equip/rig rebuild only, never per frame
+    /// and never from the world palette. The prismatic body is then re-painted ~30 Hz by the
+    /// shimmer step in `advanceVisuals`; the stem stays pinned to the authored `bodyHex` so the
+    /// antenna never moves hue with anything — world or clock.
+    private func applyCharacterColors() {
+        let bodyMat = UnlitMaterial(color: uiHex(skinBodyHex))
+        playerBody.model?.materials = [bodyMat]
+        antenna.model?.materials = [bodyMat]
+        antennaTip.model?.materials = [UnlitMaterial(color: uiHex(skinAntennaHex))]
     }
 
     // MARK: scene construction

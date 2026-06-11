@@ -452,7 +452,7 @@ final class GameModel {
         let granted = ProfileStore.shared.refreshSkinUnlocks(level: ProfileStore.shared.playerLevel)
         for skin in granted {
             celebrateMilestone("NEW CHARACTER — \(skin.name.uppercased())",
-                               color: Theme.color(skin.bodyHex == 0 ? 0x00F5FF : skin.bodyHex),
+                               color: Theme.color(skin.bodyHex),
                                sfx: .purchaseChime)
         }
     }

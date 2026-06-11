@@ -1,8 +1,10 @@
 import Foundation
 
 /// A procedural character skin (no asset files): colors + rig geometry + idle personality, one
-/// recipe shared by the RealityKit rig rebuild and the SwiftUI Canvas previews. `bodyHex == 0`
-/// means "follow the live world accent" — Prism only — and `trailHex == nil` likewise.
+/// recipe shared by the RealityKit rig rebuild and the SwiftUI Canvas previews. Every skin owns
+/// real authored hexes — no skin EVER follows the world palette (owner decree 1). Prism's
+/// `isPrismatic` shimmer is fixed and time-based (`SkinCatalog.prismaticColor`), identical in
+/// every world; its `trailHex == nil` means "ride the shimmer hue", never "follow the world".
 /// Not Codable, never persisted: only ids are stored, so catalog evolution can't corrupt saves.
 struct Skin: Identifiable, Sendable {
     enum BodyShape: Sendable { case sphere, cube, crystal }
@@ -25,8 +27,12 @@ struct Skin: Identifiable, Sendable {
     }
 
     let id, name, flavor: String
-    let bodyHex, antennaHex: UInt32          // bodyHex 0 = followsWorld (Prism only)
-    var trailHex: UInt32? = nil              // nil = follow world accent (Prism only)
+    let bodyHex, antennaHex: UInt32          // authored identity colors — never world-driven
+    var trailHex: UInt32? = nil              // nil = ride the prismatic shimmer (Prism only)
+    /// Fixed, time-based iridescence (Prism only): the body + trail cycle the shared 8 s
+    /// shimmer (`SkinCatalog.prismaticColor`), identical in every world — NEVER the world
+    /// palette. Reduce Motion holds the shimmer's phase-0 color (= `bodyHex`, 0x00F5FF).
+    var isPrismatic = false
     var bodyShape: BodyShape = .sphere
     var scale: Float = 1                     // visual only, 0.85...1.12 — never the hitbox
     var eyeRadius: Float = 0.13
@@ -38,7 +44,6 @@ struct Skin: Identifiable, Sendable {
     let rarity: Rarity
     let unlock: Unlock
 
-    var followsWorld: Bool { bodyHex == 0 }
     var premium: Bool { unlock == .iap }                                // back-compat
     var cost: Int { if case .coins(let c) = unlock { c } else { 0 } }   // back-compat
 }
@@ -52,8 +57,8 @@ enum SkinCatalog {
     /// Rarity census: Common 4 · Rare 9 · Epic 7 · Legendary 4.
     static let all: [Skin] = [
         // COMMON ──────────────────────────────────────────────────────────────────────────────
-        Skin(id: "default", name: "Prism", flavor: "Born of every world, loyal to none.",
-             bodyHex: 0, antennaHex: 0,
+        Skin(id: "default", name: "Prism", flavor: "The first runner. Every world remembers it.",
+             bodyHex: 0x00F5FF, antennaHex: 0xFF2BD6, isPrismatic: true,
              rarity: .common, unlock: .free),
         Skin(id: "ember", name: "Ember", flavor: "Runs hot. Cools never.",
              bodyHex: 0xFF5E3A, antennaHex: 0xFFD23D, trailHex: 0xFF7A3D,
@@ -192,4 +197,32 @@ enum SkinCatalog {
     ]
 
     static func skin(_ id: String) -> Skin { all.first { $0.id == id } ?? all[0] }
+
+    // MARK: the Prism shimmer (decree 1: fixed + time-based, identical in every world)
+
+    /// Shimmer loop length in seconds — matches the menu hero disc's historical 8 s hue drift.
+    static let prismaticPeriod: Double = 8
+    /// The authored identity stops the shimmer cycles through (the old menu-rainbow palette,
+    /// now truthful): cyan → magenta → amber → back to cyan. Phase 0 is exactly Prism's
+    /// `bodyHex` 0x00F5FF, which doubles as the static Reduce Motion look.
+    static let prismaticStops: [UInt32] = [0x00F5FF, 0xFF2BD6, 0xFFB13D, 0x00F5FF]
+
+    /// ONE pure clock→color function shared by the RealityKit body material, every character
+    /// FX burst, and the SwiftUI previews — so the menu hero and the in-run body show the same
+    /// hue at the same instant (decree 2 by construction; both layers feed it the same
+    /// reference-date wall clock). Deterministic for a given `t`, no hidden state, and the
+    /// signature takes ONLY time: the world palette structurally cannot influence it.
+    static func prismaticColor(at t: Double) -> (r: Double, g: Double, b: Double) {
+        func rgb(_ hex: UInt32) -> (Double, Double, Double) {
+            (Double((hex >> 16) & 0xFF) / 255, Double((hex >> 8) & 0xFF) / 255,
+             Double(hex & 0xFF) / 255)
+        }
+        let cycle = (t / prismaticPeriod).truncatingRemainder(dividingBy: 1)
+        let phase = cycle < 0 ? cycle + 1 : cycle                  // negative t stays periodic
+        let seg = phase * Double(prismaticStops.count - 1)         // 3 lerp segments, 4 stops
+        let i = min(Int(seg), prismaticStops.count - 2)
+        let f = seg - Double(i)
+        let a = rgb(prismaticStops[i]), b = rgb(prismaticStops[i + 1])
+        return (a.0 + (b.0 - a.0) * f, a.1 + (b.1 - a.1) * f, a.2 + (b.2 - a.2) * f)
+    }
 }

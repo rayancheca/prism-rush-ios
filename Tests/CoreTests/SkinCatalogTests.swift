@@ -14,8 +14,10 @@ final class SkinCatalogTests: XCTestCase {
         XCTAssertEqual(Set(all.map(\.name)).count, 24, "unique names")
 
         // The legacy 16 keep exact ids/hexes/costs — owners must notice nothing but upgrades.
+        // (Sole exception, by owner decree 1: Prism's bodyHex-0 sentinel was retired in v1.4.2
+        // for real authored hexes — its prismatic shimmer is fixed + time-based, never world.)
         let pins: [(id: String, cost: Int, body: UInt32, antenna: UInt32, premium: Bool)] = [
-            ("default", 0, 0, 0, false),
+            ("default", 0, 0x00F5FF, 0xFF2BD6, false),
             ("ember", 200, 0xFF5E3A, 0xFFD23D, false),
             ("bolt", 300, 0x00B3FF, 0xFFFFFF, false),
             ("pebble", 0, 0x8E9BAE, 0xFFB13D, false),
@@ -56,9 +58,13 @@ final class SkinCatalogTests: XCTestCase {
 
         // Rig sanity + the two singletons.
         for s in all { XCTAssertTrue((0.85...1.12).contains(s.scale), "\(s.id) scale is visual-only") }
-        XCTAssertEqual(all.filter(\.followsWorld).map(\.id), ["default"], "exactly one followsWorld")
+        XCTAssertTrue(all.allSatisfy { $0.bodyHex != 0 },
+                      "decree 1: zero followsWorld — every skin owns real authored hexes")
+        XCTAssertEqual(all.filter(\.isPrismatic).map(\.id), ["default"],
+                       "exactly one prismatic skin — a FIXED time-based shimmer, never the world")
         XCTAssertEqual(all.filter(\.premium).map(\.id), ["aurora"], "exactly one IAP skin")
-        XCTAssertNil(SkinCatalog.skin("default").trailHex, "Prism's trail follows the world accent")
+        XCTAssertEqual(all.filter { $0.trailHex == nil }.map(\.id), ["default"],
+                       "nil trail = the prismatic shimmer source — Prism only, never the world accent")
 
         // XP-locked roster matches the curve's unlock levels exactly (R1 single source of truth).
         let levelLocks = all.compactMap { if case .level(let n) = $0.unlock { n } else { nil } }
@@ -91,6 +97,49 @@ final class SkinCatalogTests: XCTestCase {
         XCTAssertEqual(all.filter { $0.rarity == .legendary }.count, 4)
 
         XCTAssertEqual(SkinCatalog.skin("nope").id, "default", "unknown id falls back to Prism")
+    }
+
+    /// The shared Prism shimmer is the decree-1 contract: one PURE clock→color function used
+    /// by the in-run body material, every character FX burst, and the SwiftUI previews. Its
+    /// signature takes ONLY time, so the world palette structurally cannot influence it.
+    func testPrismaticShimmerIsPureDeterministicAndPeriodic() async {
+        // Pure + deterministic: the same t always yields the same color — no hidden state.
+        for t in [0.0, 0.123, 1.9, 4.0, 7.999, 123.456, -3.21] {
+            let a = SkinCatalog.prismaticColor(at: t)
+            let b = SkinCatalog.prismaticColor(at: t)
+            XCTAssertEqual(a.r, b.r, "r at t=\(t)")
+            XCTAssertEqual(a.g, b.g, "g at t=\(t)")
+            XCTAssertEqual(a.b, b.b, "b at t=\(t)")
+        }
+
+        // Phase 0 is exactly Prism's authored bodyHex 0x00F5FF — also the static Reduce
+        // Motion look, so menu hero and in-run body agree there too.
+        let prism = SkinCatalog.skin("default")
+        XCTAssertTrue(prism.isPrismatic)
+        let c0 = SkinCatalog.prismaticColor(at: 0)
+        XCTAssertEqual(c0.r, 0, accuracy: 1e-12)
+        XCTAssertEqual(c0.g, 245.0 / 255.0, accuracy: 1e-12)
+        XCTAssertEqual(c0.b, 1, accuracy: 1e-12)
+        XCTAssertEqual(prism.bodyHex, 0x00F5FF, "phase 0 = the authored body hex")
+
+        // 8 s loop: t and t + period agree exactly, so the two layers can never drift apart.
+        let early = SkinCatalog.prismaticColor(at: 2.5)
+        let late = SkinCatalog.prismaticColor(at: 2.5 + SkinCatalog.prismaticPeriod)
+        XCTAssertEqual(early.r, late.r, accuracy: 1e-12)
+        XCTAssertEqual(early.g, late.g, accuracy: 1e-12)
+        XCTAssertEqual(early.b, late.b, accuracy: 1e-12)
+
+        // The cycle passes through the authored magenta and amber identity stops — the same
+        // three colors the old menu rainbow promised, now delivered in-run.
+        let third = SkinCatalog.prismaticPeriod / 3
+        let magenta = SkinCatalog.prismaticColor(at: third)
+        XCTAssertEqual(magenta.r, 1, accuracy: 1e-6)
+        XCTAssertEqual(magenta.g, 43.0 / 255.0, accuracy: 1e-6)
+        XCTAssertEqual(magenta.b, 214.0 / 255.0, accuracy: 1e-6)
+        let amber = SkinCatalog.prismaticColor(at: third * 2)
+        XCTAssertEqual(amber.r, 1, accuracy: 1e-6)
+        XCTAssertEqual(amber.g, 177.0 / 255.0, accuracy: 1e-6)
+        XCTAssertEqual(amber.b, 61.0 / 255.0, accuracy: 1e-6)
     }
 
     func testSkinUnlocksEarnedBoundaries() async {

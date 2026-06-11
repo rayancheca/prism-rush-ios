@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// SwiftUI bridge for the shared Prism shimmer — `SkinCatalog.prismaticColor` is pure
+/// Foundation; both this preview layer and the RealityKit body material feed it the same
+/// reference-date wall clock, so the menu hero and the in-run body match at any instant.
+private func prismaticTint(at t: TimeInterval) -> Color {
+    let c = SkinCatalog.prismaticColor(at: t)
+    return Color(red: c.r, green: c.g, blue: c.b)
+}
+
 /// Live procedural character preview — Canvas + TimelineView at 30 Hz (no per-card RealityViews;
 /// 24 RealityKit instances in a grid is a memory/stutter trap). Draws the same `Skin` recipe the
 /// renderer rebuilds in 3D: body shape/scale, eye tint + pupil style, antenna height/tip, and the
@@ -62,31 +70,25 @@ struct AnimatedCharacterSwatch: View {
         let yOff = sin(t * skin.idle.bobSpeed * 2 * .pi) * skin.idle.bobAmp * size
         let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2 + yOff)
 
-        let bodyColor = Theme.color(skin.bodyHex)
+        // Prism: the SAME 8 s shimmer the in-run body runs — one shared clock→color function
+        // (`SkinCatalog.prismaticColor`), so this preview and the RealityKit rig show the same
+        // hue at the same instant (decree 2). Static frames (t == 0: Reduce Motion, off-screen
+        // grids) hold phase 0 = the authored cyan body, matching the in-run Reduce Motion look.
+        let bodyColor = skin.isPrismatic ? prismaticTint(at: t) : Theme.color(skin.bodyHex)
 
         // Glow — teased renders keep it: the whole canvas fades as one, so the glow reads as a
         // dimmed version of the owned look rather than a different art style.
-        let glowColor = skin.followsWorld ? Theme.color(0x00F5FF) : bodyColor
         let glowRect = CGRect(x: center.x - bodyR * 1.6, y: center.y - bodyR * 1.6,
                               width: bodyR * 3.2, height: bodyR * 3.2)
         ctx.fill(Path(ellipseIn: glowRect),
-                 with: .radialGradient(Gradient(colors: [glowColor.opacity(0.45), .clear]),
+                 with: .radialGradient(Gradient(colors: [bodyColor.opacity(0.45), .clear]),
                                        center: center, startRadius: bodyR * 0.4, endRadius: bodyR * 1.6))
 
         // Antenna behind the body: stem + tip rotate around the stem base (per-skin sway).
         drawAntenna(&ctx, t: t, center: center, bodyR: bodyR, scale: scale)
 
         // Body shape: sphere → circle, cube → rounded rect, crystal → vertical diamond.
-        let bodyPath = bodyPath(center: center, bodyR: bodyR)
-        if skin.followsWorld {
-            // Prism keeps the rainbow — the chameleon IS its identity.
-            ctx.fill(bodyPath, with: .conicGradient(
-                Gradient(colors: [Theme.color(0x00F5FF), Theme.color(0xFF2BD6),
-                                  Theme.color(0xFFB13D), Theme.color(0x00F5FF)]),
-                center: center))
-        } else {
-            ctx.fill(bodyPath, with: .color(bodyColor))
-        }
+        ctx.fill(bodyPath(center: center, bodyR: bodyR), with: .color(bodyColor))
 
         drawEyes(&ctx, t: t, center: center, scale: scale)
     }
@@ -159,7 +161,7 @@ struct AnimatedCharacterSwatch: View {
 
     private func drawAntenna(_ ctx: inout GraphicsContext, t: TimeInterval, center: CGPoint,
                              bodyR: CGFloat, scale: CGFloat) {
-        let antennaColor: Color = skin.followsWorld ? Theme.color(0xFF2BD6) : Theme.color(skin.antennaHex)
+        let antennaColor = Theme.color(skin.antennaHex)   // constant authored hex — never shimmers
         let baseY = skin.bodyShape == .crystal ? center.y - bodyR * 1.1 : center.y - bodyR * 0.92
         let base = CGPoint(x: center.x, y: baseY)
         let stemLen = size * 0.28 * CGFloat(skin.antennaHeightScale) * scale
@@ -199,9 +201,7 @@ struct CharacterHeroStage: View {
     private static let stageTeaseOpacity = 0.6
 
     private var swatchSize: CGFloat { height * 0.5 }   // menu ≈240 → 120; select 192 → 96 (R5)
-    private var discTint: Color {
-        skin.followsWorld ? Theme.color(0x00F5FF) : Theme.color(skin.bodyHex)
-    }
+    private var discTint: Color { Theme.color(skin.bodyHex) }
 
     var body: some View {
         VStack(spacing: Theme.Space.s) {
@@ -231,22 +231,22 @@ struct CharacterHeroStage: View {
         .accessibilityHidden(true)   // the wrapping button / sibling texts carry the label
     }
 
-    /// Elliptical glow disc tinted by the skin body (slow hue drift for `followsWorld` — the
-    /// Prism stage cycles like its body; static under Reduce Motion, per uiux §1.8).
+    /// Elliptical glow disc tinted by the skin's fixed authored body hex. Prism's disc rides
+    /// the SAME shared 8 s shimmer as its body (no skin ever tracks the world palette);
+    /// static at phase 0 under Reduce Motion, per uiux §1.8.
     @ViewBuilder private var glowDisc: some View {
-        if skin.followsWorld && !reduceMotion {
+        if skin.isPrismatic && !reduceMotion {
             TimelineView(.animation(minimumInterval: 0.2)) { tl in
-                let t = tl.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 8)
-                disc.hueRotation(.degrees(t / 8 * 360))
+                disc(tint: prismaticTint(at: tl.date.timeIntervalSinceReferenceDate))
             }
         } else {
-            disc
+            disc(tint: discTint)
         }
     }
 
-    private var disc: some View {
+    private func disc(tint: Color) -> some View {
         Ellipse().fill(
-            RadialGradient(colors: [discTint.opacity(0.5), discTint.opacity(0.12), .clear],
+            RadialGradient(colors: [tint.opacity(0.5), tint.opacity(0.12), .clear],
                            center: .center, startRadius: 1, endRadius: swatchSize * 0.85))
     }
 
@@ -261,51 +261,5 @@ struct CharacterHeroStage: View {
         .padding(.horizontal, Theme.Space.m).padding(.vertical, Theme.Space.s)
         .background(Color.white.opacity(0.08), in: Capsule())
         .overlay(Capsule().strokeBorder(Theme.Role.hairline))
-    }
-}
-
-/// Legacy static swatch (pre-v1.3), moved out of MetaScreenScaffold. Still referenced by
-/// ShopView's characters row; the shop reframe replaces it with `AnimatedCharacterSwatch`,
-/// after which this shim is deleted (R13 parking lot).
-struct CharacterSwatch: View {
-    let bodyHex: UInt32
-    let antennaHex: UInt32
-    let followsWorld: Bool
-    var size: CGFloat = 64
-
-    var body: some View {
-        ZStack {
-            // antenna tip
-            Circle()
-                .fill(followsWorld ? Color(red: 1, green: 0.17, blue: 0.84) : Theme.color(antennaHex))
-                .frame(width: size * 0.16, height: size * 0.16)
-                .offset(y: -size * 0.58)
-            // body
-            ZStack {
-                Circle().fill(bodyFill)
-                // eyes
-                HStack(spacing: size * 0.18) {
-                    eye; eye
-                }
-                .offset(y: -size * 0.05)
-            }
-            .frame(width: size, height: size)
-            .shadow(color: (followsWorld ? Color(red: 0, green: 0.96, blue: 1) : Theme.color(bodyHex)).opacity(0.55), radius: size * 0.18)
-        }
-        .frame(width: size, height: size * 1.5)
-    }
-
-    private var bodyFill: AnyShapeStyle {
-        if followsWorld {
-            return AnyShapeStyle(AngularGradient(colors: [Theme.color(0x00F5FF), Theme.color(0xFF2BD6), Theme.color(0xFFB13D), Theme.color(0x00F5FF)], center: .center))
-        }
-        return AnyShapeStyle(Theme.color(bodyHex))
-    }
-
-    private var eye: some View {
-        ZStack {
-            Circle().fill(.white).frame(width: size * 0.2, height: size * 0.2)
-            Circle().fill(.black).frame(width: size * 0.09, height: size * 0.09)
-        }
     }
 }
