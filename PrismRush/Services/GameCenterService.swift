@@ -23,6 +23,15 @@ final class GameCenterService: NSObject, GKGameCenterControllerDelegate {
         }
     }
 
+    /// Submit a finished run's score. Checkpoint runs reach end-game speed (66 pts/s) from t = 0 —
+    /// strictly better for best-score chasing — so they are never leaderboard-eligible
+    /// (AGENT_core.md §Game Center). The local best still updates regardless; the leaderboard
+    /// keeps each player's maximum, so submitting per-run scores converges on the true best.
+    func submitRun(score: Int, usedCheckpoint: Bool) {
+        guard !usedCheckpoint else { return }
+        submit(score)
+    }
+
     func submit(_ score: Int) {
         guard authenticated, score > 0 else { return }
         Task {

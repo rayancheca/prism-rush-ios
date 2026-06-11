@@ -27,6 +27,16 @@ final class GameModel {
     @ObservationIgnored private var uiClock: Double = 0
     @ObservationIgnored private var popupCounter = 0
 
+    // Run-recording state (revive economy): a revived run dies more than once, so everything
+    // cumulative is awarded as a delta over what this run has already paid out, and the lifetime
+    // run counter is folded exactly once. All reset in `startRun`.
+    @ObservationIgnored private var coinsAwardedThisRun = 0
+    @ObservationIgnored private var distanceRecordedThisRun: Double = 0
+    @ObservationIgnored private var gemsRecordedThisRun = 0
+    @ObservationIgnored private var statsRecorded = false
+    @ObservationIgnored private var newBestCelebrated = false
+    @ObservationIgnored private var runStartWorld = 0
+
     @ObservationIgnored private let autoplay = ProcessInfo.processInfo.environment["PR_AUTOPLAY"] == "1"
     @ObservationIgnored private let demo = ProcessInfo.processInfo.environment["PR_DEMO"] == "1"
 
@@ -46,8 +56,12 @@ final class GameModel {
     private(set) var bannerOrdinal = 0
     private(set) var lastCoinsEarned = 0
 
-    /// Restart is allowed a beat after death (lets the death moment land; avoids accidental restart).
-    var canRestart: Bool { overTime > 1.0 }
+    /// Restart is allowed a beat after death (lets the death moment land; avoids accidental
+    /// restart). Stored + observed — `overTime` is `@ObservationIgnored`, so a computed property
+    /// reading it would never trigger a SwiftUI re-render when the gate opens.
+    private(set) var canRestart = false
+    /// Whole seconds until RUN AGAIN unlocks (0 once it has) — observed, for a "READY IN X" label.
+    private(set) var restartCountdown = 0
 
     func install(_ content: RealityViewCameraContent) {
         renderer.install(into: content)
@@ -86,7 +100,7 @@ final class GameModel {
                 guard let self else { return }
                 let dt = event.deltaTime
                 self.uiClock += dt
-                self.haptics.tick(dt)
+                self.haptics.tick(dt, playing: self.core.mode == .play && !self.paused)
 
                 if self.paused {
                     self.synth.musicPump(dt: dt, world: self.core.snapshot.worldTo)
@@ -109,21 +123,36 @@ final class GameModel {
                 self.renderer.sync(self.core.snapshot)
                 self.synth.musicPump(dt: dt, world: self.core.snapshot.worldTo)
                 self.overTime = self.core.mode == .over ? self.overTime + dt : 0
+                let ready = self.core.mode == .over && self.overTime > 1.0
+                if self.canRestart != ready { self.canRestart = ready }
+                let remain = (self.core.mode == .over && !ready) ? Int((1.0 - self.overTime).rounded(.up)) : 0
+                if self.restartCountdown != remain { self.restartCountdown = remain }
                 self.ageEffects()
             }
         }
     }
 
-    func startRun(fromWorld: Int = 0) {
+    /// Start a run. `fromWorld > 0` is a checkpoint start (not leaderboard-eligible); pass a
+    /// `seed` for deterministic runs — e.g. the daily challenge
+    /// (`DailyChallenge.seed(year:month:day:)`, date derived in UTC).
+    func startRun(fromWorld: Int = 0, seed: UInt64? = nil) {
         applyCurrentSkin()
-        core.startRun(startDistance: Double(fromWorld) * Tuning.worldLength)
+        core.startRun(seed: seed, startDistance: Double(fromWorld) * Tuning.worldLength)
         renderer.resetEntities()
         overTime = 0
+        canRestart = false
+        restartCountdown = 0
+        coinsAwardedThisRun = 0
+        distanceRecordedThisRun = 0
+        gemsRecordedThisRun = 0
+        statsRecorded = false
+        newBestCelebrated = false
+        runStartWorld = fromWorld
         paused = false
         popups.removeAll()
         activeSheet = nil
         synth.musicStart()
-        synth.playSFX(Synth.startChime())
+        synth.play(.startChime)
     }
 
     /// Pause is only meaningful mid-run. The pause button toggles it; backgrounding forces it on.
@@ -149,8 +178,10 @@ final class GameModel {
         guard canRevive, ProfileStore.shared.spendCoins(reviveCost) else { return false }
         core.revive()
         overTime = 0
+        canRestart = false
+        restartCountdown = 0
         synth.musicStart()
-        synth.playSFX(Synth.shieldChime())
+        synth.play(.shieldPickup)
         return true
     }
 
@@ -158,13 +189,13 @@ final class GameModel {
     func claimDailyReward() {
         guard let r = ProfileStore.shared.claimDailyReward() else { return }
         showToast("DAY \(r.streak)  ·  +\(r.coins)")
-        synth.playSFX(Synth.chime())
+        synth.play(.chime)
     }
 
     func openChest() {
         guard let amount = ProfileStore.shared.openFreeChest() else { return }
         showToast("CHEST  ·  +\(amount)")
-        synth.playSFX(Synth.shieldChime())
+        synth.play(.purchaseChime)
     }
 
     private func showToast(_ text: String) {
@@ -180,6 +211,8 @@ final class GameModel {
         synth.musicStop()
         activeSheet = nil
         overTime = 0
+        canRestart = false
+        restartCountdown = 0
     }
 
     // MARK: effects
@@ -189,36 +222,56 @@ final class GameModel {
         haptics.handle(fx)
         switch fx {
         case let .gemCollected(x, _, streak):
-            let mult = min(5, 1 + streak / 8)
-            addPopup("+\(10 * mult)", color: Theme.color(0xFFD23D), worldX: x)
-            synth.playSFX(Synth.gem(streak: streak))
+            let mult = min(Tuning.multCap, 1 + streak / Tuning.streakPerMult)
+            addPopup("+\(Tuning.gemBaseScore * mult)", color: Theme.color(0xFFD23D), worldX: x)
+            synth.play(.gem(streak: streak))
         case let .nearMiss(kind, x):
-            addPopup(kind, color: kind == "CLOSE" ? Theme.color(0x00F5FF) : Theme.color(0xFFD23D), worldX: x)
-            synth.playSFX(Synth.close())
+            switch kind {
+            case .close: addPopup("CLOSE", color: Theme.color(0x00F5FF), worldX: x)
+            case .slick: addPopup("SLICK", color: Theme.color(0xFFD23D), worldX: x)
+            }
+            synth.play(.close)
         case let .pickup(kind, x, _):
-            addPopup(kind == .shield ? "SHIELD" : "MAGNET", color: .white, worldX: x)
+            switch kind {
+            case .shield:
+                addPopup("SHIELD", color: .white, worldX: x)
+                synth.play(.shieldPickup)
+            case .magnet:
+                addPopup("MAGNET", color: .white, worldX: x)
+                synth.play(.magnetPickup)
+            case .doubler:
+                addPopup("COINS ×2", color: Theme.color(0x00FF88), worldX: x)
+                synth.play(.doublerPickup)
+            case .chrono:
+                addPopup("SLOW-MO", color: Theme.color(0x9BF0FF), worldX: x)
+                synth.play(.frenzyEnd)   // falling whoosh: time dips into slow-mo
+            }
             flash(0.28)
-            synth.playSFX(kind == .shield ? Synth.shieldChime() : Synth.magnetChime())
         case let .shieldAbsorbed(x):
             addPopup("SHIELDED", color: .white, worldX: x)
             flash(0.25)
-            synth.playSFX(Synth.chime())
+            synth.play(.chime)
+        case .chronoEnded:
+            synth.play(.frenzyStart)     // rising whoosh: time resumes
         case .died:
             flash(0.5)
-            synth.playSFX(Synth.crash())
+            synth.play(.crash)
+            synth.play(.deathSweep)
             synth.musicStop()
             recordRunResults()
         case let .worldChanged(index, ordinal):
             bannerName = Theme.worlds[index % 3].name
             bannerOrdinal = ordinal
             bannerID += 1
-            synth.playSFX(Synth.worldSweep())
+            synth.play(.worldSweep)
         case .jumped:
-            synth.playSFX(Synth.jump())
+            synth.play(.jump)
         case .slid:
-            synth.playSFX(Synth.slide())
-        case .landed, .laneChanged:
-            break
+            synth.play(.slide)
+        case .landed:
+            synth.play(.landThud)
+        case .laneChanged:
+            synth.play(.laneTick)
         }
     }
 
@@ -233,31 +286,70 @@ final class GameModel {
         renderer.applySkin(bodyHex: skin.bodyHex, antennaHex: skin.antennaHex, followsWorld: skin.followsWorld)
     }
 
-    func open(_ screen: MetaScreen) { activeSheet = screen }
-    func closeSheet() { activeSheet = nil }
+    func open(_ screen: MetaScreen) { activeSheet = screen; synth.play(.uiTick) }
+    func closeSheet() { activeSheet = nil; synth.play(.uiTick) }
 
     /// Equip an owned skin, or buy it with coins (premium skins require IAP — handled in the shop).
     @discardableResult
     func buyOrEquipSkin(_ skin: Skin) -> Bool {
         let store = ProfileStore.shared
         if store.owns(skin: skin.id) {
-            store.select(skin: skin.id); applyCurrentSkin(); return true
+            store.select(skin: skin.id); applyCurrentSkin()
+            synth.play(.equipClick)
+            return true
         }
         guard !skin.premium, store.spendCoins(skin.cost) else { return false }
         store.unlock(skin: skin.id); store.select(skin: skin.id); applyCurrentSkin()
+        synth.play(.purchaseChime)
         return true
     }
 
-    /// Fold the just-finished run into the profile and award coins (gems + a distance bonus).
+    /// Fold the run-so-far into the profile and award coins (gems + distance + worlds crossed).
+    /// Called on EVERY death — a revived run dies more than once — so all cumulative payouts are
+    /// awarded as `max(0, cumulative − alreadyAwarded)` deltas, and `totalRuns` counts once per run.
     private func recordRunResults() {
         let store = ProfileStore.shared
-        // Earn = gems + distance/35 + a small per-world bonus, then the Double-Coins multiplier.
-        let base = core.gemCount + Int(core.traveledDistance / 35) + core.maxWorld * 5
-        let coins = base * store.profile.coinMultiplier
-        lastCoinsEarned = coins
-        store.recordRun(score: core.score, distance: core.distance, gems: core.gemCount,
-                        bestStreak: core.bestStreak, maxWorld: core.maxWorld, coinsEarned: coins)
-        GameCenterService.shared.submit(store.profile.bestScore)
+
+        // New best fanfare, once per run, against the best on record BEFORE this death is folded in.
+        if core.score > store.profile.bestScore, !newBestCelebrated {
+            newBestCelebrated = true
+            synth.play(.newBestFanfare)
+        }
+
+        // Earn = gems + traveled distance/35 + a small bonus per world crossed THIS run (a
+        // checkpoint start must not pay for the skipped worlds), then the Double-Coins multiplier.
+        let worldsCrossed = max(0, core.maxWorld - runStartWorld)
+        let base = core.gemCount + Int(core.traveledDistance / 35) + worldsCrossed * 5
+        let cumulative = base * store.profile.coinMultiplier
+        let coinsDelta = max(0, cumulative - coinsAwardedThisRun)
+        coinsAwardedThisRun += coinsDelta
+        lastCoinsEarned = coinsDelta
+
+        let distanceDelta = max(0, core.traveledDistance - distanceRecordedThisRun)
+        distanceRecordedThisRun += distanceDelta
+        let gemsDelta = max(0, core.gemCount - gemsRecordedThisRun)
+        gemsRecordedThisRun += gemsDelta
+
+        if statsRecorded {
+            // Post-revive death: pay only what's new; totalRuns was already counted for this run.
+            store.mutate {
+                $0.coins += coinsDelta
+                $0.totalCoinsEarned += coinsDelta
+                $0.bestScore = max($0.bestScore, core.score)
+                $0.totalDistance += distanceDelta
+                $0.totalGems += gemsDelta
+                $0.bestStreak = max($0.bestStreak, core.bestStreak)
+                $0.maxWorldReached = max($0.maxWorldReached, core.maxWorld)
+            }
+        } else {
+            statsRecorded = true
+            store.recordRun(score: core.score, distance: distanceDelta, gems: gemsDelta,
+                            bestStreak: core.bestStreak, maxWorld: core.maxWorld, coinsEarned: coinsDelta)
+        }
+
+        // Checkpoint runs ramp to end-game speed from t = 0 — never leaderboard-eligible
+        // (the local best still updates above; see AGENT_core.md §Game Center).
+        GameCenterService.shared.submitRun(score: core.score, usedCheckpoint: core.usedCheckpoint)
     }
 
     private func addPopup(_ text: String, color: Color, worldX: Double) {
@@ -330,8 +422,11 @@ struct GameView: View {
 
             HUDView(core: model.core)
 
+            // Mute/pause cluster anchored to the top-trailing corner (the HUD's right-hand chips
+            // start below it — see HUDView's top padding) instead of floating top-centre.
             VStack {
                 HStack(spacing: 10) {
+                    Spacer()
                     Button { model.toggleMute() } label: {
                         Image(systemName: model.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                             .font(.system(size: 14, weight: .semibold))
@@ -357,6 +452,7 @@ struct GameView: View {
                 Spacer()
             }
             .padding(.top, 14)
+            .padding(.trailing, 16)
 
             switch model.core.snapshot.mode {
             case .menu:

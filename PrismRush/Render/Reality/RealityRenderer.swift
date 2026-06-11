@@ -32,6 +32,8 @@ final class RealityRenderer: RendererPort {
     private let gemMesh: MeshResource
     private let magnetMesh: MeshResource
     private let doublerMesh: MeshResource   // twin octahedron (coin-doubler pickup, see makeEntity)
+    private let chronoMesh: MeshResource    // hourglass (chrono slow-mo pickup)
+    private let splitBarSegmentMesh: MeshResource   // one-lane bar segment (two per splitBar)
 
     // Selected character skin (`followsWorld` = the default look that tracks the world accent).
     private var skinBodyHex: UInt32 = 0
@@ -42,6 +44,7 @@ final class RealityRenderer: RendererPort {
     private var blinkT: Double = 3
     private var shake: Float = 0
     private var fovKick: Float = 0          // transient FOV punch (pickup / world change), decays like shake
+    private var chronoDip: Float = 0        // smoothed −6° FOV dip while chrono slow-mo is active
     private var slideRoll: Float = 0        // smoothed camera z-roll while sliding
     private var lastSpeed: Float = 0
     private var lastDt: Float = 1 / 60      // wall-clock dt from advanceVisuals (runs before sync)
@@ -83,6 +86,8 @@ final class RealityRenderer: RendererPort {
         gemMesh = ProceduralMesh.octahedron(0.34)
         magnetMesh = ProceduralMesh.torus(major: 0.30, minor: 0.12)
         doublerMesh = ProceduralMesh.twinOctahedron(0.26, offset: 0.34)
+        chronoMesh = ProceduralMesh.hourglass(halfBase: 0.3, halfHeight: 0.42)
+        splitBarSegmentMesh = .generateBox(width: 2.5, height: 0.7, depth: 0.7, cornerRadius: 0.04)
         matGemGold = UnlitMaterial(color: UIColor(red: 1, green: 210/255.0, blue: 61/255.0, alpha: 1))
         matGemHot = UnlitMaterial(color: UIColor(red: 1, green: 0.95, blue: 0.75, alpha: 1))
         buildScene()
@@ -136,9 +141,11 @@ final class RealityRenderer: RendererPort {
         let px = Float(snap.playerX)
         lastSpeed = Float(snap.speed)
         let speedPunch: Float = reduceMotion ? 0 : Float(clampD((snap.speed - 7) / 27, 0, 1)) * 9
-        camera.camera.fieldOfViewInDegrees = 62 + speedPunch + fovKick
-        // INTEGRATION (frenzy): when GameSnapshot gains `timeScale`, add +8° while timeScale > 1
-        // (frenzy) and −6° while timeScale < 1 (slow-mo), gated by !reduceMotion.
+        // Chrono slow-mo: ease toward a −6° dip while the timer runs (snap.speed is already the
+        // chrono-scaled EFFECTIVE speed, so the speed punch above relaxes with it for free).
+        let dipTarget: Float = (!reduceMotion && snap.chronoRemaining > 0 && snap.mode == .play) ? -6 : 0
+        chronoDip += (dipTarget - chronoDip) * 0.08
+        camera.camera.fieldOfViewInDegrees = 62 + speedPunch + fovKick + chronoDip
         camX += (px * 0.42 - camX) * 0.15
         let shaking = !reduceMotion && shake > 0
         let shakeX = shaking ? Float.random(in: -1...1) * shake * 0.55 : 0
@@ -189,15 +196,27 @@ final class RealityRenderer: RendererPort {
         let mA = matAccent, mA2 = matAccent2
         let mGold = matGemGold, mHot = matGemHot
         pools.sync(snap.entities) { entity, s in
-            // `s.y` is authoritative. Bars fall back to the legacy 1.3 only while the core still
-            // reports y == 0 for them (pre-integration); pistons ride their snapshot y directly.
-            let y: Float = (s.kind == .bar && s.y == 0) ? 1.3 : Float(s.y)
-            entity.position = SIMD3<Float>(Float(s.x), y, Float(s.z))
+            // `s.y` is authoritative for EVERY kind (bar/splitBar centre 1.3, low 0.425, tall 1.6
+            // now arrive from the core) — never hardcode heights here.
+            entity.position = SIMD3<Float>(Float(s.x), Float(s.y), Float(s.z))
             switch s.kind {
             case .tall:
                 (entity as? ModelEntity).map { $0.model?.materials = [mA] }
             case .low, .bar, .movingTall:
                 (entity as? ModelEntity).map { $0.model?.materials = [mA2] }
+            case .splitBar:
+                // `s.lane` is the OPEN lane: park the two pooled segments over the other two
+                // lanes (recycled entities may carry a different gap, so place every frame).
+                let open = (0...2).contains(s.lane) ? s.lane : 1
+                let xa = Float(Tuning.laneX[open == 0 ? 1 : 0])
+                let xb = Float(Tuning.laneX[open == 2 ? 1 : 2])
+                var i = 0
+                for child in entity.children {
+                    guard let seg = child as? ModelEntity else { continue }
+                    seg.position = SIMD3<Float>(i == 0 ? xa : xb, 0, 0)
+                    seg.model?.materials = [mA2]
+                    i += 1
+                }
             case .gem:
                 entity.orientation = simd_quatf(angle: Float(s.spin) * 0.9, axis: SIMD3<Float>(0, 1, 0))
                 if s.fading {
@@ -209,20 +228,15 @@ final class RealityRenderer: RendererPort {
                     entity.scale = .one                      // recycled pooled gem: restore
                     (entity as? ModelEntity).map { $0.model?.materials = [mGold] }
                 }
-            case .shield, .magnet:
+            case .shield, .magnet, .doubler, .chrono:
                 entity.orientation = simd_quatf(angle: Float(s.spin) * 0.9, axis: SIMD3<Float>(0, 1, 0))
-            // INTEGRATION (core lands .doubler/.piston in EntityKind — uncomment, exhaustive switch):
-            // case .doubler:
-            //     entity.orientation = simd_quatf(angle: Float(s.spin) * 0.9, axis: SIMD3<Float>(0, 1, 0))
-            // case .piston:
-            //     (entity as? ModelEntity).map { $0.model?.materials = [mA2] }  // y already from s.y
             }
         }
 
-        // Speed trail behind the player — time-based (≈ the old 3/frame at 60 Hz).
-        // INTEGRATION (frenzy): multiply the 180/s rate by snapshot.timeScale when it lands.
+        // Speed trail behind the player — time-based (≈ the old 3/frame at 60 Hz). The emission
+        // rate breathes with chrono slow-mo so the trail thins while the world crawls.
         if snap.mode == .play {
-            trailDebt += 180 * lastDt
+            trailDebt += 180 * (snap.chronoRemaining > 0 ? Float(Tuning.chronoFactor) : 1) * lastDt
             let n = Int(trailDebt)
             if n > 0 {
                 trailDebt -= Float(n)
@@ -263,7 +277,20 @@ final class RealityRenderer: RendererPort {
         case let .slid(x):
             dropSkid(at: Float(x))
         case let .pickup(kind, x, y):
-            particles.burst(x: Float(x), y: Float(y), z: 0, color: kind == .shield ? cWhite : tintAccent, count: 36, power: 4.8, spread: 0.34, life: 0.8)
+            switch kind {
+            case .shield:
+                particles.burst(x: Float(x), y: Float(y), z: 0, color: cWhite, count: 36, power: 4.8, spread: 0.34, life: 0.8)
+            case .magnet:
+                particles.burst(x: Float(x), y: Float(y), z: 0, color: tintAccent, count: 36, power: 4.8, spread: 0.34, life: 0.8)
+            case .doubler:
+                // Gold + emerald split burst — reads as "money" against every world palette.
+                particles.burst(x: Float(x), y: Float(y), z: 0, color: cGold, count: 18, power: 4.8, spread: 0.3, life: 0.8)
+                particles.burst(x: Float(x), y: Float(y), z: 0, color: uiHex(0x00FF88), count: 18, power: 4.8, spread: 0.3, life: 0.8)
+            case .chrono:
+                // Icy cyan-white shower, slower and longer-lived — time is thickening.
+                particles.burst(x: Float(x), y: Float(y), z: 0, color: uiHex(0x9BF0FF), count: 30, power: 3.2, spread: 0.4, life: 1.1)
+                particles.burst(x: Float(x), y: Float(y), z: 0, color: cWhite, count: 12, power: 2.2, spread: 0.3, life: 1.1)
+            }
             kickFOV()
         case let .shieldAbsorbed(x):
             particles.burst(x: Float(x), y: 1.2, z: 0, color: cWhite, count: 40, power: 6.2, spread: 0.42, life: 0.7)
@@ -278,14 +305,8 @@ final class RealityRenderer: RendererPort {
             let accent = UIColor(red: CGFloat(a.x), green: CGFloat(a.y), blue: CGFloat(a.z), alpha: 1)
             particles.ring(y: 4.5, z: -42, radius: 9, color: accent, count: 24, velZ: 26, life: 1.1)
             kickFOV()
-        case .jumped, .laneChanged, .nearMiss:
-            break   // popups / banner / haptics handled by the UI layer
-        // INTEGRATION (doubler FX): when FXEvent gains a doubler-pickup case, add a 36-count
-        // gold+green burst (and kickFOV()):
-        // case let .doublerCollected(x, y):
-        //     particles.burst(x: Float(x), y: Float(y), z: 0, color: cGold, count: 18, power: 4.8, spread: 0.3, life: 0.8)
-        //     particles.burst(x: Float(x), y: Float(y), z: 0, color: uiHex(0x00FF88), count: 18, power: 4.8, spread: 0.3, life: 0.8)
-        //     kickFOV()
+        case .jumped, .laneChanged, .nearMiss, .chronoEnded:
+            break   // popups / banner / haptics / audio handled by the UI layer
         }
     }
 
@@ -309,6 +330,7 @@ final class RealityRenderer: RendererPort {
         particles.reset()
         shake = 0
         fovKick = 0
+        chronoDip = 0
         slideRoll = 0
         trailDebt = 0; dustDebt = 0; speedLineDebt = 0
         for i in skids.indices { skidLife[i] = 0; skids[i].isEnabled = false }
@@ -398,13 +420,26 @@ final class RealityRenderer: RendererPort {
         case .tall:       return boxEntity(1.9, 3.2, 0.9, .cyan)
         case .movingTall: return boxEntity(1.9, 3.2, 0.9, .magenta)
         case .bar:        return boxEntity(7.6, 0.7, 0.7, .magenta)
+        case .splitBar:   return splitBarEntity()
         case .gem:        return ModelEntity(mesh: gemMesh, materials: [matGemGold])
         case .shield:     return sphereEntity(0.42, cWhite)
         case .magnet:     return ModelEntity(mesh: magnetMesh, materials: [UnlitMaterial(color: .cyan)])
-        // INTEGRATION (core lands .doubler/.piston in EntityKind — uncomment):
-        // case .doubler:    return ModelEntity(mesh: doublerMesh, materials: [UnlitMaterial(color: uiHex(0x00FF88))])
-        // case .piston:     return boxEntity(7.6, 0.7, 0.7, .magenta)   // bar box; y driven by s.y
+        case .doubler:    return ModelEntity(mesh: doublerMesh, materials: [UnlitMaterial(color: uiHex(0x00FF88))])
+        case .chrono:     return ModelEntity(mesh: chronoMesh, materials: [UnlitMaterial(color: uiHex(0x9BF0FF))])
         }
+    }
+
+    /// Two one-lane bar segments under a shared parent. The segments' x offsets are repositioned
+    /// every frame by the place closure (the entity's `lane` is the OPEN lane and a recycled
+    /// pooled splitBar may need a different gap). Segment width 2.5 matches the collision band
+    /// exactly (`laneHitHalfWidth` 1.25 either side of the covered lane), leaving a ~1.9-wide
+    /// visible gap over the open lane.
+    private func splitBarEntity() -> Entity {
+        let parent = Entity()
+        for _ in 0..<2 {
+            parent.addChild(ModelEntity(mesh: splitBarSegmentMesh, materials: [UnlitMaterial(color: .magenta)]))
+        }
+        return parent
     }
 
     private func boxEntity(_ w: Float, _ h: Float, _ d: Float, _ c: UIColor) -> ModelEntity {

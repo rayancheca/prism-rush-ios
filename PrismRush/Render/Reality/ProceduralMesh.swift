@@ -38,6 +38,23 @@ enum ProceduralMesh {
         return build(p, idx, fallback: r + offset)
     }
 
+    /// Hourglass for the chrono slow-mo pickup: two four-sided pyramids meeting apex-to-apex at
+    /// the origin (square caps at y ±`halfHeight`, pinched waist at the centre). 9 vertices.
+    static func hourglass(halfBase b: Float, halfHeight h: Float) -> MeshResource {
+        let p: [SIMD3<Float>] = [
+            [-b, -h, -b], [b, -h, -b], [b, -h, b], [-b, -h, b],  // bottom square 0..3 (CCW from above)
+            [0, 0, 0],                                            // shared waist apex 4
+            [-b, h, -b], [b, h, -b], [b, h, b], [-b, h, b],       // top square 5..8
+        ]
+        let idx: [UInt32] = [
+            1, 0, 4,  2, 1, 4,  3, 2, 4,  0, 3, 4,   // lower pyramid sides (outward)
+            0, 2, 1,  0, 3, 2,                         // bottom cap (downward)
+            5, 6, 4,  6, 7, 4,  7, 8, 4,  8, 5, 4,   // upper inverted-pyramid sides (outward)
+            5, 7, 6,  5, 8, 7,                         // top cap (upward)
+        ]
+        return build(p, idx, fallback: max(b, h))
+    }
+
     /// Four-sided pyramid for the Solar Sands decor.
     static func pyramid(halfBase b: Float, height h: Float) -> MeshResource {
         let p: [SIMD3<Float>] = [

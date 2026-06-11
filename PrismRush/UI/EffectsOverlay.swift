@@ -65,6 +65,9 @@ private struct BannerView: View {
             guard id > 0 else { return }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) { shown = true }
             try? await Task.sleep(for: .seconds(1.8))
+            // A new world change restarts this task mid-sleep; the cancelled instance must not
+            // race the fresh one and hide the banner it just showed.
+            guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.5)) { shown = false }
         }
     }
