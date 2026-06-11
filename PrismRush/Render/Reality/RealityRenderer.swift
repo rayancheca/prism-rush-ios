@@ -69,8 +69,27 @@ final class RealityRenderer: RendererPort {
     private var lastSpeed: Float = 0
     private var lastDt: Float = 1 / 60      // wall-clock dt from advanceVisuals (runs before sync)
     private var camX: Float = 0
+    private var camXV: Float = 0            // lateral-follow spring velocity (lag + overshoot on swipes)
+    private var slideDip: Float = 0         // smoothed 0→1 camera ground-drop while sliding (the P0 read)
 
-    // Reduce Motion gates shake, the FOV speed-punch/kicks, the slide roll, and speed lines.
+    // Pose-extras state. The snapshot carries no velocities, so lateral/vertical speed is estimated
+    // from position deltas right here (Core stays untouched). Timers are armed by FX edges.
+    private var lastPlayerX: Float = 0
+    private var lastPlayerY: Float = 0
+    private var vxEst: Float = 0            // smoothed lateral velocity — drives the antenna whip
+    private var vyEst: Float = 0            // smoothed vertical velocity — drives the airborne stretch
+    private var jumpStretchT: Float = 0     // takeoff anticipation pop, armed by `.jumped`
+    private var landSquashT: Float = 0      // landing squash impulse, armed by `.landed`
+    private var whip: Float = 0             // antenna whip spring angle: lags/overshoots the body's x-motion
+    private var whipVel: Float = 0
+    private var runPhase: Float = 0         // run-cycle gallop clock (wraps at 2π; period shrinks with speed)
+    private var runBobOn = false            // cached for advanceVisuals (runs BEFORE sync): grounded play run
+    private var speedNorm: Float = 0        // cached 0…1 speed factor (FOV punch, lean, antenna bounce)
+    private var lastSliding = false         // cached for the eye squint in advanceVisuals
+
+    // Reduce Motion gates shake, the FOV speed-punch/kicks, the slide roll, and speed lines, plus
+    // all of the pose extras above. The slide camera keeps a SUBTLE height dip even under RM —
+    // slide state is gameplay information, so total removal would hurt readability.
     // Observed live, not just sampled at launch.
     private var reduceMotion = UIAccessibility.isReduceMotionEnabled
     private var reduceMotionObserver: (any NSObjectProtocol)?
@@ -175,7 +194,10 @@ final class RealityRenderer: RendererPort {
         // doesn't bleed into the lerp; Reduce Motion disables all of the motion flourishes).
         let px = Float(snap.playerX)
         lastSpeed = Float(snap.speed)
-        let speedPunch: Float = reduceMotion ? 0 : Float(clampD((snap.speed - 7) / 27, 0, 1)) * 9
+        lastSliding = snap.sliding && snap.mode == .play
+        runBobOn = snap.mode == .play && snap.grounded && !snap.sliding
+        speedNorm = Float(clampD((snap.speed - 7) / 27, 0, 1))
+        let speedPunch: Float = reduceMotion ? 0 : speedNorm * 9
         // Chrono slow-mo: ease toward a −6° dip while the timer runs (snap.speed is already the
         // chrono-scaled EFFECTIVE speed, so the speed punch above relaxes with it for free).
         let dipTarget: Float = (!reduceMotion && snap.chronoRemaining > 0 && snap.mode == .play) ? -6 : 0
@@ -185,15 +207,42 @@ final class RealityRenderer: RendererPort {
         let boostTarget: Float = (!reduceMotion && snap.boostRemaining > 0 && snap.mode == .play) ? 6 : 0
         boostFOV += (boostTarget - boostFOV) * 0.12
         camera.camera.fieldOfViewInDegrees = 62 + speedPunch + fovKick + chronoDip + boostFOV
-        camX += (px * 0.42 - camX) * 0.15
+
+        // Lateral/vertical velocity estimated from position deltas, clamped so the run-start
+        // teleport can't spike the pose, then smoothed (~3 frames) so the estimates stay calm.
+        let sdt = max(min(lastDt, 1 / 30), 1 / 240)
+        vxEst += (min(max((px - lastPlayerX) / sdt, -20), 20) - vxEst) * 0.35
+        vyEst += (min(max((Float(snap.playerY) - lastPlayerY) / sdt, -16), 16) - vyEst) * 0.35
+        lastPlayerX = px
+        lastPlayerY = Float(snap.playerY)
+
+        // Slide camera drop (the P0 readability fix): the eye DIVES toward the ground and the
+        // look-at pitches down while sliding — in fast (~0.12 s), out slower (~0.2 s) — so a bar
+        // whooshes OVERHEAD exactly as the player ducks under it. Reduce Motion keeps a small
+        // height dip only (slide state is gameplay information) and drops the pitch/pull extras.
+        let slideTarget: Float = (snap.sliding && snap.mode == .play) ? 1 : 0
+        slideDip += (slideTarget - slideDip) * (slideTarget > slideDip ? 0.28 : 0.14)
+        let dropY: Float = slideDip * (reduceMotion ? 0.6 : 2.1)
+        // Lateral follow: a lightly underdamped spring instead of a flat lerp — the camera lags a
+        // swipe then overshoots a touch, which makes lane changes feel kinetic. RM keeps the lerp.
+        let followX = px * 0.42
+        if reduceMotion {
+            camX += (followX - camX) * 0.15
+            camXV = 0
+        } else {
+            camXV += (followX - camX) * 90 * sdt
+            camXV *= max(0, 1 - 9.5 * sdt)
+            camX += camXV * sdt
+        }
         let shaking = !reduceMotion && shake > 0
         let shakeX = shaking ? Float.random(in: -1...1) * shake * 0.55 : 0
         let shakeY = shaking ? Float.random(in: -1...1) * shake * 0.55 : 0
-        let cp = SIMD3<Float>(camX + shakeX, 5.1 + shakeY, 9.6)
+        let cp = SIMD3<Float>(camX + shakeX, 5.1 - dropY + shakeY, 9.6 - (reduceMotion ? 0 : slideDip * 0.8))
         camera.position = cp
-        camera.look(at: SIMD3<Float>(px * 0.3, 1.3, -5), from: cp, relativeTo: nil)
+        let lookY: Float = 1.3 - (reduceMotion ? 0 : slideDip * 0.85)
+        camera.look(at: SIMD3<Float>(px * 0.3, lookY, -5), from: cp, relativeTo: nil)
         // Slight z-roll folded into the look-at while sliding (smoothed both ways).
-        let rollTarget: Float = (!reduceMotion && snap.sliding && snap.mode == .play) ? -0.04 : 0
+        let rollTarget: Float = (!reduceMotion && snap.sliding && snap.mode == .play) ? -0.06 : 0
         slideRoll += (rollTarget - slideRoll) * 0.2
         if abs(slideRoll) > 0.0005 {
             camera.orientation = simd_quatf(angle: slideRoll, axis: SIMD3<Float>(0, 0, 1)) * camera.orientation
@@ -204,25 +253,58 @@ final class RealityRenderer: RendererPort {
         }
 
         // Player rig: lane/jump pose, squash-&-stretch, bank, plus a pronounced forward-lean slide.
+        // The renderer-side extras (run gallop, airborne stretch, takeoff pop, landing impulse)
+        // layer MULTIPLICATIVELY on Core's playerScaleY baseline and are all RM-gated.
         playerRig.isEnabled = snap.mode != .over
-        playerRig.position = SIMD3<Float>(px, Float(snap.playerY), 0)
-        let sy = Float(snap.playerScaleY)
+        var sy = Float(snap.playerScaleY)
         var sx = 1 + (1 - sy) * 0.45
-        if snap.sliding { sx *= 1.55 }                       // flatten dramatically into a pancake
+        var poseY = Float(snap.playerY)
+        var pitch: Float = 0
+        if snap.sliding {
+            sx *= 1.7                                        // flatten dramatically into a pancake
+            pitch = -0.85                                    // nose-down — diving under the bar
+        } else if !reduceMotion, snap.mode == .play {
+            if snap.grounded {
+                // Run cycle: gallop bob whose period shrinks with speed, plus a forward lean
+                // proportional to speed. |sin| gives the bounce; sin(2φ) is the matching pulse.
+                poseY += abs(sin(runPhase)) * (0.045 + 0.035 * speedNorm)
+                pitch = -0.16 * speedNorm
+                sy *= 1 + sin(runPhase * 2) * 0.025
+            } else {
+                // Airborne: stretch with vertical speed (derived from y deltas above), which
+                // relaxes to neutral at the apex for free; nose-up rising, nose-down falling.
+                let f = min(abs(vyEst) / Float(Tuning.jumpV0), 1)
+                sy *= 1 + f * 0.26
+                sx *= 1 - f * 0.12
+                pitch = min(max(vyEst * 0.022, -0.30), 0.12)
+            }
+            if jumpStretchT > 0 {                            // takeoff anticipation pop (.jumped edge)
+                let e = jumpStretchT / 0.12
+                sy *= 1 + 0.16 * e
+                sx *= 1 - 0.08 * e
+            }
+            if landSquashT > 0 {                             // impact squash atop Core's (.landed edge)
+                let e = landSquashT / 0.18
+                sy *= 1 - 0.22 * e
+                sx *= 1 + 0.26 * e
+            }
+        }
+        playerRig.position = SIMD3<Float>(px, poseY, 0)
         playerRig.scale = SIMD3<Float>(sx, sy, sx) * skinScale   // skin size is pose-only; hitbox untouched
         let bankQ = simd_quatf(angle: Float(snap.bankZ), axis: SIMD3<Float>(0, 0, 1))
-        let leanQ = simd_quatf(angle: snap.sliding ? -0.85 : 0, axis: SIMD3<Float>(1, 0, 0))
+        let leanQ = simd_quatf(angle: pitch, axis: SIMD3<Float>(1, 0, 0))
         playerRig.orientation = bankQ * leanQ
 
         // Dust kicked up during a slide — grounded OR mid air-slam — so it's unmistakable.
-        // Time-based (≈ the old 6/frame at 60 Hz) so density matches at 120 Hz.
+        // Time-based (≈ the old 6/frame at 60 Hz) so density matches at 120 Hz. The wider x
+        // scatter + slightly hotter power turn it into a continuous ground ribbon behind the body.
         if snap.mode == .play, snap.sliding {
             dustDebt += 360 * lastDt
             let n = Int(dustDebt)
             if n > 0 {
                 dustDebt -= Float(n)
-                particles.burst(x: px + Float.random(in: -0.4...0.4), y: 0.12, z: 0.5,
-                                color: skinTrailColor ?? tintAccent, count: n, power: 1.8, spread: 0.18, life: 0.45)
+                particles.burst(x: px + Float.random(in: -0.55...0.55), y: 0.12, z: 0.5,
+                                color: skinTrailColor ?? tintAccent, count: n, power: 2.1, spread: 0.2, life: 0.5)
             }
         }
 
@@ -327,8 +409,24 @@ final class RealityRenderer: RendererPort {
             let ladder = [cGold, UIColor.cyan, UIColor.magenta, cWhite]
             particles.burst(x: Float(x), y: Float(y), z: 0, color: ladder[tier],
                             count: 12 + 4 * tier, power: 3.2, spread: 0.18, life: 0.6)
+        case let .jumped(x):
+            // Takeoff: arm the anticipation pop and chuff a small launch puff at the feet
+            // (the airborne stretch in sync carries the rest of the arc).
+            if !reduceMotion {
+                jumpStretchT = 0.12
+                particles.burst(x: Float(x), y: 0.1, z: 0.3, color: skinTrailColor ?? tintAccent,
+                                count: 7, power: 2.0, spread: 0.26, life: 0.35)
+            }
         case let .landed(x):
             particles.burst(x: Float(x), y: 0.1, z: 0.2, color: skinTrailColor ?? tintAccent, count: 10, power: 2.6, spread: 0.32, life: 0.4)
+            if !reduceMotion { landSquashT = 0.18 }   // body squash sells the existing dust ring
+        case let .laneChanged(x):
+            // Skid kick where the dodge started — the antenna whip + camera lateral spring
+            // (both velocity-driven in sync/advanceVisuals) carry the rest of the motion.
+            if !reduceMotion {
+                particles.burst(x: Float(x), y: 0.12, z: 0.4, color: skinTrailColor ?? tintAccent,
+                                count: 10, power: 2.4, spread: 0.3, life: 0.38)
+            }
         case let .slid(x):
             dropSkid(at: Float(x))
         case let .pickup(kind, x, y):
@@ -391,7 +489,7 @@ final class RealityRenderer: RendererPort {
             particles.burst(x: Float(x), y: 0.9, z: -Float(Tuning.fountainLead), color: cGold,
                             count: 16, power: 2.6, spread: 0.5, life: 0.8)
             kickFOV()
-        case .jumped, .laneChanged, .nearMiss, .chronoEnded, .boostEnded:
+        case .nearMiss, .chronoEnded, .boostEnded:
             break   // popups / banner / haptics / audio handled by the UI layer; boost restore
                     // is snapshot-driven (see sync), so `.boostEnded` is audio's edge, not ours
         }
@@ -404,13 +502,33 @@ final class RealityRenderer: RendererPort {
         lastDt = Float(dt)
         blinkT -= dt
         if blinkT < -0.12 { blinkT = Double.random(in: 2.2...4.2) }
-        let blink: Float = blinkT < 0 ? 0.1 : 1
-        for eye in eyes { eye.scale = SIMD3<Float>(1, blink, 1) }
-        // Antenna sway — per-skin idle personality; visual-only, gated by Reduce Motion. The tip
-        // swings on an arm around the stem centre so scaled antennae (Pebble 0.6 … Wisp 1.4)
-        // stay attached. Zero allocations, two transform writes per frame.
-        if !reduceMotion, skinSway > 0 {
-            let a = Float(sin(elapsed * skinSwaySpeed)) * skinSway
+        // Squint while sliding (motion-free, so never RM-gated): paired with the camera drop it
+        // makes a slide readable in a single still frame. A blink wins when both close the lids.
+        let lid: Float = blinkT < 0 ? 0.1 : (lastSliding ? 0.3 : 1)
+        for eye in eyes { eye.scale = SIMD3<Float>(1, lid, 1) }
+        // Run-cycle gallop clock: period shrinks as the speed climbs. Wraps at 2π so sin(φ) and
+        // sin(2φ) both stay continuous and Float precision never degrades on marathon runs.
+        if runBobOn, !reduceMotion {
+            runPhase = (runPhase + Float(dt) * min(max(lastSpeed * 1.1, 6), 24))
+                .truncatingRemainder(dividingBy: 2 * .pi)
+        }
+        // Pose-impulse timers (armed by the `.jumped` / `.landed` edges, consumed in sync).
+        if jumpStretchT > 0 { jumpStretchT = max(0, jumpStretchT - Float(dt)) }
+        if landSquashT > 0 { landSquashT = max(0, landSquashT - Float(dt)) }
+        // Antenna — three motions folded into ONE angle: per-skin idle sway, a whip spring that
+        // lags then overshoots the body's lateral velocity (swipes crack it like a car aerial),
+        // and a bounce synced to the run bob. The tip swings on an arm around the stem centre so
+        // scaled antennae (Pebble 0.6 … Wisp 1.4) stay attached. Zero allocations, two transform
+        // writes per frame; all RM-gated with the one-time rest-pose restore below.
+        if !reduceMotion {
+            let sdtA = Float(min(dt, 1 / 30.0))
+            let whipTarget = min(max(-vxEst * 0.05, -0.5), 0.5)
+            whipVel += (whipTarget - whip) * 140 * sdtA      // stiffness 140, damping 10:
+            whipVel *= max(0, 1 - 10 * sdtA)                 // underdamped → visible overshoot
+            whip += whipVel * sdtA
+            let swayA = skinSway > 0 ? Float(sin(elapsed * skinSwaySpeed)) * skinSway : 0
+            let bounceA = runBobOn ? sin(runPhase) * 0.07 * speedNorm : 0
+            let a = swayA + whip + bounceA
             let arm = antennaTipY - antennaCenterY
             antenna.orientation = simd_quatf(angle: a, axis: SIMD3<Float>(0, 0, 1))
             antennaTip.position = SIMD3<Float>(sin(a) * arm, antennaCenterY + cos(a) * arm, 0)
@@ -420,6 +538,8 @@ final class RealityRenderer: RendererPort {
             antenna.orientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 0, 1))
             antennaTip.position = SIMD3<Float>(0, antennaTipY, 0)
             swayApplied = false
+            whip = 0
+            whipVel = 0
         }
         particles.step(Float(dt), speed: lastSpeed)
         stepSkids(Float(dt))
@@ -446,6 +566,13 @@ final class RealityRenderer: RendererPort {
         chronoDip = 0
         boostFOV = 0
         slideRoll = 0
+        slideDip = 0
+        camXV = 0
+        vxEst = 0; vyEst = 0
+        lastPlayerX = 0; lastPlayerY = 0   // runs start at lane centre, grounded
+        jumpStretchT = 0; landSquashT = 0
+        whip = 0; whipVel = 0
+        runPhase = 0
         trailDebt = 0; dustDebt = 0; speedLineDebt = 0
         ringPulseLife = 0
         ringPulse.isEnabled = false
@@ -529,6 +656,10 @@ final class RealityRenderer: RendererPort {
         ringPulse.isEnabled = false
         root.addChild(ringPulse)
 
+        // The rig itself must live under root — buildCharacter() only parents the body parts to
+        // the rig. Without this line the whole character is orphaned and never rendered (this is
+        // exactly what shipped in v1.3: every play-mode frame shows the wake but no body).
+        root.addChild(playerRig)
         buildCharacter()
     }
 
