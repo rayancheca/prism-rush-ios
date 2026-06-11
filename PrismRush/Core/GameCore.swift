@@ -52,6 +52,9 @@ final class GameCore {
     @ObservationIgnored private(set) var magnetT: Double = 0
     @ObservationIgnored private(set) var doublerT: Double = 0  // gems pay double currency while > 0
     @ObservationIgnored private(set) var chronoT: Double = 0   // slow-mo: distance integrates at × chronoFactor
+    @ObservationIgnored private(set) var boostT: Double = 0    // overdrive: world speed × boostFactor (capped)
+    @ObservationIgnored private(set) var flowStreak: Int = 0   // near-misses since the last reset (surge every 3rd)
+    @ObservationIgnored private(set) var flowSurges: Int = 0   // surges this run (FX escalation level, 1-based)
     @ObservationIgnored private(set) var bonus: Int = 0
     @ObservationIgnored private(set) var score: Int = 0
     @ObservationIgnored private(set) var gemCount: Int = 0
@@ -109,10 +112,16 @@ final class GameCore {
     /// Distance actually travelled this run (excludes a checkpoint head-start).
     var traveledDistance: Double { distance - scoreOffset }
 
-    /// World speed the player actually experiences: chrono slow-mo scales the raw ramp `speed`
-    /// without touching it, so the difficulty curve resumes seamlessly when the timer ends.
-    /// Everything distance-domain (obstacle arrival, autopilot leads, renderer scroll) uses this.
-    var effectiveSpeed: Double { chronoT > 0 ? speed * Tuning.chronoFactor : speed }
+    /// World speed the player actually experiences: chrono slow-mo and the overdrive boost scale
+    /// the raw ramp `speed` without touching it, so the difficulty curve resumes seamlessly when
+    /// their timers end. Chrono applies first, then the boost (capped) — the single composition
+    /// point. Everything distance-domain (obstacle arrival, autopilot leads, scroll) uses this.
+    var effectiveSpeed: Double {
+        var v = speed
+        if chronoT > 0 { v *= Tuning.chronoFactor }
+        if boostT > 0 { v = min(v * Tuning.boostFactor, Tuning.boostSpeedMax) }
+        return v
+    }
 
     /// Reset to the fresh menu state. Reseeds if `seed` is given (else a new random stream).
     func reset(seed: UInt64?) {
@@ -124,6 +133,7 @@ final class GameCore {
         bankZ = 0; jumpBuf = 0
         world = 0; maxWorld = 0; worldFrom = 0; worldTo = 0; worldBlend = 1
         shield = false; invulnT = 0; magnetT = 0; doublerT = 0; chronoT = 0
+        boostT = 0; flowStreak = 0; flowSurges = 0
         bonus = 0; score = 0; gemCount = 0; streak = 0; bestStreak = 0; mult = 1
         activeObstacles.removeAll(keepingCapacity: true)
         activeGems.removeAll(keepingCapacity: true)
@@ -160,6 +170,10 @@ final class GameCore {
         if chronoT > 0 {
             chronoT = max(0, chronoT - dt)
             if chronoT == 0 { emit(.chronoEnded) }   // edge, not level — audio keys off it
+        }
+        if boostT > 0 {
+            boostT = max(0, boostT - dt)
+            if boostT == 0 { emit(.boostEnded) }     // edge — renderer/audio restore on it
         }
         if invulnT > 0 { invulnT = max(0, invulnT - dt) }
         // Score freezes at death: the post-death decel keeps distance climbing, but the run's
@@ -287,6 +301,7 @@ final class GameCore {
                         // The grace window outlives the kill band: patterns 3/7/9 pair talls at the
                         // same `d`, and the partner wall stays lethal for several more ticks.
                         shield = false; invulnT = Tuning.invulnDuration; streak = 0; mult = 1
+                        flowStreak = 0   // taking a hit (even absorbed) breaks the flow
                         emit(.shieldAbsorbed(x: px))
                         activeObstacles.swapAt(i, activeObstacles.count - 1)
                         activeObstacles.removeLast()
@@ -308,11 +323,13 @@ final class GameCore {
                         if Collisions.closeNearMiss(dx: dx) {
                             bonus += Tuning.nearMissBonus * mult
                             emit(.nearMiss(kind: .close, x: px))
+                            registerFlowNearMiss()
                         }
                     case .bar:
                         if slideT > 0 {
                             bonus += Tuning.nearMissBonus * mult
                             emit(.nearMiss(kind: .slick, x: px))
+                            registerFlowNearMiss()
                         }
                     default: break
                     }
@@ -320,6 +337,22 @@ final class GameCore {
             }
             i += 1
         }
+    }
+
+    /// Flow surge (v1.3): every `flowPerSurge`-th CLOSE/SLICK without a hit pays a score bonus and
+    /// sprays a gem fountain into the player's lane. The fountain derives purely from current state
+    /// (laneIndex + distance) — it consumes ZERO RNG, so the seeded spawn stream stays byte-identical
+    /// whether or not surges fire (iron rule 2; pinned by `FlowTests`).
+    private func registerFlowNearMiss() {
+        flowStreak += 1
+        guard flowStreak % Tuning.flowPerSurge == 0 else { return }
+        flowSurges += 1
+        bonus += Tuning.flowSurgeScore * mult
+        for i in 0..<Tuning.fountainGems {
+            apply(.gem(d: distance + Tuning.fountainLead + Double(i) * Tuning.fountainSpacing,
+                       lane: laneIndex, y: 0.8))
+        }
+        emit(.flowSurge(level: flowSurges, x: px))
     }
 
     private func stepGems(_ dt: Double) {
@@ -344,8 +377,9 @@ final class GameCore {
                 activeGems.swapAt(i, activeGems.count - 1)
                 activeGems.removeLast()
                 // Doubler doubles CURRENCY only (gemCount feeds the coin payout); streak/multiplier
-                // remain skill stats and always count single.
-                gemCount += doublerT > 0 ? 2 : 1
+                // remain skill stats and always count single. The overdrive boost adds a flat
+                // +boostGemBonus coin per gem on top (stacks with the doubler: 2+1).
+                gemCount += (doublerT > 0 ? 2 : 1) + (boostT > 0 ? Tuning.boostGemBonus : 0)
                 streak += 1
                 bestStreak = max(bestStreak, streak)
                 mult = clampI(1 + streak / Tuning.streakPerMult, 1, Tuning.multCap)
@@ -370,6 +404,43 @@ final class GameCore {
                 continue
             }
             let pxw = Tuning.laneX[p.lane]
+
+            // Rings & pads (v1.3) have bespoke trigger geometry — branch BEFORE the generic window
+            // so `pickupHit` can never consume them (a mid-jump body overlap with a ring at apex
+            // height is a THREAD, not a touch-grab). Both are non-lethal by construction.
+            switch p.kind {
+            case .ring:
+                if mode == .play {
+                    let (pass, perfect) = Collisions.ringPass(playerCenterY: pcy, playerX: px,
+                                                              ringX: pxw, ringY: p.baseY, z: z)
+                    if pass {
+                        activePickups.swapAt(i, activePickups.count - 1)
+                        activePickups.removeLast()
+                        // Ring payouts are score + CURRENCY only — streak/mult stay gem-pickup
+                        // skill stats (iron rule 9; the doubler pays gemCount the same way).
+                        bonus += Tuning.ringScore * mult
+                        gemCount += perfect ? Tuning.ringPerfectCoins : Tuning.ringCoins
+                        emit(.ringPassed(x: pxw, y: p.baseY, perfect: perfect))
+                        continue
+                    }
+                }
+                i += 1
+                continue
+            case .boostPad:
+                if mode == .play && Collisions.boostPadHit(playerX: px, padX: pxw, z: z, grounded: grounded) {
+                    activePickups.swapAt(i, activePickups.count - 1)
+                    activePickups.removeLast()
+                    boostT = Tuning.boostDuration   // a second pad simply refreshes the timer
+                    bonus += Tuning.boostScoreBonus * mult
+                    emit(.boostStarted(x: pxw))
+                    continue
+                }
+                i += 1
+                continue
+            default:
+                break
+            }
+
             if mode == .play && Collisions.pickupHit(playerCenterY: pcy, playerX: px, pickupX: pxw, pickupY: p.baseY, z: z) {
                 activePickups.swapAt(i, activePickups.count - 1)
                 activePickups.removeLast()
@@ -399,7 +470,7 @@ final class GameCore {
         score = Int(((distance - scoreOffset) * 2).rounded(.down)) + bonus   // final, frozen score
         deathDistance = distance
         mode = .over
-        streak = 0; mult = 1
+        streak = 0; mult = 1; flowStreak = 0   // death breaks the flow (boostT decays naturally)
         if score > best { best = score }
         emit(.died(x: px))
     }
@@ -431,6 +502,7 @@ final class GameCore {
         laneIndex = 1; px = Tuning.laneX[1]
         jumpY = 0; vy = 0; grounded = true; slideT = 0; sy = 1
         shield = true
+        boostT = 0; flowStreak = 0              // a continue restarts clean — no leftover boost/flow
         speed = max(speed, Tuning.speedStart)   // paid continues resume instantly, not from the decel floor
         activeObstacles.removeAll()
         activeGems.removeAll()
@@ -488,6 +560,12 @@ final class GameCore {
         case let .chrono(d, lane):
             guard pickupCount(.chrono) < Tuning.capChrono else { return }
             activePickups.append(CoreEntity(id: takeId(), kind: .chrono, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 1.0, phase: 0, passed: false, fading: false))
+        case let .ring(d, lane, y):
+            guard pickupCount(.ring) < Tuning.capRing else { return }
+            activePickups.append(CoreEntity(id: takeId(), kind: .ring, lane: lane, d: d, x: Tuning.laneX[lane], baseY: y, phase: 0, passed: false, fading: false))
+        case let .boostPad(d, lane):
+            guard pickupCount(.boostPad) < Tuning.capBoostPad else { return }
+            activePickups.append(CoreEntity(id: takeId(), kind: .boostPad, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 0.05, phase: 0, passed: false, fading: false))
         }
     }
 
@@ -522,6 +600,7 @@ final class GameCore {
             worldFrom: worldFrom, worldTo: worldTo, worldBlend: worldBlend,
             shieldActive: shield, magnetRemaining: magnetT, doublerRemaining: doublerT,
             chronoRemaining: chronoT,
+            boostRemaining: boostT, flowStreak: flowStreak,
             sliding: slideT > 0, grounded: grounded,
             usedCheckpoint: usedCheckpoint,
             entities: entityScratch,

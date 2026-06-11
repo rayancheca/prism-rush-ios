@@ -12,47 +12,79 @@ enum SpawnCmd: Sendable, Equatable {
     case magnet(d: Double, lane: Int)
     case doubler(d: Double, lane: Int)
     case chrono(d: Double, lane: Int)
+    case ring(d: Double, lane: Int, y: Double)
+    case boostPad(d: Double, lane: Int)
 }
 
-/// The 12-pattern catalogue: 0–9 ported verbatim from the shipped Three.js prototype, 10 (split
-/// bar) new in v1.2, 11 the moving walls (kept LAST so the spawner's prefix gating unlocks split
-/// bars at mid difficulty without unlocking moving walls early). Every pattern is provably
-/// solvable (see `SolvabilityBotTests`). Each function appends its spawns to `out` and returns
-/// its length (used by the spawner to advance the cursor).
+/// The 14-pattern catalogue (v1.3): 0–8 ported from the shipped prototype, 9 the prism-ring arc and
+/// 10 the overdrive runway (both new in v1.3 — the reward beats unlock before the pain tiers), 11
+/// the gauntlet, 12 the split bar (chrono reward), 13 the moving walls — kept LAST so the spawner's
+/// prefix gating can open every earlier tier without unlocking them (iron rule 4). Every pattern is
+/// provably solvable (see `SolvabilityBotTests`). Each function appends its spawns to `out` and
+/// returns its length (used by the spawner to advance the cursor).
 enum Patterns {
-    static let count = 12
+    static let count = 14
 
-    // MARK: helpers (mirror the prototype's gemLine / gemArc / otherLanes)
+    // MARK: helpers (gemLine verbatim from the prototype; gemArc rewritten ballistic in v1.3)
+
+    /// Predicted ramp speed when the player reaches absolute distance `d`. Pure — zero RNG — so
+    /// speed-aware placement never perturbs the seeded spawn stream (iron rule 2).
+    private static func crossingSpeed(at d: Double) -> Double {
+        min(Tuning.speedCap, Tuning.speedStart + d * Tuning.speedRamp)
+    }
 
     private static func gemLine(_ d: Double, _ lane: Int, _ n: Int, _ out: inout [SpawnCmd]) {
         for i in 0..<n { out.append(.gem(d: d + Double(i) * 1.7, lane: lane, y: 0.8)) }
     }
 
-    private static func gemArc(_ d: Double, _ lane: Int, _ out: inout [SpawnCmd]) {
+    /// Ballistic gem arc (v1.3): gem 0 is the jump telegraph — the player jumps when it is
+    /// underfoot, at every speed. Every later gem sits at exactly the height the player's center
+    /// will have when crossing it at the predicted speed, so a single well-timed jump collects all
+    /// seven (`ArcCollectionTests`). Returns the arc's span so callers size their lengths from it.
+    @discardableResult
+    private static func gemArc(_ d: Double, _ lane: Int, _ out: inout [SpawnCmd]) -> Double {
+        let v    = crossingSpeed(at: d)                                       // crossing speed
+        let tAir = 2 * Tuning.jumpV0 / Tuning.gravity                         // total airtime
+        let span = min(Tuning.gemArcAirFrac * v * tAir, Tuning.gemArcMaxSpan) // 10.40 … 14
+        let hMax = Tuning.jumpV0 * Tuning.jumpV0 / (2 * Tuning.gravity)       // 2.16077
         for i in 0..<7 {
-            let t = Double(i) / 6
-            let y = 0.8 + sin(t * .pi) * 1.5
-            out.append(.gem(d: d + Double(i) * 1.25, lane: lane, y: y))
+            let frac = Double(i) / 6                       // 0…1 across the span
+            let tau  = frac * span / (v * tAir)            // airtime fraction at gem i
+            let y    = Tuning.gemArcBaseY + 4 * hMax * tau * (1 - tau)
+            out.append(.gem(d: d + frac * span, lane: lane, y: y))
         }
+        return span
+    }
+
+    /// Test hook: emit the ballistic arc exactly as the patterns do, returning its span
+    /// (`ArcCollectionTests` drives scripted jumps through it at known distances).
+    @discardableResult
+    static func debugGemArc(_ d: Double, lane: Int, out: inout [SpawnCmd]) -> Double {
+        gemArc(d, lane, &out)
     }
 
     private static func otherLanes(_ l: Int) -> [Int] { [0, 1, 2].filter { $0 != l } }
 
     // MARK: dispatch
 
-    /// Run pattern `idx` (0-based) at `base`, returning its length.
+    /// Run pattern `idx` (0-based) at `base`, returning its length. Per-pattern RNG call counts
+    /// are pinned in `PatternOrderTests` — consuming one extra call silently reshuffles every
+    /// seeded run (that is a `DailyChallenge.layoutVersion` bump, not an edit).
     static func run(_ idx: Int, base b: Double, rng: inout SplitMix64, out: inout [SpawnCmd]) -> Double {
         switch idx {
         case 0:  // gem line, random lane
             gemLine(b, rng.int(0, 2), 6, &out); return 14
 
-        case 1:  // one low + gem arc over it
+        case 1:  // one low + gem arc over it (the arc jump IS the survival jump)
             let l = rng.int(0, 2)
-            out.append(.low(d: b + 6, lane: l)); gemArc(b + 2.2, l, &out); return 16
+            out.append(.low(d: b + 6, lane: l))
+            let span = gemArc(b + 2.2, l, &out)
+            return max(16, span + 6)
 
         case 2:  // triple low across all lanes, arc over center → forces jump
             out.append(.low(d: b + 6, lane: 0)); out.append(.low(d: b + 6, lane: 1)); out.append(.low(d: b + 6, lane: 2))
-            gemArc(b + 2.2, 1, &out); return 18
+            let span = gemArc(b + 2.2, 1, &out)
+            return max(18, span + 8)
 
         case 3:  // twin talls, gems in the free lane → forces weave
             let free = rng.int(0, 2); let o = otherLanes(free)
@@ -73,7 +105,8 @@ enum Patterns {
         case 6:  // tall + low + low mixed row, arc over the free low
             let free = rng.int(0, 2); let o = otherLanes(free)
             out.append(.tall(d: b + 6, lane: o[0])); out.append(.low(d: b + 6, lane: o[1])); out.append(.low(d: b + 6, lane: free))
-            gemArc(b + 2, free, &out); return 18
+            let span = gemArc(b + 2, free, &out)
+            return max(18, span + 8)
 
         case 7:  // twin talls, then a pickup in the free lane (shield/magnet common, doubler rarer)
             let free = rng.int(0, 2); let o = otherLanes(free)
@@ -87,14 +120,38 @@ enum Patterns {
         case 8:  // double bar 9 apart
             out.append(.bar(d: b + 6)); out.append(.bar(d: b + 15)); gemLine(b + 18, 1, 4, &out); return 24
 
-        case 9:  // gauntlet: twin talls → bar → triple low, arc + line rewards
+        case 9:  // PRISM RING (v1.3): 3-gem run-up telegraph, a low keeping the jump honest, and a
+                 // ring hung at the apex of a jump triggered on the last gem. v(d) is pure; the
+                 // ring is non-lethal and lives in activePickups — the bot is unaffected.
+            let l = rng.int(0, 2)
+            gemLine(b, l, 3, &out)                          // run-up: b, b+1.7, b+3.4
+            out.append(.low(d: b + 7, lane: l))
+            let tApex = Tuning.jumpV0 / Tuning.gravity
+            let v = crossingSpeed(at: b + 3.4)
+            out.append(.ring(d: b + 3.4 + v * tApex, lane: l, y: Tuning.ringY))
+            return max(18, 9.4 + v * tApex)
+
+        case 10: // OVERDRIVE RUNWAY (v1.3): a boost pad into a gem river with ZERO obstacles.
+                 // Worst-case boost travel (trigger by b+5.1, then 1.0 s × 36) is over by b+41.1
+                 // < 48, and the next pattern's earliest obstacle sits past the gap — the boost can
+                 // never coexist with an obstacle (invariant pinned in SolvabilityBotTests).
+            let r = rng.int(0, 2)
+            out.append(.boostPad(d: b + 4, lane: r))
+            gemLine(b + 8, r, 10, &out)                     // main river  b+8 … b+23.3
+            gemLine(b + 12, r == 2 ? 1 : r + 1, 8, &out)    // offset stream — weave temptation
+            gemLine(b + 28, 1, 6, &out)                     // center finisher b+28 … b+36.5
+            return 48
+
+        case 11: // gauntlet: twin talls → bar → triple low, arc + line rewards
             let free = rng.int(0, 2); let o = otherLanes(free)
             out.append(.tall(d: b + 6, lane: o[0])); out.append(.tall(d: b + 6, lane: o[1]))
             out.append(.bar(d: b + 15))
             out.append(.low(d: b + 24, lane: 0)); out.append(.low(d: b + 24, lane: 1)); out.append(.low(d: b + 24, lane: 2))
-            gemArc(b + 20, free, &out); gemLine(b + 27, free, 4, &out); return 34
+            let span = gemArc(b + 20, free, &out)           // arc jump clears the triple low
+            gemLine(b + 20 + span + 2, free, 4, &out)
+            return 24 + span + 12
 
-        case 10: // split bar over two lanes — steer to the open gap OR slide under. Gem line marks
+        case 12: // split bar over two lanes — steer to the open gap OR slide under. Gem line marks
                  // the gap; a chrono slow-mo sometimes waits just beyond it as the reward.
             let open = rng.int(0, 2)
             out.append(.splitBar(d: b + 7, openLane: open))
@@ -102,9 +159,9 @@ enum Patterns {
             if rng.chance(0.35) { out.append(.chrono(d: b + 17, lane: open)) }
             return 22
 
-        case 11: // moving walls x2 — phase 0 puts each wall at CENTER on its collision plane, so the
+        case 13: // moving walls x2 — phase 0 puts each wall at CENTER on its collision plane, so the
                  // gem-lined outer lanes (0 and 2) are always the safe, readable escape. The wall still
-                 // oscillates visually on approach; amplitude 1.6 guarantees a clear lane.
+                 // oscillates visually on approach; amplitude 1.6 guarantees a clear lane. LAST (rule 4).
             out.append(.movingTall(d: b + 9, phase: 0)); gemLine(b + 1, 0, 3, &out)
             out.append(.movingTall(d: b + 22, phase: 0)); gemLine(b + 14, 2, 3, &out); return 32
 

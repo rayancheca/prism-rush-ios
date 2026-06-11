@@ -22,6 +22,8 @@ enum EntityKind: Sendable, Equatable {
     case magnet     // torus pickup
     case doubler    // ×2 coin pickup (gems pay double currency while active)
     case chrono     // slow-mo pickup (world scroll slows; player reflexes run at full rate)
+    case ring       // prism ring at jump-apex height: thread it for score/coins — never lethal
+    case boostPad   // floor chevron strip: grounded contact triggers the overdrive boost
 }
 
 /// One pooled entity's render state for a single frame.
@@ -63,6 +65,8 @@ struct GameSnapshot: Sendable {
     var magnetRemaining: Double
     var doublerRemaining: Double    // > 0 → gems pay double coins (HUD shows the timer)
     var chronoRemaining: Double     // > 0 → slow-mo active (HUD timer; renderer may tint)
+    var boostRemaining: Double      // > 0 → overdrive boost active (mirrors boostT; HUD ring, FOV punch)
+    var flowStreak: Int             // near-miss count toward flow surges (HUD pips show % flowPerSurge)
     var sliding: Bool
     var grounded: Bool
     var usedCheckpoint: Bool        // run began mid-track — meta layer must skip Game Center submit
@@ -89,6 +93,8 @@ struct GameSnapshot: Sendable {
         magnetRemaining: 0,
         doublerRemaining: 0,
         chronoRemaining: 0,
+        boostRemaining: 0,
+        flowStreak: 0,
         sliding: false,
         grounded: true,
         usedCheckpoint: false,
@@ -118,5 +124,9 @@ enum FXEvent: Sendable, Equatable {
     case worldChanged(index: Int, ordinal: Int)
     case shieldAbsorbed(x: Double)
     case chronoEnded                 // slow-mo timer crossed 0 (audio needs the edge)
+    case ringPassed(x: Double, y: Double, perfect: Bool)   // threaded a prism ring (once per ring)
+    case boostStarted(x: Double)     // overdrive pad triggered (edge)
+    case boostEnded                  // boost timer crossed 0 (edge, like chronoEnded)
+    case flowSurge(level: Int, x: Double)   // every flowPerSurge-th near-miss; level = surges this run (1-based)
     case died(x: Double)
 }

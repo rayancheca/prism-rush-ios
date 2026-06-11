@@ -18,14 +18,16 @@ final class DifficultyTests: XCTestCase {
         XCTAssertEqual(Spawner.gap(forDistance: Tuning.diffFullAt), Tuning.gapMin, accuracy: 1e-9)
     }
 
-    /// Pattern-availability gates open at the documented distances.
+    /// Pattern-availability gates open at the documented distances (v1.3 five-tier ladder).
     func testPatternGating() async {
         XCTAssertEqual(Spawner.maxIndex(forDistance: 0), 5)
         XCTAssertEqual(Spawner.maxIndex(forDistance: 259), 5)
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 260), 9)        // diff = 0.08 < 0.45
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 1439), 9)       // diff just under 0.45
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 1440), 11)      // diff = 0.45 → gauntlet + split bars (no moving walls)
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 1919), 11)      // diff just under 0.6
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 260), 9)        // diff = 0.08 < 0.18
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 575), 9)        // diff just under 0.18
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 576), 11)       // diff = 0.18 → rings + overdrive runways
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 1439), 11)      // diff just under 0.45
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 1440), 13)      // diff = 0.45 → gauntlet + split bars (no moving walls)
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 1919), 13)      // diff just under 0.6
         XCTAssertEqual(Spawner.maxIndex(forDistance: 1920), Patterns.count) // diff = 0.6 → moving walls unlock
         XCTAssertEqual(Spawner.maxIndex(forDistance: 6000), Patterns.count)
     }

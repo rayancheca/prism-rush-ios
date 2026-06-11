@@ -129,6 +129,20 @@ final class CollisionTests: XCTestCase {
         XCTAssertFalse(Collisions.magnetActive(z: 2.0))
     }
 
+    // MARK: Overdrive pad trigger (v1.3)
+
+    func testBoostPadTriggerBoundaries() {
+        XCTAssertTrue(Collisions.boostPadHit(playerX: 0, padX: 0, z: 0, grounded: true))
+        XCTAssertFalse(Collisions.boostPadHit(playerX: 0, padX: 0, z: 0, grounded: false),
+                       "airborne crossing must not trigger the pad")
+        // Lateral edge ±1.1 (pickupXHalf).
+        XCTAssertTrue(Collisions.boostPadHit(playerX: 1.09, padX: 0, z: 0, grounded: true))
+        XCTAssertFalse(Collisions.boostPadHit(playerX: 1.11, padX: 0, z: 0, grounded: true))
+        // Depth edge ±1.1 (pickupZHalf).
+        XCTAssertTrue(Collisions.boostPadHit(playerX: 0, padX: 0, z: 1.09, grounded: true))
+        XCTAssertFalse(Collisions.boostPadHit(playerX: 0, padX: 0, z: 1.11, grounded: true))
+    }
+
     // MARK: CLOSE near-miss band
 
     func testCloseNearMissBand() {

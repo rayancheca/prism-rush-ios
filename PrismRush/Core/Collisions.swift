@@ -69,4 +69,21 @@ enum Collisions {
         dx >= Tuning.nearMissInner && dx < Tuning.nearMissOuter
     }
 
+    /// Prism ring (v1.3): pass = threading the torus near the player plane; PERFECT = the player's
+    /// center within ±ringPerfectDY of the bullseye at that moment. Never lethal.
+    static func ringPass(playerCenterY pcy: Double, playerX: Double,
+                         ringX: Double, ringY: Double, z: Double) -> (pass: Bool, perfect: Bool) {
+        guard abs(z) < Tuning.ringZHalf,
+              abs(playerX - ringX) < Tuning.ringPassDX,
+              abs(pcy - ringY) < Tuning.ringPassDY else { return (false, false) }
+        return (true, abs(pcy - ringY) < Tuning.ringPerfectDY)
+    }
+
+    /// Overdrive pad trigger (v1.3): grounded floor contact — slides count (they're grounded),
+    /// an airborne crossing does not.
+    static func boostPadHit(playerX: Double, padX: Double, z: Double, grounded: Bool) -> Bool {
+        grounded
+            && abs(z) < Tuning.pickupZHalf
+            && abs(playerX - padX) < Tuning.pickupXHalf
+    }
 }

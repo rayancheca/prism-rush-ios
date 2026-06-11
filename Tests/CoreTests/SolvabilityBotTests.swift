@@ -24,6 +24,69 @@ final class SolvabilityBotTests: XCTestCase {
         botSoak(seedCount: 10, targetDistance: 12_000, seedSalt: 0xDEE9_5EED)
     }
 
+    /// v1.3 containment invariant (geometric, no sim): the overdrive runway emits ZERO obstacles,
+    /// and even the LATEST possible pad trigger followed by a full boost at the hard speed cap
+    /// dies inside the pattern (5.1 + 1.0 × 36 = 41.1 < 48). This is why the boost can never
+    /// coexist with an obstacle, and why the Autopilot needs zero changes for it.
+    func testOverdriveRunwayContainmentInvariant() async {
+        for base in [600.0, 1_600, 3_200, 8_000] {
+            for seed: UInt64 in [1, 99, 0xABCD] {
+                var rng = SplitMix64(seed: seed)
+                var out: [SpawnCmd] = []
+                let len = Patterns.run(10, base: base, rng: &rng, out: &out)
+                var padD: Double?
+                for cmd in out {
+                    switch cmd {
+                    case .gem:
+                        break
+                    case let .boostPad(d, _):
+                        XCTAssertNil(padD, "runway must place exactly one pad")
+                        padD = d
+                    default:
+                        XCTFail("overdrive runway emitted a non-gem, non-pad spawn: \(cmd)")
+                    }
+                }
+                guard let pad = padD else { XCTFail("runway placed no pad at base \(base)"); continue }
+                let latestTrigger = (pad - base) + Tuning.pickupZHalf   // 4 + 1.1 = 5.1
+                XCTAssertLessThan(latestTrigger + Tuning.boostDuration * Tuning.boostSpeedMax, len,
+                                  "worst-case boost travel must end inside the runway")
+            }
+        }
+    }
+
+    /// Force-feed the bot a boost pad mid-procedural-run, then require 200 m of normal spawning
+    /// after the trigger with zero deaths: the bot's leads already scale with effectiveSpeed, and
+    /// the containment invariant keeps obstacles out of the boost window.
+    func testBotSurvivesForcedBoostIntoNextPattern() async {
+        for s in 0..<5 {
+            let seed = UInt64(s) &* 0x9E37_79B9_7F4A_7C15 &+ 0xB005_7AD5
+            let core = GameCore(seed: 1)
+            core.startRun(seed: seed)
+            var boosted = false
+            var boostedAt = 0.0
+            core.onFX = { if case .boostStarted = $0 { boosted = true } }
+
+            var ticks = 0
+            var nextPadTick = 240
+            while core.mode == .play && ticks < 200_000 {
+                Autopilot.drive(core)
+                if !boosted && ticks >= nextPadTick {
+                    // Drop a pad right under the bot's lane; if it crosses airborne it just
+                    // misses, so retry until one actually triggers (pads are never lethal).
+                    core.debugSpawn(.boostPad(d: core.distance + 3, lane: core.laneIndex))
+                    nextPadTick = ticks + 600
+                }
+                core.tick(Tuning.tickDt)
+                ticks += 1
+                if boosted && boostedAt == 0 { boostedAt = core.distance }
+                if boosted && core.distance > boostedAt + 200 { break }
+            }
+            XCTAssertTrue(boosted, "seed \(seed): a forced pad must eventually trigger")
+            XCTAssertEqual(core.mode, .play,
+                           "seed \(seed): bot died within 200 m of a forced boost\n\(Self.dumpWindow(core))")
+        }
+    }
+
     private func botSoak(seedCount: Int, targetDistance: Double, seedSalt: UInt64) {
         let maxTicks = 400_000   // safety bound (~3300 s sim) — real runs finish far sooner
 

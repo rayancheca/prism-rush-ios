@@ -250,7 +250,7 @@ final class GameplayTests: XCTestCase {
 
     func testRetunedFeelConstants() async {
         XCTAssertEqual(Tuning.laneLerpRate, 15, accuracy: 1e-9)
-        XCTAssertEqual(Tuning.streakPerMult, 6)
+        XCTAssertEqual(Tuning.streakPerMult, 5)   // v1.3: ×5 at 20 gems
         XCTAssertEqual(Tuning.magnetRange, 16, accuracy: 1e-9)
         XCTAssertEqual(Tuning.magnetGemYRate, 7, accuracy: 1e-9)
         XCTAssertEqual(Tuning.worldBlendRate, 0.6, accuracy: 1e-9)

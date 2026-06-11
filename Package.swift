@@ -6,6 +6,7 @@ import PackageDescription
 
 let package = Package(
     name: "PrismRushCore",
+    platforms: [.macOS(.v14)],   // macOS test runs need modern concurrency APIs; ignored on Linux CI
     targets: [
         .target(
             name: "PrismRush",
