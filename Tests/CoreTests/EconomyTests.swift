@@ -84,6 +84,54 @@ final class EconomyTests: XCTestCase {
         XCTAssertEqual(core.laneIndex, 1, "player re-centred")
     }
 
+    // MARK: clock-manipulation hardening (P1)
+    // Exploit: set the device clock forward, claim, set it back — the future-dated `last…`
+    // timestamp must NOT make the reward readable as available again.
+
+    func testDailyRewardClockRollbackExploitBlocked() async {
+        let store = ProfileStore(testing: Profile())
+        let realNow = date(2026, 6, 10)
+        let future = date(2026, 6, 20)
+        XCTAssertNotNil(store.claimDailyReward(now: future), "claim while clock is set forward")
+        // Clock set back: the stored claim is in the future relative to `now` → clamps to "today".
+        XCTAssertFalse(store.dailyRewardAvailable(now: realNow), "future-dated claim must read as claimed")
+        XCTAssertNil(store.claimDailyReward(now: realNow), "no infinite-claim loop")
+        XCTAssertEqual(store.pendingDailyStreak(now: realNow), store.profile.loginStreak,
+                       "clamped read keeps the streak stable instead of crediting a bonus day")
+    }
+
+    func testChestClockRollbackExploitBlocked() async {
+        let store = ProfileStore(testing: Profile())
+        let realNow = date(2026, 6, 10)
+        let future = date(2026, 6, 20)
+        XCTAssertNotNil(store.openFreeChest(now: future, reward: 100))
+        // Clock set back: the future open must read as "just opened" — cooldown fully re-armed.
+        XCTAssertFalse(store.chestReady(now: realNow))
+        XCTAssertNil(store.openFreeChest(now: realNow, reward: 100))
+        XCTAssertEqual(store.secondsUntilChest(now: realNow), ProfileStore.chestInterval, accuracy: 0.001)
+    }
+
+    func testSanitizedClampsFutureTimestampsOnLoad() async {
+        let now = date(2026, 6, 10)
+        let future = date(2027, 1, 1)
+        var p = Profile()
+        p.lastDailyClaim = future
+        p.lastChestOpen = future
+        p.dailyMissionDate = future
+        p.dailyChallengeDate = future
+        let s = ProfileStore.sanitized(p, now: now)
+        XCTAssertEqual(s.lastDailyClaim, now)
+        XCTAssertEqual(s.lastChestOpen, now)
+        XCTAssertEqual(s.dailyMissionDate, now)
+        XCTAssertEqual(s.dailyChallengeDate, now)
+        // Past timestamps pass through untouched (no save is ever harmed by sanitizing).
+        var ok = Profile()
+        let past = date(2026, 6, 1)
+        ok.lastDailyClaim = past
+        ok.lastChestOpen = past
+        XCTAssertEqual(ProfileStore.sanitized(ok, now: now), ok)
+    }
+
     // MARK: profile schema resilience (G5 + decoder)
 
     func testProfileDecodesLegacyJSONWithoutWiping() async throws {

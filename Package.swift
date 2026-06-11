@@ -15,8 +15,8 @@ let package = Package(
                 "Meta/Profile.swift",
                 "Meta/ProfileStore.swift",
                 "Meta/SkinCatalog.swift",
+                "Meta/MissionCatalog.swift",
                 "Audio/Synth.swift",
-                "Services/Persistence.swift",
             ]
         ),
         .testTarget(
