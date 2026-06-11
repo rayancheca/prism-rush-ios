@@ -59,8 +59,11 @@ Center leaderboard and chase a score worth bragging about.
 - Three-lane swipe controls: lane swap, jump (with landing buffer), slide & air-slam
 - Gem streak multiplier x1 → x5 that only resets when you're hit
 - CLOSE and SLICK near-miss bonuses for clutch play
-- Shield and Magnet pickups for momentum and recovery
-- Moving-wall obstacles that ramp up at high difficulty
+- Shield, Magnet, Coin Doubler, and Chrono slow-mo pickups
+- Split bars and moving-wall obstacles that ramp up at high difficulty
+- Daily Challenge: everyone plays the same track each day — race it on the daily board
+- Daily missions and tiered achievements that pay out coins
+- Earn coins to unlock a roster of glowing characters and world checkpoints
 - Looping difficulty curve that keeps every run faster than the last
 - Original 132bpm synthwave score with per-world layers and full SFX
 - Particles, screen shake, speed lines, and haptics for full-body feedback
@@ -74,9 +77,11 @@ Center leaderboard and chase a score worth bragging about.
 Welcome to Prism Rush v1.0 — the launch run.
 
 Three neon worlds, three-lane hyperspeed action, gem streak multipliers,
-near-miss bonuses, Shield and Magnet pickups, moving-wall obstacles, an original
-132bpm synthwave soundtrack, and a Game Center leaderboard. Swipe in and see how
-far you can go. No ads, no tracking — just speed.
+near-miss bonuses, Shield / Magnet / Coin Doubler / Chrono slow-mo pickups, a
+shared Daily Challenge with its own daily leaderboard, daily missions and
+achievements, unlockable characters, and an original 132bpm synthwave
+soundtrack. Swipe in and see how far you can go. No ads, no tracking — just
+speed.
 
 ---
 

@@ -100,6 +100,51 @@ revive-for-coins · much bigger particles/shake/flash · a ~6,000-allocs/sec ren
 
 ---
 
+## v1.2 — Fable 5 multi-agent overhaul
+
+A coordinated multi-agent overhaul: six specialized agents (tooling, core, render, audio,
+meta, integration/wiring) each swept their layer in parallel, handing off through written contracts
+([`reports/AGENT_*.md`](reports/)), with a final adversarial QA pass over the entire diff
+([`reports/QA.md`](reports/QA.md)) — including a 500-seed × 6,000 m bot soak with **zero deaths**.
+
+**Test harness anywhere:** the deterministic layers (Core sim, economy, missions, synth DSP) now also
+build as a SwiftPM package (`Package.swift`), so the full **89-test** suite — including the 200-seed
+solvability bot — runs on Linux, and a GitHub Actions workflow runs it on every push/PR. No Mac needed
+to keep the core honest.
+
+**Bug-fix sweep (probe-confirmed, regression-tested):** the revive economy exploit (dying after a
+continue re-paid the whole run's coins — now every payout is a per-death *delta*, `totalRuns` counts
+once) · a NaN `dt` guard in `GameCore.advance` (a single NaN wedged the accumulator forever) · world
+decor never resetting between runs · AVAudioSession resilience (interruptions, route changes, and
+config changes now recover the engine and re-anchor the music instead of going silent for the
+session) · revive score leak · shield same-tick double-hit · near-miss band paying for standing still.
+
+**New content:** **Coin Doubler** (10 s, gems pay double coins — never double skill stats) ·
+**Chrono** slow-mo (5 s at 0.65×, dodge windows stretch — the bot proves runs stay solvable with it
+live) · **Split Bar** — a 12th obstacle pattern covering 2 of 3 lanes (steer to the gap *or* slide) ·
+**missions & tiered achievements** (3 rotating daily slots, per-run challenges, claim-once engine,
+clock-exploit-proof) · a **daily challenge** — everyone worldwide plays the same seeded track each UTC
+day, ranked on the recurring `prismrush.daily` Game Center board · **settings** (music/SFX volume,
+haptics, reduce flashing) · a swipeable **how-to-play tutorial** on first run · a full **game-over
+overhaul** (count-up score, run stats grid, exact coin breakdown, NEW BEST vs "m TO GO", revive
+states).
+
+**Performance:** steady-state rendering is now alloc-free (materials rebuilt only on palette-key
+change during crossfades; particle materials cached; time-based emission identical at 60/120 Hz) and
+every SFX renders once into a cached buffer instead of being re-synthesized per play.
+
+**Accessibility:** Dynamic Type (`@ScaledMetric` copy), VoiceOver labels across missions/shop/
+challenge/stats, a reduce-flashing setting (death flash ×0.15), and live Reduce Motion gating for
+shake/FOV/speed lines.
+
+> **Honesty note:** everything above is proven on Linux (89/89 unit tests + parse checks of every
+> iOS file), but Linux cannot type-check or run UIKit/RealityKit/SwiftUI. The UI layers still need
+> **one Mac build + the visual/audio pass** — the exact checklist lives in
+> [`reports/AGENT_wiring.md`](reports/AGENT_wiring.md) §MAC VERIFICATION (and condensed in
+> [`docs/SHIP_CHECKLIST.md`](docs/SHIP_CHECKLIST.md)).
+
+---
+
 ## Architecture
 
 ```
@@ -109,7 +154,7 @@ revive-for-coins · much bigger particles/shake/flash · a ~6,000-allocs/sec ren
    ┌──────────────────────────────┐   snapshot   ┌────────────────────────────┐
    │  Core/  (pure Swift)          │ ───────────▶ │  Render/  RealityKit        │
    │  • GameCore  (1/120 s tick)   │              │  • RealityRenderer          │
-   │  • Spawner + 11 patterns      │   FXEvent    │  • EntityPools (by kind)    │
+   │  • Spawner + 12 patterns      │   FXEvent    │  • EntityPools (by kind)    │
    │  • Collisions (pure preds)    │ ───────────▶ │  • ProceduralMesh           │
    │  • SplitMix64 RNG (seeded)    │              │  + UI/ SwiftUI HUD/overlays │
    │  • Autopilot (greedy bot)     │              │                            │
@@ -128,11 +173,14 @@ revive-for-coins · much bigger particles/shake/flash · a ~6,000-allocs/sec ren
 
 ```
 PrismRush/
-  App/      SwiftUI entry + root            Render/Reality/  RealityRenderer, EntityPools, ProceduralMesh
-  Core/     GameCore, Spawner, Patterns,    UI/              GameView, HUD, Menu, GameOver, Theme
-            Tuning, RNG, Collisions,        Services/        (Persistence, GameCenter, Haptics — WIP)
-            Autopilot, Models               Support/         entitlements, PrivacyInfo.xcprivacy
-Tests/      RNG · Collision · Difficulty · SolvabilityBot     Tools/  build / qa / screenshots / gen_icon
+  App/      SwiftUI entry + root             Render/Reality/  RealityRenderer, EntityPools, ProceduralMesh
+  Core/     GameCore, Spawner, 12 Patterns,  UI/              GameView, HUD, Menu, GameOver, Shop, Missions,
+            Tuning, RNG, Collisions,                          DailyChallenge, Settings, HowToPlay, …
+            Autopilot, DailyChallenge        Meta/            Profile, ProfileStore, Skin/MissionCatalog
+  Audio/    Synth (pure DSP), SynthEngine,   IAP/             IAPCatalog, IAPManager (StoreKit 2)
+            Music                            Services/        GameCenter, Account, Haptics
+Tests/CoreTests/  89 deterministic tests (also run on Linux via Package.swift)   UITests/  6 XCUITests
+Tools/  build / ci / qa / screenshots / gen_icon
 ```
 
 ---
@@ -185,7 +233,8 @@ Watch the engine play itself (used for the screenshots above):
 SIMCTL_CHILD_PR_AUTOPLAY=1 xcrun simctl launch booted com.rayancheca.prismrush
 ```
 
-Run the test suite (89 tests incl. the 200-seed solvability bot and a 10-seed 12,000 m deep soak):
+Run the full test suite — 95 on a Mac (89 unit incl. the 200-seed solvability bot and a 10-seed
+12,000 m deep soak, + 6 XCUITest interaction tests):
 
 ```bash
 xcodebuild test -project PrismRush.xcodeproj -scheme PrismRush \
@@ -223,14 +272,17 @@ Built phase-by-phase, each gate verified by a real build + on-device screenshot 
 | E4 | Shop + StoreKit 2 IAP (`Products.storekit` local config) | ✅ |
 | E5 | World checkpoints / level select (start from any reached world) | ✅ |
 | E6 | Sign in with Apple + Game Center friends leaderboard | ✅ |
-| — | Soak hardening · App Store archive · live IAP/accounts | ⏳ needs your Apple account |
+| — | **v1.2 multi-agent overhaul** — Linux CI, bug sweep, new content, perf, a11y (see above) | ✅ |
+| — | Mac build + visual pass · App Store archive · live IAP/accounts | ⏳ needs your Mac + Apple account |
 
 ## Shipping (your Apple Developer account)
 
 Everything above builds, runs and tests on the simulator with no signing. To go live you (the
-account holder) do these once — the code is already wired for them:
+account holder) do these once — the code is already wired for them. **The full step-by-step,
+copy-paste version (exact IAP table, leaderboard settings, privacy answers) is
+[`docs/SHIP_CHECKLIST.md`](docs/SHIP_CHECKLIST.md).**
 
-1. **Team ID** → `project.yml` `DEVELOPMENT_TEAM`.
+1. **Team ID** → `project.yml` `DEVELOPMENT_TEAM` — ✅ already set (`8M64JJQQAU`).
 2. **Capabilities** (Signing & Capabilities, and on developer.apple.com): In-App Purchase, Sign in
    with Apple, Game Center, iCloud (Key-Value storage).
 3. **App Store Connect**: create the app record (bundle `com.rayancheca.prismrush`); add the 5 IAP

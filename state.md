@@ -1,12 +1,71 @@
 # PRISM RUSH — Build State
 
 > Single source of truth for session resumability. On any fresh session: read this first, then continue.
-> Last updated: end of Phase 6.
+> Last updated: end of the **v1.2 multi-agent overhaul** (this branch, pre-merge).
 
 ## Current phase
-**Base game (Phases 0–6) COMPLETE + pushed. Now in the FREE-TO-PLAY EXPANSION (user-requested).**
+**v1.2 OVERHAUL COMPLETE on this branch.** Base game (Phases 0–6) + F2P expansion (E1–E6) + the v1.1
+critique rounds all shipped earlier; this branch adds the Fable 5 multi-agent overhaul on top.
+Everything Linux can prove is green; what remains is the **Mac verification pass + App Store ops**
+(see "Next actions" below and `docs/SHIP_CHECKLIST.md`).
 
-### F2P expansion plan & progress (post-base-game)
+### v1.2 overhaul — wave structure (who built what)
+| Wave | Scope | Report |
+|---|---|---|
+| Tooling | Linux SPM test harness (`Package.swift`) + GitHub Actions CI (`.github/workflows/core-tests.yml`); icon/screenshot/ci scripts | `reports/AGENT_tooling.md` |
+| Core | Bug sweep (NaN dt guard, revive score leak, shield double-hit, near-miss band), Coin Doubler, Chrono slow-mo, Split Bar (12th pattern), `DailyChallenge` seeds, retuning — 68 core tests | `reports/AGENT_core.md` |
+| Render | Decor reset, alloc-free steady state (palette-key material caching), live Reduce Motion, speed lines/skids/crossfade flourish, doubler/hourglass meshes | `reports/AGENT_render.md` |
+| Audio | AVAudioSession resilience + recovery, automatic music ducking, 10 new SFX, cached SFX buffers, volume APIs | `reports/AGENT_audio.md` |
+| Meta | Economy hardening (clock-exploit clamps, delta payouts), missions/achievements engine + UI, daily-challenge meta, Settings/HowToPlay/Missions views, GameOver overhaul | `reports/AGENT_meta.md` |
+| Integration | Wired core↔render↔audio breaking changes, HUD power-up chips, revive-economy P0 fix in GameModel, GC checkpoint gating | `reports/AGENT_integration.md` |
+| Wiring | Meta screens, daily challenge entry, settings persistence, tutorial, reduce-flash, missions feed | `reports/AGENT_wiring.md` |
+| QA | Adversarial review of the full diff; fixed TIME-tile contract, stale docs/metadata; 500-seed soak clean | `reports/QA.md` |
+
+### Test status
+- `swift test -c release` (Linux & Mac, SPM): **89/89 green** (~9 s) — incl. 200-seed × 6,000 m bot,
+  10-seed × 12,000 m deep soak, economy/missions/daily-challenge/synth suites.
+- Mac `xcodebuild test`: 89 unit + **6 XCUITest** interaction tests = 95 (needs the Mac).
+- Every iOS-only file passes `swiftc -parse` on Linux; **none are type-checked** (UIKit/RealityKit/
+  SwiftUI unavailable) — hence the Mac pass below.
+
+## Next actions (in order)
+
+### A. Mac verification (one session — condensed from `reports/AGENT_wiring.md` §MAC VERIFICATION + `reports/QA.md` flags)
+1. **Build**: `./Tools/build.sh` (xcodegen + simulator build). Highest compile risk under Swift 6
+   `complete`: `MainActor.assumeIsolated` notification observers (SynthEngine ×3, RealityRenderer ×1,
+   ProfileStore ×1, GC auth handler), `.sensoryFeedback(trigger:)` closures, `symbolEffect(.pulse,
+   options:isActive:)`, the haptic double-tap `Task`, GameOverView/MenuView call sites (19/10 args).
+2. **Full suite**: `xcodebuild test -project PrismRush.xcodeproj -scheme PrismRush -destination
+   'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' CODE_SIGNING_ALLOWED=NO` → expect 95 green.
+3. **Visual/audio/UX spot checks** (full detail in AGENT_wiring §3–13):
+   first-run tutorial → run; daily challenge (same track twice per UTC day, NO continue button,
+   card updates); game-over count-up + frozen TIME tile (pause 30 s mid-run, die → TIME excludes it)
+   + coin breakdown sums + Shop over the death panel; revive pays delta only, `totalRuns` +1,
+   fanfare once; missions progress + single CLAIM; settings sliders live + persist + reduce-flash
+   ≈15%; renderer feel (hourglass, splitBar gap, chrono FOV dip, HUD chips vs corner cluster);
+   equip-ring animation; VoiceOver sweep + Dynamic Type XL; menu density on a small phone; watch for
+   "modifying state during view update" near UTC midnight.
+4. **Screenshots**: `./Tools/screenshots.sh` (6.9" sim; 6.5" needs a downloaded iPhone 11 Pro Max sim).
+
+### B. App Store (after A is green) — full copy-paste detail in `docs/SHIP_CHECKLIST.md`
+1. ASC app record (`com.rayancheca.prismrush`, name "Prism Rush" — check availability).
+2. 5 IAP products from `Products.storekit` (exact table in the checklist).
+3. Game Center: classic `prismrush.best` + **recurring** `prismrush.daily` (daily reset, UTC).
+4. Capabilities sanity (auto-managed on first signed build; Team ID already in `project.yml`).
+5. App Privacy questionnaire (answers in `Store/metadata.md` §7).
+6. Archive + upload.
+
+### Known accepted trade-offs (QA flags — do not "fix" casually)
+- Backward-clock daily-mission farming (~300–400 coins/day of clock fiddling) — accepted; closing it
+  needs per-day claim bookkeeping. Forward-clock is fully blocked.
+- Mid-run Double Coins purchase retroactively doubles the current run's already-paid components —
+  one-shot, player-favoring, bounded.
+- Post-revive tail isn't folded into missions (`.revives` metric always 0 at first death) — fine
+  until a revive mission ships.
+
+---
+
+## History — F2P expansion plan & progress (post-base-game)
 - [x] **E1 Slide animation** — `snapshot.sliding/grounded`; renderer does a forward-lean pancake + ground
       dust. Screenshot-verified (was indistinguishable before).
 - [x] **E2 Economy foundation** — `Meta/`: `Profile` (Codable: coins/stats/unlocks/skins/progression/IAP),
@@ -25,13 +84,15 @@
       world's difficulty/palette while `scoreOffset` keeps score & coins counting from zero. `LevelSelectView`
       grid (per-world color, "Nm in", furthest highlighted). `PR_DEMOPROFILE` debug seeds progression for
       screenshots. Verified (7 worlds shown).
-- [ ] **E5b** — more in-run power-ups (2× coins pickup) + wire permanent double-coins.
+- [x] **E5b** — DONE in v1.2: Coin Doubler pickup (gems pay 2× coins for 10 s) + permanent
+      Double Coins IAP multiplies the run payout (`reports/AGENT_core.md` §A).
 - [x] **E6** — Accounts. `GameCenterService` (lazy auth, submit best to `prismrush.best`, present friends
       leaderboard). `AccountService` (Sign in with Apple → stable user id, stored locally). `ProfileView`:
       Sign in with Apple button + lifetime stats grid + Friends Leaderboard + Restore Purchases. Profile
       button added to the menu. GC auth on launch; best submitted on death. Screenshot-verified.
       HUMAN GATES: enable Sign in with Apple + Game Center capabilities; create leaderboard `prismrush.best`.
-- [ ] **E7** — privacy manifest update (iCloud/GC/IAP), one more in-run power-up, final ship prep.
+- [~] **E7** — Chrono slow-mo power-up DONE in v1.2; privacy answers documented
+      (`Store/metadata.md` §7); final ship prep = `docs/SHIP_CHECKLIST.md`.
 
 > NEW HUMAN GATES (Apple Developer account): enable capabilities **iCloud (KV)**, **Sign in with Apple**,
 > **Game Center**, **In-App Purchase**; create IAP products in App Store Connect; sign + upload.
@@ -89,14 +150,9 @@ exist here. Override via `PR_SIM_NAME`/`PR_SIM_OS`/`PR_SIM_UDID`.
       SFX/music routed from `GameModel.handleFX`; mute button + persisted best score wired. `SynthTests`
       green; all SFX/music rendered to `reports/audio/*.wav` and verified (correct durations + non-silent).
 
-## Next 3 actions (Phase 7 — QA soak / Phase 8 — ship)
-1. **Soak** — 15-min autoplay run; assert bounded live entity count each minute (no leaks/growth trend) and
-    no AVAudioEngine stalls in logs. Write `reports/SOAK.md`.
-2. **Ship — icon/screenshots** — wire `Store/icon_1024.png` into an `AppIcon.appiconset`; capture App Store
-    screenshots at 6.9" (17 Pro Max) via `Tools/screenshots.sh` (6.5" sim absent — flag).
-3. **Ship — archive** — `xcodebuild archive` + `-exportArchive` (method app-store-connect) with an export
-    options plist. HUMAN GATES: Team ID, ASC app record + Game Center leaderboard `prismrush.best`, name
-    availability, signed upload. (GameCenterService still TODO — lazy auth on first game-over.)
+## (Superseded) Phase 7/8 plan — replaced by "Next actions" at the top
+The old soak/ship plan is folded into `docs/SHIP_CHECKLIST.md`. The 500-seed QA soak (0 deaths,
+0 stalls) covered the simulation side; icon/screenshots/archive are steps in the checklist.
 
 ## Resolved polish backlog
 - Gems are now octahedrons, magnet a torus (procedural meshes). ✓
@@ -124,15 +180,33 @@ exist here. Override via `PR_SIM_NAME`/`PR_SIM_OS`/`PR_SIM_UDID`.
   on the main thread but isn't statically isolated → wrap its body in `MainActor.assumeIsolated`. Verified.
 - **Score freezes at death** (`die()` captures it; `tick()` only advances it while `.play`) — post-death
   decel keeps `distance` climbing and was otherwise inflating the score past the locked best.
+- **(v1.2) Leaderboards = `prismrush.best` (classic, per-run, checkpoint runs never submitted) +
+  `prismrush.daily` (RECURRING, daily reset UTC; context = UTC days-since-epoch).** Submitting per-run
+  scores (not `profile.bestScore`) keeps checkpoint-earned bests off the board.
+- **(v1.2) `DailyChallenge.layoutVersion` (currently 1) MUST be bumped whenever spawner/pattern/
+  RNG-consumption changes** — goldens pinned in `DailyChallengeTests`; same-day players must see the
+  same track within a layout version.
+- **(v1.2) Revive economy = per-death deltas** (`max(0, cumulative − awarded)` per component);
+  `applyRunSummary` exactly once per run (first death); challenge runs can never revive or checkpoint.
+- **(v1.2) Pattern order matters**: split bar is index 10, moving walls stay LAST (index 11) — the
+  spawner gates by prefix, so reordering changes difficulty gating.
+- **(v1.2) `Profile` decodes every field `decodeIfPresent ?? default`** — schema changes never wipe
+  an existing save (pinned by EconomyTests decode tests).
 
 ## Blockers
 - None.
 
-## HUMAN GATES (do not fake — for the operator)
-- [ ] Apple Developer **Team ID** → `project.yml` `DEVELOPMENT_TEAM` before archiving (Phase 8).
-- [ ] App Store Connect app record + Game Center leaderboard **`prismrush.best`** (Phase 8).
-- [ ] Name-availability check for **"Prism Rush"** (flagged by docs-aso; Phase 8).
-- [ ] The actual signed upload (Phase 8).
+## HUMAN GATES (do not fake — for the operator; full detail in `docs/SHIP_CHECKLIST.md`)
+- [x] Apple Developer **Team ID** → `project.yml` `DEVELOPMENT_TEAM` — **DONE** (`8M64JJQQAU`, commit `ba45711`).
+- [ ] Capabilities on the App ID: In-App Purchase, Sign in with Apple, Game Center, iCloud KV
+      (Xcode auto-manage handles most on the first signed build; entitlements already in the repo).
+- [ ] App Store Connect app record (`com.rayancheca.prismrush`) + name-availability check for **"Prism Rush"**.
+- [ ] Game Center leaderboards: classic **`prismrush.best`** AND **recurring `prismrush.daily`**
+      (daily reset, UTC — ranks the shared-seed daily challenge; without it challenge submissions
+      silently no-op).
+- [ ] 5 IAP products from `Products.storekit` created in ASC.
+- [ ] App Privacy questionnaire (NOT "Data Not Collected" — see `Store/metadata.md` §7).
+- [ ] The actual signed upload.
 
 ## Commit log (every commit builds)
 - `phase1`: scaffold + contracts + verified placeholder RealityView.
