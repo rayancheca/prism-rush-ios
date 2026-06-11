@@ -19,3 +19,8 @@ reports/shots/*.png
 reports/audio/*.wav
 reports/audio/*.caf
 .build/
+
+# iCloud Drive sync-conflict copies (Desktop is synced — see state.md gotcha)
+* 2.swift
+* 2.xcodeproj
+* 2.yml
