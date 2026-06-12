@@ -178,6 +178,7 @@ final class GameModel {
         // Settings persistence: SettingsView applies changes live (model.synth / model.haptics);
         // these lines make them stick across launches (AGENT_meta.md §4).
         synth.musicVolume = Float(saved.musicVolume)
+        synth.menuMusicVolume = Float(saved.menuMusicVolume)
         synth.sfxVolume = Float(saved.sfxVolume)
         haptics.enabled = saved.hapticsEnabled
         core.best = saved.bestScore

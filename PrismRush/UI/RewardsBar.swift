@@ -108,9 +108,14 @@ struct RewardsBar: View {
                 Image(systemName: glyph).font(.system(size: 16, weight: .bold))
                     .foregroundStyle(lit ? Color.black : tint)
                 Text(title).typeScale(.micro)
+                    .lineLimit(1).minimumScaleFactor(0.7)
                 Text(sub).typeScale(.micro).monospacedDigit()
                     .opacity(lit ? 0.85 : 0.6)
+                    .lineLimit(1).minimumScaleFactor(0.6)
             }
+            // Narrow third-width cells: keep the longest sub-line ("PLAY · ENDS H:MM") off the
+            // card edges and let it shrink-to-fit instead of clipping past the rounded corners.
+            .padding(.horizontal, 6)
             .foregroundStyle(lit ? Color.black : .white.opacity(0.85))
             .frame(maxWidth: .infinity)
             .frame(height: 64)

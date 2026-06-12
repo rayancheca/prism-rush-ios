@@ -56,7 +56,8 @@ struct Profile: Codable, Equatable, Sendable {
     // Settings.
     var muted: Bool = false
     var reduceFlash: Bool = false
-    var musicVolume: Double = 1
+    var musicVolume: Double = 1       // in-game (run) music bed
+    var menuMusicVolume: Double = 1   // hub/splash ambient bed — owner wants it tuned separately
     var sfxVolume: Double = 1
     var hapticsEnabled: Bool = true
 
@@ -93,7 +94,7 @@ extension Profile {
         case missionProgress, claimedMissions, achievementTier, dailyMissionDate
         case dailyChallengeBest, dailyChallengeDate, challengeDaysPlayed
         case doubleCoins, ownedProducts, muted, reduceFlash
-        case musicVolume, sfxVolume, hapticsEnabled
+        case musicVolume, menuMusicVolume, sfxVolume, hapticsEnabled
         case bestDistanceByWorld, totalXP, xpLevelRewarded, seenSkins
         case weeklyMissionDate, challengeRewardTier, purchasedWorlds
         case totalIAPPurchases, firstPurchaseBonusUsed
@@ -128,6 +129,7 @@ extension Profile {
         muted = try c.decodeIfPresent(Bool.self, forKey: .muted) ?? d.muted
         reduceFlash = try c.decodeIfPresent(Bool.self, forKey: .reduceFlash) ?? d.reduceFlash
         musicVolume = try c.decodeIfPresent(Double.self, forKey: .musicVolume) ?? d.musicVolume
+        menuMusicVolume = try c.decodeIfPresent(Double.self, forKey: .menuMusicVolume) ?? d.menuMusicVolume
         sfxVolume = try c.decodeIfPresent(Double.self, forKey: .sfxVolume) ?? d.sfxVolume
         hapticsEnabled = try c.decodeIfPresent(Bool.self, forKey: .hapticsEnabled) ?? d.hapticsEnabled
         bestDistanceByWorld = try c.decodeIfPresent([Int: Double].self, forKey: .bestDistanceByWorld) ?? d.bestDistanceByWorld

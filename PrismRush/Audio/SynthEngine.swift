@@ -29,7 +29,18 @@ final class SynthEngine {
     /// Settings sliders (0...1). SFX applies to the SFX submix; music multiplies into Music's own
     /// fade/duck envelope. Persistence is the caller's job — these are live values only.
     var sfxVolume: Float = 1 { didSet { sfxMixer.outputVolume = min(1, max(0, sfxVolume)) } }
-    var musicVolume: Float = 1 { didSet { music?.userVolume = min(1, max(0, musicVolume)) } }
+    /// Music has TWO independent user levels: the in-run bed (`musicVolume`) and the hub/splash bed
+    /// (`menuMusicVolume`). Only the level for the currently-playing context feeds Music's
+    /// `userVolume`; `musicStart(calm:)` flips the context. Both setters re-apply live so dragging a
+    /// slider while that bed plays updates immediately.
+    var musicVolume: Float = 1 { didSet { applyMusicUserVolume() } }
+    var menuMusicVolume: Float = 1 { didSet { applyMusicUserVolume() } }
+    /// true while the calm hub/splash bed is the active context; false during a run.
+    private var musicIsCalm = false
+
+    private func applyMusicUserVolume() {
+        music?.userVolume = min(1, max(0, musicIsCalm ? menuMusicVolume : musicVolume))
+    }
 
     init() {
         // No mono float format would mean no audio at all — degrade to a silent-but-alive engine
@@ -103,6 +114,8 @@ final class SynthEngine {
         guard started else { return }
         if !engine.isRunning { recoverEngine() }   // self-heal if an interruption beat us here
         guard engine.isRunning else { return }
+        musicIsCalm = calm
+        applyMusicUserVolume()                     // feed the right bed's user level before fading in
         music?.start(targetVolume: calm ? 0.4 : 0.85)
     }
     func musicStop() { music?.stop() }

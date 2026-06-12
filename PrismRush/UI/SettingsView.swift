@@ -10,7 +10,8 @@ struct SettingsView: View {
 
     // Slider positions live locally so dragging doesn't hammer UserDefaults/iCloud; the profile is
     // written once per gesture (onEditingChanged) while the mixers update live per tick.
-    @State private var music: Double
+    @State private var music: Double        // in-game (run) music
+    @State private var menuMusic: Double    // hub/splash music — tuned separately (owner request)
     @State private var sfx: Double
     @State private var showHowTo = false
     @State private var restoring = false
@@ -21,6 +22,7 @@ struct SettingsView: View {
         self.model = model
         let p = ProfileStore.shared.profile
         _music = State(initialValue: p.musicVolume)
+        _menuMusic = State(initialValue: p.menuMusicVolume)
         _sfx = State(initialValue: p.sfxVolume)
     }
 
@@ -59,7 +61,12 @@ struct SettingsView: View {
 
     private func audioCard(store: ProfileStore) -> some View {
         VStack(spacing: 14) {
-            sliderRow(symbol: "music.note", label: "Music", value: $music) { final in
+            // Two separate music beds: the calm hub/splash ambience and the in-run track. Tuning
+            // the menu bed down here changes it live while the hub plays, leaving gameplay untouched.
+            sliderRow(symbol: "house.fill", label: "Menu music", value: $menuMusic) { final in
+                store.mutate { $0.menuMusicVolume = final }
+            }
+            sliderRow(symbol: "gamecontroller.fill", label: "Game music", value: $music) { final in
                 store.mutate { $0.musicVolume = final }
             }
             sliderRow(symbol: "speaker.wave.2.fill", label: "Sound effects", value: $sfx) { final in
@@ -69,6 +76,7 @@ struct SettingsView: View {
         .padding(16)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.12)))
+        .onChange(of: menuMusic) { _, v in model.synth.menuMusicVolume = Float(v) }
         .onChange(of: music) { _, v in model.synth.musicVolume = Float(v) }
         .onChange(of: sfx) { _, v in model.synth.sfxVolume = Float(v) }
     }
