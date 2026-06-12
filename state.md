@@ -11,14 +11,21 @@ no spawn-RNG consumption, `DailyChallenge.layoutVersion` unchanged (the sim is u
 
 | Step | Scope | Status |
 |---|---|---|
-| 1 | Doc/claim fixes: README test split (147+11), IAP 5→7, "zero hand-authored binary assets", "material-allocation-free"; `ci.sh` stale Phase-2 comment deleted; SUPERSEDED banners on `AGENT_docs.md` (privacy) + `AGENT_wiring.md` (daily board) | ✅ done |
-| 2 | **The worlds — distance-driven evolution** (M1): palette/decor/sky/music keyed off absolute `worldOrdinal`, not `% 3`; `min(cycle,2)` clamps removed; per-cycle hue rotation + richening; WorldPreviewCanvas mirrored | ⏳ |
-| 3 | macOS CI job (build app + unit bundle on macos-latest) | ⏳ |
-| 4 | Cheap test gaps: IAPManager value-badge math + availability transitions; pure view-logic helpers | ⏳ |
-| 5 | Dynamic Type: ProfileView/HowToPlayView/PauseOverlay → typeScale | ⏳ |
-| 6 | Solvability deep-soak seed count raise | ⏳ |
-| 7 | heroShell generic (M6); revive() power-up inconsistency (L1); Apple user id → Keychain (L3) | ⏳ |
-| 8 | Re-capture README screenshots (Mac-only) | ⏳ |
+| 1 | Doc/claim fixes: README test split (147+11), IAP 5→7, "zero hand-authored binary assets", "material-allocation-free"; `ci.sh` stale Phase-2 comment deleted; SUPERSEDED banners on `AGENT_docs.md` (privacy) + `AGENT_wiring.md` (daily board) | ✅ `4b9..` |
+| 2 | **The worlds — distance-driven evolution** (M1): `Theme.evolvedPalette(ordinal:)` (hue-rotate ~49°/cycle + intensify + cycle-tier name) drives playfield/decor/previews/UI; `WorldSky` re-tint registry recolors set pieces per cycle at each boundary; `min(cycle,N)` clamps removed; `Synth.step` layers voices by cycle (fed `worldOrdinal`). Cycle 0 byte-identical. Evidence `reports/shots/v143/` (Caverns w1→4→7 teal→blue→violet). SPM 145✓, Mac BUILD OK. **No Core/ edits, no RNG, layoutVersion unchanged.** | ✅ 3 commits |
+| 3 | macOS CI job (`.github/workflows/ios-build.yml`): macos-15, newest Xcode, xcodegen, `build-for-testing` (generic iOS Simulator — compiles renderer/audio/SwiftUI/StoreKit) + `PrismRushTests` unit bundle. Locally validated (`build-for-testing` → TEST BUILD SUCCEEDED); first push confirms the hosted runner. | ✅ |
+| 4 | Pure `Meta/ShopValue.swift` (added to Package.swift): `coinsPerUnit`/`badge`, `featuredSkin`, `StoreState`+`StoreAvailability.afterLoad/afterThrow`. ShopView/IAPManager delegate (`Availability` = typealias). 15 Linux tests in `ShopValueTests`. | ✅ |
+| 5 | Dynamic Type: `@ScaledMetric`-backed `Theme.scaledFont(size:weight:design:)`; all 35 hardcoded `.system(size:)` in ProfileView/HowToPlay/Pause migrated (copySize left to avoid double-scale). | ✅ |
+| 6 | Deep solvability soak 10 → 64 seeds × 12,000 m (still ~5 s, bot green). | ✅ |
+| 7 | `heroShell` generic (10 AnyView dropped); `revive()` comment honest (boost/flow reset, magnet/doubler/chrono carry over by design); Apple id + name → Keychain (`Services/Keychain.swift`, one-time UserDefaults migration). | ✅ |
+| 8 | Re-captured `docs/screenshots/11_characters.png` (current 24-roster) + caption fix; deep-world evolution evidence in `reports/shots/v143/`. Full curated 13-shot walkthrough re-capture left as optional polish (cycle-0 worlds unchanged so existing world shots stay accurate). | ✅ (partial) |
+
+**Final gate (v1.4.3):** Full Mac `xcodebuild test` → **TEST SUCCEEDED, 174/174** (163 unit + 11
+XCUITest, iPhone 17 Pro · iOS 26.5). SPM `swift test -c release` 160 green incl. 200-seed bot + the
+widened 64-seed deep soak. Mac `./Tools/build.sh` BUILD OK. **No Core/ sim-logic change, no spawn
+RNG consumed, `DailyChallenge.layoutVersion` unchanged** — the worlds work is purely visual/audio.
+Outstanding (human-only): the on-device feel pass (§v1.3 checklist) + App Store Connect gates
+(`docs/SHIP_CHECKLIST.md`); the new macOS CI job's first hosted run to confirm the runner toolchain.
 
 ## v1.4.2 — owner decrees enforced (AUDIT_intent fix fleet, 2026-06-11)
 The six owner decrees landed in `CLAUDE.md` (product law, overriding every design doc) together

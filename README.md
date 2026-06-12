@@ -66,7 +66,7 @@ checkpoints, secure accounts, and friends competition — driven by an `@Observa
 
 <table>
 <tr>
-<td align="center"><img src="docs/screenshots/11_characters.png" width="200"><br><sub><b>Characters</b><br>Buy/equip 7 procedural skins with coins</sub></td>
+<td align="center"><img src="docs/screenshots/11_characters.png" width="200"><br><sub><b>Characters</b><br>Buy/equip 24 procedural characters (rarity tiers, coin/level/IAP unlocks)</sub></td>
 <td align="center"><img src="docs/screenshots/12_shop.png" width="200"><br><sub><b>Shop</b><br>StoreKit 2 IAP — coin packs, Double Coins, premium skin</sub></td>
 <td align="center"><img src="docs/screenshots/13_worlds.png" width="200"><br><sub><b>Worlds</b><br>Checkpoint start from any reached world</sub></td>
 </tr>
@@ -233,7 +233,7 @@ calmer first run (tutorial gate covers every run entrance, the info X never forc
 WORLDS card teaches the 800 m transition, tutorial numbers derive from `Tuning` so a retune can't
 strand the copy).
 
-**Verification:** `./Tools/ci.sh` **158/158** (147 unit + 11 XCUITest) · evidence in
+**Verification:** `./Tools/ci.sh` **174/174** (163 unit + 11 XCUITest) · evidence in
 [`reports/shots/v14/`](reports/shots/v14/), `v141/`, `v142/` (incl. one autoplay run crossing the
 800 m crossfade with Prism's shimmer — never the world accent — on both sides).
 
@@ -292,7 +292,7 @@ PrismRush/
             Autopilot, DailyChallenge        Meta/            Profile, ProfileStore, Skin/MissionCatalog
   Audio/    Synth (pure DSP), SynthEngine,   IAP/             IAPCatalog, IAPManager (StoreKit 2)
             Music                            Services/        GameCenter, Account, Haptics
-Tests/CoreTests/  147 deterministic tests (most also run on Linux via Package.swift)   UITests/  11 XCUITests
+Tests/CoreTests/  163 deterministic tests (most also run on Linux via Package.swift)   UITests/  11 XCUITests
 Tools/  build / ci / qa / screenshots / gen_icon
 ```
 
@@ -346,7 +346,7 @@ Watch the engine play itself (used for the screenshots above):
 SIMCTL_CHILD_PR_AUTOPLAY=1 xcrun simctl launch booted com.rayancheca.prismrush
 ```
 
-Run the full test suite — 158 on a Mac (147 unit incl. the 200-seed solvability bot and a 10-seed
+Run the full test suite — 174 on a Mac (163 unit incl. the 200-seed solvability bot and a 10-seed
 12,000 m deep soak, + 11 XCUITest interaction tests):
 
 ```bash

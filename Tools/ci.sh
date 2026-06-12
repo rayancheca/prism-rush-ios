@@ -6,8 +6,8 @@
 #   (b) ./Tools/build.sh         — build the app for the Simulator (no signing)
 #   (c) xcodebuild test          — run the unit test target
 #
-# Prints "CI GREEN" only if every step succeeds. The full suite is 158 tests
-# (147 unit + 11 XCUITest) at v1.4.2.
+# Prints "CI GREEN" only if every step succeeds. The full suite is 174 tests
+# (163 unit + 11 XCUITest) at v1.4.3.
 #
 # Env overrides (same convention as build.sh):
 #   PR_SIM_NAME   simulator device name (default: iPhone 17 Pro)
