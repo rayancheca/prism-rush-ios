@@ -124,9 +124,10 @@ rotation gold dot is CUT (v1.4).
 **R13 — Serialized-build compat convention (waves 3–4).** Waves 3 and 4 must NEVER break the
 previous waves' call sites: new renderer API is ADDED next to the legacy 3-arg `applySkin`
 shim (kept, unused after wave 5, ~~deleted in v1.4~~ **[CORRECTED: the planned v1.4 deletion
-never happened — the shim (and the dead `MenuView` `onSettings`/`onDailyChallenge` params, and
-the legacy `struct CharacterSwatch`) shipped through v1.4/v1.4.1 with stale "still referenced"
-comments (AUDIT D2-6) and were actually deleted in v1.4.2 `7349a19`]**); new view init params get
+never happened — all three D2-6 shims shipped through v1.4/v1.4.1 with stale "still referenced"
+comments (AUDIT D2-6). The shim and the legacy `struct CharacterSwatch` were deleted in v1.4.2
+`7349a19`; the dead `MenuView` `onSettings`/`onDailyChallenge` params survived that commit too
+and were deleted in the v1.4.2 decree-review fix that follows it]**); new view init params get
 defaults; views
 read `ProfileStore.shared` / `IAPManager.shared` directly in `body` (G3-canonical) instead of
 demanding new params from GameView. Wave 5 rewires GameView; dead shims/params are parked.
@@ -183,8 +184,13 @@ never feed `startRun(seed:)`).
 - RealityKit hero stage / 3D menu vignette (Canvas swatch ships first; revisit if flat).
 - Persisted per-mechanic stats (`bestFlow`, `ringsPassed` in Profile) + ring/flow missions.
 - Legacy shim deletion: 3-arg `applySkin`, dead defaulted MenuView params (R13).
-  **[Done — but only in v1.4.2 `7349a19`, not v1.4 as planned; see the R13 correction.]**
-- Eclipse body lighten to `0x232337` (only if device QA fails readability on Caverns).
+  **[Done — but only in v1.4.2, not v1.4 as planned, and in two steps: the shim (+ legacy
+  `struct CharacterSwatch`) in `7349a19`, the MenuView params in the decree-review fix after
+  it; see the R13 correction.]**
+- Eclipse body lighten (only if device QA fails readability on Caverns).
+  **[Done v1.4.2 decree-review fix — AUDIT D3-4 promoted this from QA-conditional to shipped,
+  at the audit's brighter `0x2A2A4A` (not the `0x232337` parked here); on-device Caverns
+  confirmation stays on the state.md device QA checklist.]**
 - Shop "GET COINS" toast auto-scroll animation polish; CLAIM ALL stagger tuning.
 
 ---
@@ -344,7 +350,9 @@ Tasks:
    `ProfileStore.shared.playerLevel` + `XPCurve.xpIntoLevel` in body), tappable CoinBadge→Shop,
    hero stage (`CharacterHeroStage`, tap→Characters), world-progress chip→Worlds, PLAY
    (pulse deleted), best chip→Profile (`FIRST RUN ›`→HowToPlay when best==0), rewards rail,
-   demoted nav row. Old params (`onSettings` etc.) kept defaulted/no-op.
+   demoted nav row. Old params (`onSettings` etc.) kept defaulted/no-op. **[Historical — the
+   dead params were deleted in the v1.4.2 decree-review fix (AUDIT D2-6); see the R13
+   correction. Do not restore them.]**
 4. `RewardsBar.swift`: rebuilt as the 3-cell rail (Daily Rush | Rewards | Missions) with the
    gold priority ladder (one lit cell max) per uiux §1.5; absorbs DailyChallengeCard.
 5. `CharacterSelectView.swift`: stage-and-shelf per R7 — hero (`CharacterHeroStage` 96 +

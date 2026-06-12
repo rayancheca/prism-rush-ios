@@ -14,8 +14,10 @@ final class SkinCatalogTests: XCTestCase {
         XCTAssertEqual(Set(all.map(\.name)).count, 24, "unique names")
 
         // The legacy 16 keep exact ids/hexes/costs — owners must notice nothing but upgrades.
-        // (Sole exception, by owner decree 1: Prism's bodyHex-0 sentinel was retired in v1.4.2
-        // for real authored hexes — its prismatic shimmer is fixed + time-based, never world.)
+        // (Two sanctioned exceptions, both v1.4.2: Prism's bodyHex-0 sentinel was retired by
+        // owner decree 1 for real authored hexes — its prismatic shimmer is fixed + time-based,
+        // never world — and Eclipse's body lightened 0x1A1A2E → 0x2A2A4A per AUDIT D3-4 so the
+        // level-25 skin is actually visible in-run. Pure upgrades, identities unchanged.)
         let pins: [(id: String, cost: Int, body: UInt32, antenna: UInt32, premium: Bool)] = [
             ("default", 0, 0x00F5FF, 0xFF2BD6, false),
             ("ember", 200, 0xFF5E3A, 0xFFD23D, false),
@@ -32,7 +34,7 @@ final class SkinCatalogTests: XCTestCase {
             ("wisp", 0, 0xDFF6FF, 0x9BF0FF, false),
             ("tempo", 0, 0xC6FF4D, 0xFF2BD6, false),
             ("aurora", 0, 0x00FFC8, 0xFF2BD6, true),
-            ("eclipse", 0, 0x1A1A2E, 0xFF2BD6, false),
+            ("eclipse", 0, 0x2A2A4A, 0xFF2BD6, false),   // lightened v1.4.2 (AUDIT D3-4)
         ]
         for pin in pins {
             let s = SkinCatalog.skin(pin.id)

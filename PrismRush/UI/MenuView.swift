@@ -14,11 +14,6 @@ struct MenuView: View {
     let onLevels: () -> Void
     let onProfile: () -> Void
     var rewards: AnyView = AnyView(EmptyView())
-    /// Legacy (v1.2) — the settings gear moved to ProfileView's header; kept defaulted so
-    /// GameView's call site compiles until the wave-5 rewire prunes it (R13).
-    var onSettings: () -> Void = {}
-    /// Legacy (v1.2) — Daily Rush now lives inside the rewards rail (RewardsBar starts it).
-    var onDailyChallenge: () -> Void = {}
     /// FIRST RUN › destination when best == 0 (HowToPlay). Falls back to `onPlay`, whose
     /// first-run gate already routes through the tutorial; wave 5 wires it directly.
     var onHowToPlay: (() -> Void)? = nil

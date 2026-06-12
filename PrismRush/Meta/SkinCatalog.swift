@@ -176,7 +176,10 @@ enum SkinCatalog {
              idle: .init(bobSpeed: 1.8, bobAmp: 0.07, blinkMin: 2.2, blinkMax: 4.0, sway: 0.22),
              rarity: .legendary, unlock: .iap),
         Skin(id: "eclipse", name: "Eclipse", flavor: "The dark between worlds.",
-             bodyHex: 0x1A1A2E, antennaHex: 0xFF2BD6, trailHex: 0x6B5BFF,
+             // Body lightened 0x1A1A2E → 0x2A2A4A (AUDIT D3-4): the original was ~1.2:1 against
+             // the world backgrounds — near-invisible in-run and a black halo in the swatch.
+             // Still the roster's only dark body; gold eyes/indigo trail carry the menace.
+             bodyHex: 0x2A2A4A, antennaHex: 0xFF2BD6, trailHex: 0x6B5BFF,
              scale: 1.08, eyeRadius: 0.14, eyeTintHex: 0xFFD23D,   // only non-white sclera
              pupilStyle: .slit, antennaTipScale: 1.2,
              idle: .init(bobSpeed: 1.0, bobAmp: 0.03, blinkMin: 4.0, blinkMax: 6.0, sway: 0.06),

@@ -485,12 +485,11 @@ final class GameModel {
     }
 
     /// Push the equipped skin's full rig recipe to the renderer (v1.3 `applySkin(Skin)` API).
-    /// Ownership guard: a cloud merge or stale save can select a skin this device doesn't own —
-    /// fall back to the default rather than render an unowned cosmetic.
+    /// Reads the canonical `ProfileStore.equippedSkinID` resolver (AUDIT D3-1) — the SAME
+    /// ownership guard the menu hero, select stage, and shop cards render from, so the run can
+    /// never silently diverge from what those surfaces call "Equipped".
     func applyCurrentSkin() {
-        let store = ProfileStore.shared
-        let selected = SkinCatalog.skin(store.profile.selectedSkin)
-        renderer.applySkin(store.owns(skin: selected.id) ? selected : SkinCatalog.skin("default"))
+        renderer.applySkin(SkinCatalog.skin(ProfileStore.shared.equippedSkinID))
     }
 
     /// Auto-grant every newly earned character (XP level / achievement / challenge-days — R2) and

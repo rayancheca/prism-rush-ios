@@ -14,13 +14,14 @@ cleared it:
 | `c173f37` | Wave 2A — preview/rig fidelity (D2-1/2/3/5 + D2-4): antenna stem = `antennaHex` both sides, per-skin blink range in-run, sway = preview's `bobSpeed·2π·0.8`, shared `CharacterProportions` contract (+ `octahedron(rx:ry:rz:)`, CharacterParityTests), trail wisp in every swatch (Aurora's two-tone sell finally visible at the buy moment) |
 | `37ea7f2` | Wave 2B — state honesty (D3-1/3-3/6-5): canonical `ProfileStore.equippedSkinID` resolver + self-heal in `sanitized()`/`merged()` (unowned-selection contradiction can't persist), menu chip + ambient tint → `highestStartableWorld` (purchases show on the hub; display only), shop locked-skins render the same tease as select |
 | `0bf0094` | Wave 2C — first-run flow + HUD calm (D6-1/2/3/4/6/7, D3-2, D5-2/3, D2-7): `routeRun()` tutorial gate covers ALL run entrances, HowToPlay X never force-starts a run (info mode = GOT IT), new WORLDS card + decree-1 reassurance, DAILY RUSH "PLAY · ENDS H:MM", challenge-death fair-track caption, CLAIM ALL frozen-clock cascade, doubler upsell deferred to ≥3 runs, ghost chip floored at best ≥ 1,000, sub-second Overdrive ring dropped, tutorial numbers derived from `Tuning` |
+| `a7632a2` | Wave 3 — doc-rot purge (D1-1 d/e/g, DR-1/DR-2, D2-6 record): V13_SPEC DECREE-1 REVOCATION + v1.4 amendments, DESIGN_characters §1.2 superseded + §8 QA inverted, DESIGN_uiux glow-disc/world-chip rescope, README v1.4–v1.4.2 section + honest PERFECT/chameleon copy |
+| decree-review fix | The three audit items the waves dropped or half-landed: **D3-4** Eclipse body lightened `0x1A1A2E` → `0x2A2A4A` (catalog-only — swatch/tease/rig stay in lockstep; SkinCatalogTests pin flipped; on-device Caverns check stays on the QA list); **D2-6 completed** — the dead `MenuView` `onSettings`/`onDailyChallenge` params (third item of the audit's fix list, missed by `7349a19`) deleted, and the three v1.4.2 doc records that falsely claimed `7349a19` deleted them corrected (V13_SPEC R13 + §P, state.md decision log); **D3-1 completed** — `GameView.applyCurrentSkin()` rewired to the canonical `ProfileStore.equippedSkinID` resolver (the rewire `37ea7f2` promised to wave 2C; the run now shares the exact guard the menu/select/shop surfaces render from) |
 
-**Test status: 158/158** (146 unit + 12 XCUITest) via `./Tools/ci.sh` (recorded at `0bf0094`).
+**Test status: 158/158** via `./Tools/ci.sh` (CI GREEN re-measured at the decree-review fix on
+the 10C15FE0 iPhone 17 Pro · iOS 26.5 sim: 147 unit + 11 XCUITest — the earlier "146 + 12"
+split recorded at `0bf0094` had the same 158 total).
 Evidence: `reports/shots/v142/` — Prism holds its own shimmer (never the world accent) across
 the 800 m crossfade; menu hero + glow disc cycle in lockstep with the in-run body.
-**Doc amendments (this commit):** V13_SPEC DECREE-1 REVOCATION + v1.4 amendments,
-DESIGN_characters §1.2 superseded + §8 QA inverted, DESIGN_uiux glow-disc/world-chip rescope,
-README v1.4–v1.4.2 section + honest PERFECT/chameleon copy.
 
 ## v1.4.1 — shop conversion + honest pre-launch states (2026-06-11)
 | Commit | Scope |
@@ -98,7 +99,9 @@ Filed as remaining (automated equivalents are covered by the suite + autoplay):
 Bolt trail end-to-end · ~~Prism crossfade regression~~ **[INVERTED v1.4.2 by decree 1 — the old
 item guarded the violation; now: Prism's body colors/trail do NOT change across a world
 crossfade, the fixed 8 s shimmer is the only motion]** · Eclipse readability on Caverns
-(§P parking-lot candidate `0x232337` lighten) · Reduce Motion statics · Pebble vs Eclipse
+**[body lightened to `0x2A2A4A` in the v1.4.2 decree-review fix (AUDIT D3-4, supersedes the §P
+`0x232337` candidate) — device pass now just confirms it reads against all three world
+backgrounds]** · Reduce Motion statics · Pebble vs Eclipse
 silhouettes · 7/7 arc by feel · ring PERFECT timing · overdrive runway feel · flow surge
 cadence · level-up burst · weekly board rollover · challenge tier toast.
 
@@ -297,8 +300,10 @@ The old soak/ship plan is folded into `docs/SHIP_CHECKLIST.md`. The 500-seed QA 
   its DECREE-1 REVOCATION + v1.4 amendment blocks (top of §R) record where. Legacy shims it parks
   (3-arg `applySkin`, defaulted MenuView params, `DailyChallengeCard` absorption) were ~~deleted
   in v1.4 (R13/§P parking lot)~~ **[CORRECTION (AUDIT D2-6): that deletion never happened in
-  v1.4 — the shims shipped through v1.4/v1.4.1 behind stale "still referenced" comments and were
-  actually deleted in v1.4.2 `7349a19`]**.
+  v1.4 — the shims shipped through v1.4/v1.4.1 behind stale "still referenced" comments. The
+  3-arg shim + legacy `struct CharacterSwatch` were deleted in v1.4.2 `7349a19`; the dead
+  MenuView `onSettings`/`onDailyChallenge` params survived that commit too and were deleted in
+  the v1.4.2 decree-review fix after it]**.
 - **(v1.3) Mission-claim character grants land on sheet close**: MissionsView claims straight on
   `ProfileStore` (G3), so `GameModel.closeSheet()` runs `refreshSkinUnlocks` — Drift/Wisp pop on
   the way back to the hub. Run/challenge grants land in `recordRunResults`; launch catch-up in

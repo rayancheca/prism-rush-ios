@@ -163,15 +163,18 @@ idle = `bobSpeed Hz / bobAmp / blinkMin–blinkMax s / sway rad` · eyes white (
 | 13 | `shard` | Shard | A splinter of the first prism. | `0x7DF9FF` | `0xFFFFFF` | `0x7DF9FF` | **X** / 1.00 | 0.12 glint | 1.1/0.8 | 1.3/0.04/3.0–5.0/0.10 | Epic | **Level 12** |
 | 14 | `wisp` | Wisp | Half here. All speed. | `0xDFF6FF` | `0x9BF0FF` | `0xCFF8FF` | S / 0.90 | 0.12 dot | 1.4/0.7 | 2.2/0.09/3.8–6.0/0.25 | Epic | **Achievement: `ach.close` tier 1** (100 CLOSE calls) |
 | 15 | `tempo` | Tempo | Never misses a beat. Or a day. | `0xC6FF4D` | `0xFF2BD6` | `0xC6FF4D` | S / 1.00 | 0.13 dot | 1.2/1.2 | 2.0/0.05/3.0–3.0/0.35 | Epic | **Play the Daily Challenge on 7 days** |
-| 16 | `eclipse` | Eclipse | The dark between worlds. | `0x1A1A2E` | `0xFF2BD6` | `0x6B5BFF` | S / 1.08 | 0.14 slit, **eye tint `0xFFD23D`** | 1.0/1.2 | 1.0/0.03/4.0–6.0/0.06 | Legendary | **Level 25** |
+| 16 | `eclipse` | Eclipse | The dark between worlds. | `0x2A2A4A` (was `0x1A1A2E` — lightened v1.4.2, AUDIT D3-4) | `0xFF2BD6` | `0x6B5BFF` | S / 1.08 | 0.14 slit, **eye tint `0xFFD23D`** | 1.0/1.2 | 1.0/0.03/4.0–6.0/0.06 | Legendary | **Level 25** |
 
 Design notes:
 - **Tempo is the metronome**: `blinkMin == blinkMax == 3.0` (blinks exactly on the beat), bob locked
   at 2.0 Hz, the biggest antenna sway in the roster — the antenna *is* the metronome. Its unlock
   (7 challenge days) matches the personality.
 - **Eclipse** is the only dark body; its gold eyes (only non-white sclera), indigo trail, magenta
-  tip, and 1.08 scale carry it against dark backdrops — verify on Caverns in QA, lighten body to
-  `0x232337` if it sinks.
+  tip, and 1.08 scale carry it against dark backdrops. ~~Verify on Caverns in QA, lighten body to
+  `0x232337` if it sinks.~~ **[v1.4.2: it sank — the original `0x1A1A2E` measured ≈1.2:1 against
+  the world backgrounds (AUDIT D3-4), so the body lightened straight to the audit's `0x2A2A4A`
+  (one step brighter than the `0x232337` fallback parked here). Catalog-only change: swatch,
+  tease, and rig stay in lockstep. On-device Caverns confirmation remains on the QA list.]**
 - Color-collision audit done against world accents: no fixed body within ΔH ≈ 20° of all three
   world accents simultaneously; near-accent bodies (toxic/lime, midas/gold) pop via trail + shape +
   antenna instead. Pebble is the only desaturated body (gray is its joke).
@@ -515,6 +518,7 @@ bump**, solvability bot unaffected.
   **[INVERTED v1.4.2 (decree 1 — the old item regression-guarded the violation): Prism equipped →
   body colors and trail do NOT change across a world crossfade. The shimmer keeps its own fixed
   8 s cycle, never the world accent, in all 12 worlds.]**
-- Eclipse on Caverns: body readable (else lighten to `0x232337`).
+- Eclipse on Caverns: body readable at the lightened `0x2A2A4A` (shipped v1.4.2, AUDIT D3-4 —
+  the `0x232337` contingency is superseded).
 - Reduce Motion: swatches static, no antenna sway in-run, equip ring animation off (existing gate).
 - Pebble vs Eclipse side-by-side in grid: size difference visible; cube vs crystal silhouettes read at 56pt.
