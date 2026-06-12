@@ -3,6 +3,23 @@
 > Single source of truth for session resumability. On any fresh session: read this first, then continue.
 > Last updated: end of **v1.4.2 (owner-decree compliance — Prism identity fix + audit waves)**.
 
+## v1.4.3 — CODE_REVIEW.md §20 implementation (in progress, 2026-06-12)
+Executing the prioritized plan from `CODE_REVIEW.md` (Opus 4.8 strict pass, 8.7/10). Ordered steps;
+each verified + committed independently. The worlds work (step 2) is **purely visual** — no Core/,
+no spawn-RNG consumption, `DailyChallenge.layoutVersion` unchanged (the sim is untouched, so the
+200-seed bot stays green and every seed stays byte-stable).
+
+| Step | Scope | Status |
+|---|---|---|
+| 1 | Doc/claim fixes: README test split (147+11), IAP 5→7, "zero hand-authored binary assets", "material-allocation-free"; `ci.sh` stale Phase-2 comment deleted; SUPERSEDED banners on `AGENT_docs.md` (privacy) + `AGENT_wiring.md` (daily board) | ✅ done |
+| 2 | **The worlds — distance-driven evolution** (M1): palette/decor/sky/music keyed off absolute `worldOrdinal`, not `% 3`; `min(cycle,2)` clamps removed; per-cycle hue rotation + richening; WorldPreviewCanvas mirrored | ⏳ |
+| 3 | macOS CI job (build app + unit bundle on macos-latest) | ⏳ |
+| 4 | Cheap test gaps: IAPManager value-badge math + availability transitions; pure view-logic helpers | ⏳ |
+| 5 | Dynamic Type: ProfileView/HowToPlayView/PauseOverlay → typeScale | ⏳ |
+| 6 | Solvability deep-soak seed count raise | ⏳ |
+| 7 | heroShell generic (M6); revive() power-up inconsistency (L1); Apple user id → Keychain (L3) | ⏳ |
+| 8 | Re-capture README screenshots (Mac-only) | ⏳ |
+
 ## v1.4.2 — owner decrees enforced (AUDIT_intent fix fleet, 2026-06-11)
 The six owner decrees landed in `CLAUDE.md` (product law, overriding every design doc) together
 with the read-only `reports/AUDIT_intent.md` sweep (`bf75acd`); four serialized fix waves then

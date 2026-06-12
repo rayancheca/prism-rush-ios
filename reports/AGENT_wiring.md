@@ -1,3 +1,8 @@
+> **⚠️ SUPERSEDED (historical v1.0 artifact) — see `Store/metadata.md` / `docs/SHIP_CHECKLIST.md`
+> for shipped reality.** The claim below that there is "no `prismrush.daily` GC board, not specced
+> anywhere" is obsolete: the recurring `prismrush.daily` leaderboard was later added and is now a
+> required ship gate (it ranks the shared-seed daily challenge). Kept for history, not as truth.
+
 # AGENT_wiring — final wiring pass (v1.0)
 
 Files touched: `UI/GameView.swift`, `UI/EffectsOverlay.swift` (+ this report).

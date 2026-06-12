@@ -6,13 +6,8 @@
 #   (b) ./Tools/build.sh         — build the app for the Simulator (no signing)
 #   (c) xcodebuild test          — run the unit test target
 #
-# Prints "CI GREEN" only if every step succeeds.
-#
-# NOTE ON TESTS: the test step requires the PrismRushTests target (declared in
-# project.yml) to have at least one test source. project.yml already wires the
-# target, but until Phase 2 lands actual test files the `xcodebuild test` step
-# may report "no tests" / fail to find a test bundle. That is expected and
-# documented — once Phase 2 adds tests under Tests/ this step goes green.
+# Prints "CI GREEN" only if every step succeeds. The full suite is 158 tests
+# (147 unit + 11 XCUITest) at v1.4.2.
 #
 # Env overrides (same convention as build.sh):
 #   PR_SIM_NAME   simulator device name (default: iPhone 17 Pro)

@@ -1,3 +1,8 @@
+> **⚠️ SUPERSEDED (historical v1.0–v1.2 artifact) — see `Store/metadata.md` / `docs/SHIP_CHECKLIST.md`
+> for shipped reality.** The "App Privacy: Data Not Collected" and "Free / no IAP" claims below are
+> obsolete: the shipped app declares data linkage (Purchases via StoreKit, User ID via Game Center /
+> Sign in with Apple) and ships 7 IAP products. This file is kept for history, not as a source of truth.
+
 # AGENT_docs — Prism Rush ASO / Store Metadata
 
 ## Scope
