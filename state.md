@@ -3,6 +3,32 @@
 > Single source of truth for session resumability. On any fresh session: read this first, then continue.
 > Last updated: end of **v1.4.2 (owner-decree compliance — Prism identity fix + audit waves)**.
 
+## v1.5 — "Depth & Clarity" overhaul (in progress, 2026-06-12)
+Owner-driven redesign. Full plan + locked decisions: `reports/design/V15_PLAN.md`. Order: (1) home/
+menu UX + splash + music → (2) 12 distinct worlds → (3) gameplay difficulty + scoring clarity →
+(4) power-ups + tutorial. Decisions: characters stay cosmetic identity **+** honest higher-tier
+passive **+** equippable power-up loadout; **12 distinct themed worlds** then evolve; in-run HUD =
+**meters primary** (score/coins/×N/live-XP secondary).
+
+**Phase 1 — DONE (verified: Mac BUILD OK, 174/174 tests, on-sim screenshots):**
+- Splash screen (`UI/SplashView.swift`): character floats full-size + uncropped, wordmark, name
+  pill, breathing "TAP TO START"; calm ambient bed plays from launch. First tap fades to the hub.
+  `PR_SKIP_SPLASH=1` (QA/UITests) boots straight to the hub.
+- Character cutoff fix: `AnimatedCharacterSwatch` gained `heightScale`/`verticalAnchor` (defaults
+  hold every grid byte-identical); `CharacterHeroStage` renders in a 1.85× canvas (anchor 0.66) so
+  tall antennas + up-bob never crop; `showsReflection` toggle (splash off → no "box").
+- Menu hub (`UI/MenuView.swift`): **settings gear surfaced top-right** (was 3 taps deep in Profile);
+  nav cards now **color-coded** (Characters cyan / Shop gold / Worlds magenta) with tinted icon
+  chips — no longer uniform gray. `onSettings` → `model.open(.settings)`.
+- Top-bar conflict fixed (`UI/GameView.swift`): the floating mute/pause cluster is **hidden in
+  `.menu`** (it sat on top of the coin badge — the owner's "hidden circular button behind coins").
+- Menu music (`Audio/Music.swift` `start(targetVolume:)`, `SynthEngine.musicStart(calm:)`): hub/
+  splash run the sequencer as a calm 0.4 bed; `returnToMenu` restarts it instead of going silent;
+  a run still starts the full 0.85 bed.
+
+**Phase 1 next:** RewardsBar (Daily/Rewards/Missions rail) still reads grayer than the new nav —
+optional consistency pass. Then Phase 2 (worlds).
+
 ## v1.4.3 — CODE_REVIEW.md §20 implementation (in progress, 2026-06-12)
 Executing the prioritized plan from `CODE_REVIEW.md` (Opus 4.8 strict pass, 8.7/10). Ordered steps;
 each verified + committed independently. The worlds work (step 2) is **purely visual** — no Core/,

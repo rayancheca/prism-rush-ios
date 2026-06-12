@@ -97,11 +97,13 @@ final class SynthEngine {
         schedule(buf)
     }
 
-    func musicStart() {
+    /// `calm` starts the bed at a quieter target (the hub/splash ambience); the default full
+    /// intensity is the in-run bed. Either way mute is mixer-level — never gate scheduling on it.
+    func musicStart(calm: Bool = false) {
         guard started else { return }
         if !engine.isRunning { recoverEngine() }   // self-heal if an interruption beat us here
         guard engine.isRunning else { return }
-        music?.start()                             // mute is mixer-level; never gate scheduling on it
+        music?.start(targetVolume: calm ? 0.4 : 0.85)
     }
     func musicStop() { music?.stop() }
     func musicPump(dt: Double, world: Int) {

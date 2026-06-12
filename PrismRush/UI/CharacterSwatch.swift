@@ -29,6 +29,15 @@ struct AnimatedCharacterSwatch: View {
     /// buy moment (shop cards, select stage/grid, menu hero). Static frames freeze the wisp
     /// in place (Reduce Motion = static wisp, never a missing one).
     var showsTrail = true
+    /// Vertical room for the figure as a multiple of `size`. The default 1.5 holds every existing
+    /// call site (the 24-card grids, shop, select) byte-identical; the menu hero and the splash
+    /// pass a taller value so the tallest antennas (Blossom) and the full up-bob never crop — the
+    /// owner's "characters sit in a square smaller than them" fix.
+    var heightScale: CGFloat = 1.5
+    /// Where the figure's center sits in the canvas (0 = top, 1 = bottom). 0.5 keeps the grids
+    /// centered; the hero/splash bias it down so the added headroom lands above the antenna while
+    /// the feet stay near the disc.
+    var verticalAnchor: CGFloat = 0.5
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -46,7 +55,7 @@ struct AnimatedCharacterSwatch: View {
         .overlay(alignment: .bottom) {
             if silhouette { lockChip }
         }
-        .frame(width: size, height: size * 1.5)   // antenna headroom + bob never clips
+        .frame(width: size, height: size * heightScale)   // antenna headroom + bob never clips
         .accessibilityHidden(true)                 // containers carry the meaning (name/state labels)
     }
 
@@ -73,7 +82,7 @@ struct AnimatedCharacterSwatch: View {
         let bodyR = size * 0.5 * scale
         // Bob: whole figure rides a per-skin sine; 0 at the static frame.
         let yOff = sin(t * skin.idle.bobSpeed * 2 * .pi) * skin.idle.bobAmp * size
-        let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2 + yOff)
+        let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height * verticalAnchor + yOff)
 
         // Prism: the SAME 8 s shimmer the in-run body runs — one shared clock→color function
         // (`SkinCatalog.prismaticColor`), so this preview and the RealityKit rig show the same
@@ -238,13 +247,19 @@ struct CharacterHeroStage: View {
     /// v1.4: a focused LOCKED skin stages as a 0.6-opacity tease (full color + lock chip) —
     /// bright enough to want, dim enough that the buy/requirement button reads as the way in.
     var locked = false
+    /// The splash sets this false: against its flat dark backdrop the mirrored floor reflection's
+    /// glow reads as a faint rectangle behind the figure (the owner's "box"); on the menu the busy
+    /// 3D scene washes it out, so the hub keeps it.
+    var showsReflection = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Hero-stage tease opacity (grid cards use the swatch default 0.45).
     private static let stageTeaseOpacity = 0.6
 
-    private var swatchSize: CGFloat { height * 0.5 }   // menu ≈240 → 120; select 192 → 96 (R5)
+    // 0.42 (was 0.5): the figure now renders in a 1.85× canvas with real antenna headroom, so it
+    // sizes down a touch to keep the taller, never-cropped stage inside the menu's height budget.
+    private var swatchSize: CGFloat { height * 0.42 }
     private var discTint: Color { Theme.color(skin.bodyHex) }
 
     var body: some View {
@@ -257,7 +272,7 @@ struct CharacterHeroStage: View {
                 // Floor reflection at 18% (skipped under Reduce Motion: one Canvas, not two).
                 // Offset so the mirrored feet meet the real feet; the stage frame clips the rest.
                 // Locked: plain render faded harder (0.18 × 0.6) — a mirrored lock chip is noise.
-                if !reduceMotion {
+                if !reduceMotion && showsReflection {
                     AnimatedCharacterSwatch(skin: skin, size: swatchSize)
                         .scaleEffect(x: 1, y: -1)
                         .opacity(locked ? 0.11 : 0.18)
@@ -265,9 +280,13 @@ struct CharacterHeroStage: View {
                         .offset(y: swatchSize)
                 }
                 AnimatedCharacterSwatch(skin: skin, size: swatchSize,
-                                        silhouette: locked, teaseOpacity: Self.stageTeaseOpacity)
+                                        silhouette: locked, teaseOpacity: Self.stageTeaseOpacity,
+                                        heightScale: 1.85, verticalAnchor: 0.66)
             }
-            .frame(height: swatchSize * 1.5)
+            // Clip matches the figure's own 1.85× canvas, so the antenna + up-bob are never cropped
+            // (anchor 0.66 lands the headroom above the tip); only the mirrored reflection's spill
+            // below the stage is trimmed.
+            .frame(height: swatchSize * 1.85)
             .clipped()
             if showsNamePill { namePill }
         }

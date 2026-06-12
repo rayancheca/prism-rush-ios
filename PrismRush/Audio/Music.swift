@@ -29,14 +29,17 @@ final class Music {
         lookaheadFrames = Int64(Synth.stepFrames * 4)
     }
 
-    func start() {
+    /// `targetVolume` lets the hub/splash run the same sequencer as a calmer bed (≈0.4) so the menu
+    /// has music that "makes you want to play" without competing with the UI, while a run starts the
+    /// full-intensity bed (0.85). The fade-in time scales with the target so a calm start is gentle.
+    func start(targetVolume: Float = 0.85) {
         player.stop()
         beat = 0
         scheduledFrames = 0
         playing = true
-        vol = 0.08                     // start just audible so the run-start beat lands
-        targetVol = 0.85
-        fadeRate = 0.85 / 0.5          // fade in over ~0.5 s
+        vol = min(0.08, targetVolume)  // start just audible so the run-start beat lands
+        targetVol = targetVolume
+        fadeRate = targetVolume / 0.5  // fade in over ~0.5 s
         duckLevel = 1
         mixer.outputVolume = vol * userVolume
         player.play()

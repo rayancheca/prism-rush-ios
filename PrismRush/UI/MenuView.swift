@@ -13,6 +13,9 @@ struct MenuView: View {
     let onShop: () -> Void
     let onLevels: () -> Void
     let onProfile: () -> Void
+    /// Settings, surfaced as a gear in the hub's top-right (uiux §2): the universal convention and
+    /// the owner's ask — no longer three taps deep behind Profile.
+    var onSettings: () -> Void = {}
     var rewards: AnyView = AnyView(EmptyView())
     /// FIRST RUN › destination when best == 0 (HowToPlay). Falls back to `onPlay`, whose
     /// first-run gate already routes through the tutorial; wave 5 wires it directly.
@@ -52,7 +55,7 @@ struct MenuView: View {
     // MARK: zone A — status strip
 
     private var statusStrip: some View {
-        HStack {
+        HStack(spacing: Theme.Space.s) {
             levelRing
             Spacer()
             Button(action: onShop) {
@@ -69,8 +72,29 @@ struct MenuView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("\(coins) coins")
             .accessibilityHint("Opens the shop.")
+            settingsGear
         }
         .frame(height: 44)
+    }
+
+    /// The gear lives at the far top-right — the universal settings spot. Its own 44 pt target sits
+    /// after the coin badge with `Space.s` between, so nothing overlaps (the old floating mute
+    /// circle that crowded this corner is now hidden on the hub).
+    private var settingsGear: some View {
+        Button(action: onSettings) {
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Theme.Role.textSecondary)
+                .frame(width: 40, height: 40)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().strokeBorder(Theme.Role.hairline))
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.neon)
+        .accessibilityIdentifier("settingsButton")
+        .accessibilityLabel("Settings")
+        .accessibilityHint("Opens settings.")
     }
 
     /// Profile entry as a level-ring avatar: the player's level inside a cyan XP-progress ring
@@ -215,9 +239,10 @@ struct MenuView: View {
 
     private var navRow: some View {
         HStack(spacing: Theme.Space.m - 4) {
-            navButton("person.fill", "Characters", action: onCharacters, badge: hasUnseenSkins)
-            navButton("cart.fill", "Shop", action: onShop)
-            navButton("map.fill", "Worlds", action: onLevels)
+            navButton("person.fill", "Characters", tint: Theme.color(0x00F5FF),
+                      action: onCharacters, badge: hasUnseenSkins)
+            navButton("cart.fill", "Shop", tint: Theme.color(0xFFD23D), action: onShop)
+            navButton("map.fill", "Worlds", tint: Theme.color(0xFF2BD6), action: onLevels)
         }
     }
 
@@ -228,21 +253,32 @@ struct MenuView: View {
             .subtracting(ProfileStore.shared.profile.seenSkins).isEmpty
     }
 
-    private func navButton(_ symbol: String, _ title: String,
+    /// Color-coded destination tile (uiux §1.4): each surface owns a neon hue from the brand trio
+    /// so the row reads as three distinct doors, not three identical gray chips — the owner's
+    /// "they're so light gray and small I'd have to click each to know what it is." The icon rides
+    /// a tinted chip; a hairline of the same hue lifts the card. Stays calm (decree 6): faint wash,
+    /// not a saturated block.
+    private func navButton(_ symbol: String, _ title: String, tint: Color,
                            action: @escaping () -> Void, badge: Bool = false) -> some View {
         Button(action: action) {
-            VStack(spacing: 5) {
-                Image(systemName: symbol).font(.system(size: 17, weight: .semibold))
-                Text(title.uppercased()).typeScale(.micro)
+            VStack(spacing: 7) {
+                Image(systemName: symbol)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 40, height: 40)
+                    .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: Theme.Radius.s))
+                Text(title.uppercased())
+                    .typeScale(.micro)
+                    .foregroundStyle(Theme.Role.textPrimary)
             }
-            .foregroundStyle(.white.opacity(0.85))
-            .frame(maxWidth: .infinity).frame(height: 56)
+            .frame(maxWidth: .infinity).frame(height: 78)
             .background(Theme.Role.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.m))
-            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m).strokeBorder(Theme.Role.hairline))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m)
+                .strokeBorder(tint.opacity(0.45), lineWidth: 1))
             .overlay(alignment: .topTrailing) {
                 if badge {
-                    Circle().fill(Theme.Role.interactive)
-                        .frame(width: 6, height: 6)
+                    Circle().fill(tint)
+                        .frame(width: 7, height: 7)
                         .padding(Theme.Space.s)
                 }
             }

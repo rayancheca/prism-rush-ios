@@ -121,6 +121,7 @@ final class GameModel {
         renderer.install(into: content)
         haptics.prepare()
         synth.start()
+        synth.musicStart(calm: true)   // hub/splash ambience from launch (silenced until a run before)
         IAPManager.shared.start()
         GameCenterService.shared.authenticate()
         if ProcessInfo.processInfo.environment["PR_DEMOPROFILE"] == "1" {
@@ -386,7 +387,7 @@ final class GameModel {
         paused = false
         core.reset(seed: nil)
         renderer.resetEntities()
-        synth.musicStop()
+        synth.musicStart(calm: true)   // back to the calm hub bed (was musicStop → dead-silent menu)
         activeSheet = nil
         overTime = 0
         canRestart = false
@@ -713,6 +714,10 @@ struct GameView: View {
     /// return to the menu, never into a run (AUDIT D6-2). The pre-run tutorial is the model's
     /// `pendingFirstRunStart` gate, a separate flow.
     @State private var showHowToPlayInfo = false
+    /// Launch splash, shown once over the booting scene; first tap fades into the hub.
+    /// `PR_SKIP_SPLASH=1` (QA/screenshot capture only) boots straight to the hub.
+    @State private var showSplash =
+        ProcessInfo.processInfo.environment["PR_SKIP_SPLASH"] != "1"
     @Environment(\.scenePhase) private var scenePhase
 
     @ViewBuilder
@@ -751,36 +756,41 @@ struct GameView: View {
             HUDView(core: model.core)
 
             // Mute/pause cluster anchored to the top-trailing corner (the HUD's right-hand chips
-            // start below it — see HUDView's top padding) instead of floating top-centre.
-            VStack {
-                HStack(spacing: 10) {
-                    Spacer()
-                    Button { model.toggleMute() } label: {
-                        Image(systemName: model.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.85))
-                            .frame(width: 38, height: 38)
-                            .background(.ultraThinMaterial, in: Circle())
-                            .overlay(Circle().strokeBorder(.white.opacity(0.14)))
-                    }
-                    .accessibilityLabel(model.muted ? "Unmute" : "Mute")
-                    if model.core.snapshot.mode == .play {
-                        Button { model.togglePause() } label: {
-                            Image(systemName: "pause.fill")
+            // start below it — see HUDView's top padding) instead of floating top-centre. Hidden in
+            // `.menu` mode: it used to sit on top of the hub's coin badge (the owner's "hidden
+            // circular button behind the coins"). On the hub, audio lives in Settings (top-right
+            // gear); this cluster is for play/over only.
+            if model.core.snapshot.mode != .menu {
+                VStack {
+                    HStack(spacing: 10) {
+                        Spacer()
+                        Button { model.toggleMute() } label: {
+                            Image(systemName: model.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(.white.opacity(0.85))
                                 .frame(width: 38, height: 38)
                                 .background(.ultraThinMaterial, in: Circle())
                                 .overlay(Circle().strokeBorder(.white.opacity(0.14)))
                         }
-                        .accessibilityIdentifier("pauseButton")
-                        .accessibilityLabel("Pause")
+                        .accessibilityLabel(model.muted ? "Unmute" : "Mute")
+                        if model.core.snapshot.mode == .play {
+                            Button { model.togglePause() } label: {
+                                Image(systemName: "pause.fill")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.85))
+                                    .frame(width: 38, height: 38)
+                                    .background(.ultraThinMaterial, in: Circle())
+                                    .overlay(Circle().strokeBorder(.white.opacity(0.14)))
+                            }
+                            .accessibilityIdentifier("pauseButton")
+                            .accessibilityLabel("Pause")
+                        }
                     }
+                    Spacer()
                 }
-                Spacer()
+                .padding(.top, 14)
+                .padding(.trailing, 16)
             }
-            .padding(.top, 14)
-            .padding(.trailing, 16)
 
             switch model.core.snapshot.mode {
             case .menu:
@@ -796,6 +806,7 @@ struct GameView: View {
                              onShop: { model.open(.shop) },
                              onLevels: { model.open(.levels) },
                              onProfile: { model.open(.stats) },
+                             onSettings: { model.open(.settings) },
                              rewards: AnyView(RewardsBar(model: model, onMissions: { model.open(.missions) })),
                              onHowToPlay: { showHowToPlayInfo = true })
                 }
@@ -876,6 +887,14 @@ struct GameView: View {
                 }
                 .allowsHitTesting(false)
                 .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
+            // Launch splash — topmost, covering the booting RealityKit scene. The calm hub bed
+            // already plays (started in `install`); the first tap fades through to the menu.
+            if showSplash {
+                SplashView(onStart: { withAnimation(.easeOut(duration: 0.45)) { showSplash = false } })
+                    .transition(.opacity)
+                    .zIndex(10)
             }
         }
         .statusBarHidden(true)

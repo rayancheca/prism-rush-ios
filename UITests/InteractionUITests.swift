@@ -10,6 +10,9 @@ final class InteractionUITests: XCTestCase {
 
     private func launch(_ env: [String: String] = [:]) -> XCUIApplication {
         let app = XCUIApplication()
+        // Boot straight to the hub: the launch splash covers the menu until tapped, which would
+        // hide every element these tests assert on.
+        app.launchEnvironment["PR_SKIP_SPLASH"] = "1"
         for (k, v) in env { app.launchEnvironment[k] = v }
         app.launch()
         return app
