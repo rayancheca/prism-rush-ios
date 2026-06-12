@@ -62,7 +62,7 @@ struct LevelSelectView: View {
     /// Full-width 200 pt header: the deepest startable world's hero vignette + PLAY FROM HERE.
     /// The whole header is one tap target → `startRun(fromWorld: furthest)`.
     private func previewHeader(furthest: Int) -> some View {
-        let palette = Theme.worlds[furthest % 3]
+        let palette = Theme.evolvedPalette(ordinal: furthest)
         let best = ProfileStore.shared.profile.bestDistanceByWorld[furthest] ?? 0
         return Button {
             model.startRun(fromWorld: furthest)
@@ -111,7 +111,7 @@ struct LevelSelectView: View {
     /// One-line "next rung" strip: chip vignette, name, both keys (REACH n m / UNLOCK · price) —
     /// pinned above the fold so the climb is always visible. Tap → the same unlock panel.
     private func nextUnlockStrip(world: Int) -> some View {
-        let palette = Theme.worlds[world % 3]
+        let palette = Theme.evolvedPalette(ordinal: world)
         let price = XPCurve.worldPrice(world)
         let reachM = Int(Double(world) * Tuning.worldLength)
         return Button { unlockTarget = world } label: {
@@ -165,7 +165,7 @@ private struct WorldCard: View {
     let best: Double
     let action: () -> Void
 
-    private var palette: WorldPalette { Theme.worlds[world % 3] }
+    private var palette: WorldPalette { Theme.evolvedPalette(ordinal: world) }
     private var checkpointM: Int { Int(Double(world) * Tuning.worldLength) }
 
     var body: some View {
@@ -232,7 +232,7 @@ private struct LockedWorldCard: View {
     let world: Int
     let action: () -> Void
 
-    private var palette: WorldPalette { Theme.worlds[world % 3] }
+    private var palette: WorldPalette { Theme.evolvedPalette(ordinal: world) }
     private var requiredM: Int { Int(Double(world) * Tuning.worldLength) }
     private var price: Int { XPCurve.worldPrice(world) }
 
@@ -362,7 +362,7 @@ private struct UnlockPanel: View {
     /// dismissed sheet can never close its successor (CharacterSelect.closeTask pattern).
     @State private var dismissTask: Task<Void, Never>?
 
-    private var palette: WorldPalette { Theme.worlds[world % 3] }
+    private var palette: WorldPalette { Theme.evolvedPalette(ordinal: world) }
     private var price: Int { XPCurve.worldPrice(world) }
     private var reachM: Int { Int(Double(world) * Tuning.worldLength) }
 

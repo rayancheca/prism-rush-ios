@@ -180,7 +180,12 @@ final class RealityRenderer: RendererPort {
     func sync(_ snap: GameSnapshot) {
         // Recolor only when the palette key changes (world pair or quantized blend step) — in
         // steady state (worldBlend == 1, ~95% of frames) this whole block is skipped, alloc-free.
-        let key = (snap.worldFrom % 3) &* 4096 &+ (snap.worldTo % 3) &* 256 &+ Int(snap.worldBlend * 64)
+        // Keyed on the ABSOLUTE ordinals (not the 0–2 family), so each evolution cycle gets its
+        // own cached materials — worlds 0 and 3 share a family but must not share a palette
+        // (v1.4.3). fromOrdinal = toOrdinal − 1 holds because worlds step exactly one at a time
+        // during a crossfade; in steady state worldBlend == 1 so the `from` half contributes 0.
+        let toOrd = snap.worldOrdinal, fromOrd = max(0, toOrd - 1)
+        let key = fromOrd &* 1_000_000 &+ toOrd &* 1_000 &+ Int(snap.worldBlend * 64)
         if key != paletteKey {
             paletteKey = key
             let pal = Palette(snap)
@@ -466,9 +471,10 @@ final class RealityRenderer: RendererPort {
             particles.burst(x: Float(x), y: 1, z: 0, color: skinTrailColor, count: 120, power: 7.5, spread: 0.55, life: 1.2)
             particles.burst(x: Float(x), y: 1, z: 0, color: cWhite, count: 60, power: 9.5, spread: 0.35, life: 0.9)
             shake = 1.4
-        case let .worldChanged(index, _):
+        case let .worldChanged(_, ordinal):
             // One-shot horizon ring sweep in the incoming world's accent (banner is UI-side).
-            let a = Theme.worlds[index % 3].accent
+            // Evolved by absolute ordinal so the sweep matches the cycle's palette (v1.4.3).
+            let a = Theme.evolvedPalette(ordinal: ordinal).accent
             let accent = UIColor(red: CGFloat(a.x), green: CGFloat(a.y), blue: CGFloat(a.z), alpha: 1)
             particles.ring(y: 4.5, z: -42, radius: 9, color: accent, count: 24, velZ: 26, life: 1.1)
             kickFOV()
@@ -868,8 +874,10 @@ final class RealityRenderer: RendererPort {
 private struct Palette {
     let bg, grid, accent, accent2, lane: UIColor
     init(_ snap: GameSnapshot) {
-        let a = Theme.worlds[snap.worldFrom % 3]
-        let b = Theme.worlds[snap.worldTo % 3]
+        // Evolve by ABSOLUTE ordinal so deep cycles diverge (v1.4.3). fromOrdinal = ordinal − 1
+        // (worlds step one at a time); at blend == 1 the `from` half contributes nothing.
+        let a = Theme.evolvedPalette(ordinal: max(0, snap.worldOrdinal - 1))
+        let b = Theme.evolvedPalette(ordinal: snap.worldOrdinal)
         let t = Float(snap.worldBlend)
         func ui(_ v: SIMD3<Float>) -> UIColor {
             UIColor(red: CGFloat(v.x), green: CGFloat(v.y), blue: CGFloat(v.z), alpha: 1)

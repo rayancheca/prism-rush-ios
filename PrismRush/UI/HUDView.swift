@@ -50,7 +50,7 @@ struct HUDView: View {
     @ViewBuilder private func ghostChaseChip(_ snap: GameSnapshot) -> some View {
         if snap.best >= 1_000, snap.score < snap.best,
            Double(snap.score) >= 0.9 * Double(snap.best) {
-            let accent = Theme.color(Theme.worlds[snap.worldTo % 3].accent2)
+            let accent = Theme.color(Theme.evolvedPalette(ordinal: snap.worldOrdinal).accent2)
             Text("BEST \(snap.best - snap.score) AHEAD")
                 .font(.system(size: 11, weight: .heavy, design: .rounded))
                 .tracking(1.5)

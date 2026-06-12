@@ -258,9 +258,17 @@ enum Synth {
     private static let rootShift = [0, 2, -2]
     private static let scales = [[0, 3, 7, 10], [0, 3, 7, 12], [0, 5, 7, 12]]
     private static let bassPattern = [0, 0, 2, 1, 0, 0, 3, 2]
+    /// Cap on the music cycle-layering (v1.4.3): deeper evolution cycles add voices up to here,
+    /// then hold — so the bed thickens with the worlds without ever clipping.
+    static let musicLayerCap = 3
 
+    /// One 8th-note step. `world` is the ABSOLUTE ordinal (v1.4.3): the family (`% 3`) sets the
+    /// root/scale/character as before, and the cycle (`/ 3`) layers extra voices so deep worlds
+    /// sound progressively richer rather than looping. Cycle 0 (worlds 0/1/2) is byte-identical to
+    /// the original three-world bed.
     static func step(beat: Int, world: Int) -> [Float] {
         let w = ((world % 3) + 3) % 3
+        let cycle = max(0, world) / 3
         var b = [Float](repeating: 0, count: stepFrames)
         let root = 45 + rootShift[w]
         let scale = scales[w]
@@ -277,6 +285,20 @@ enum Synth {
         if w >= 1, beat % 2 == 0 {                           // sparkle arp from World 2
             let arpMidi = root + 24 + scale[(beat >> 1) % 4]
             tone(&b, freq(arpMidi), freq(arpMidi), dur: 0.2, .triangle, vol: 0.05)
+        }
+
+        // Cycle layering — each evolution cycle thickens the bed (capped at `musicLayerCap`).
+        let layer = min(cycle, musicLayerCap)
+        if layer >= 1 {                                      // octave-up saw shimmer doubling bass
+            let shimMidi = bassMidi + 12
+            tone(&b, freq(shimMidi), freq(shimMidi), dur: 0.14, .saw, vol: 0.03 + 0.01 * Float(layer))
+        }
+        if layer >= 2, beat % 2 == 1 {                       // syncopated counter-arp on offbeats
+            let cMidi = root + 19 + scale[(beat >> 1) % 4]
+            tone(&b, freq(cMidi), freq(cMidi), dur: 0.16, .triangle, vol: 0.035)
+        }
+        if layer >= 3, beat % 8 == 0 {                       // held sub-octave swell anchoring the bar
+            tone(&b, freq(root - 12), freq(root - 12), dur: 0.40, .sine, vol: 0.06)
         }
         return b
     }

@@ -112,7 +112,9 @@ final class WorldDecor {
 
         let x = s.side * Float.random(in: 6.6...11.5)
         s.group.position.x = x
-        let tint = Self.dim(Theme.worlds[w].accent2)
+        // Evolved by the ABSOLUTE world (not the 0–2 family `w`) so side decor hue-shifts with the
+        // cycle in lockstep with the playfield palette (v1.4.3).
+        let tint = Self.dim(Theme.evolvedPalette(ordinal: world).accent2)
         let mat = UnlitMaterial(color: tint)
 
         switch (w, alt) {

@@ -24,6 +24,89 @@ enum Theme {
 
     static func mix(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ t: Float) -> SIMD3<Float> { a + (b - a) * t }
 
+    // MARK: - Distance-driven world evolution (v1.4.3, CODE_REVIEW.md §20.1)
+    //
+    // The 12-rung ladder reuses three palette FAMILIES (`worlds[ordinal % 3]`), so without this
+    // every third world was the same art reshuffled — the owner's "Neon Metropolis, again"
+    // concern. `evolvedPalette` keeps each family's base identity but makes every CYCLE
+    // (`ordinal / 3`) a visible transformation of it: the hue rotates a fixed step per cycle
+    // (wraps, so it's safe for unbounded infinite runs), saturation/contrast intensify up to a
+    // cap (deep runs stay vivid, never muddy), and the background deepens for atmosphere. It is a
+    // PURE function of the ABSOLUTE ordinal — no RNG, no sim state — so the deterministic core is
+    // untouched (rule 2/3) and the same ordinal always looks identical. Cycle 0 (worlds 0/1/2) is
+    // the identity, so the established first-cycle look and its screenshots/previews are preserved.
+
+    /// Cap on the cycles over which density/saturation/contrast keep ramping. Hue still rotates
+    /// past this (it wraps), so deeper worlds keep diverging without degenerating to black/grey.
+    static let evolutionRampCycles = 4
+
+    /// The palette for an absolute world `ordinal`, with per-cycle hue rotation + intensification
+    /// layered onto the base family. Cycle 0 returns the base family unchanged.
+    static func evolvedPalette(ordinal: Int) -> WorldPalette {
+        let o = max(0, ordinal)
+        let base = worlds[o % 3]
+        let cycle = o / 3
+        guard cycle > 0 else { return base }
+
+        let hueShift = Float(cycle) * 0.137                      // ≈ 49° per cycle, wraps
+        let intens = Float(min(cycle, evolutionRampCycles))
+        let satBoost = intens * 0.05
+        func shift(_ v: SIMD3<Float>, satAdd: Float, valScale: Float) -> SIMD3<Float> {
+            var hsb = rgbToHSB(v)
+            hsb.x += hueShift
+            hsb.y = min(1, hsb.y + satAdd)
+            hsb.z = min(1, max(0, hsb.z * valScale))
+            return hsbToRGB(hsb)
+        }
+        return WorldPalette(
+            name: base.name + " " + roman(cycle + 1),
+            bg: shift(base.bg, satAdd: 0.02 * intens, valScale: 1 - 0.05 * intens),   // deepen
+            grid: shift(base.grid, satAdd: satBoost, valScale: 1),
+            accent: shift(base.accent, satAdd: satBoost, valScale: 1),
+            accent2: shift(base.accent2, satAdd: satBoost, valScale: 1))
+    }
+
+    /// RGB (0…1) → HSB (h in turns 0…1, s, b). Pure; used only by `evolvedPalette`.
+    static func rgbToHSB(_ c: SIMD3<Float>) -> SIMD3<Float> {
+        let r = c.x, g = c.y, b = c.z
+        let mx = max(r, max(g, b)), mn = min(r, min(g, b))
+        let d = mx - mn
+        var h: Float = 0
+        if d > 0 {
+            if mx == r { h = (g - b) / d; if h < 0 { h += 6 } }
+            else if mx == g { h = (b - r) / d + 2 }
+            else { h = (r - g) / d + 4 }
+            h /= 6
+        }
+        return SIMD3(h, mx == 0 ? 0 : d / mx, mx)
+    }
+
+    /// HSB (h in turns) → RGB (0…1). Pure inverse of `rgbToHSB`.
+    static func hsbToRGB(_ c: SIMD3<Float>) -> SIMD3<Float> {
+        let h = (c.x - floor(c.x)) * 6, s = c.y, v = c.z
+        let i = Int(h)
+        let f = h - Float(i)
+        let p = v * (1 - s), q = v * (1 - s * f), t = v * (1 - s * (1 - f))
+        switch i % 6 {
+        case 0: return SIMD3(v, t, p)
+        case 1: return SIMD3(q, v, p)
+        case 2: return SIMD3(p, v, t)
+        case 3: return SIMD3(p, q, v)
+        case 4: return SIMD3(t, p, v)
+        default: return SIMD3(v, p, q)
+        }
+    }
+
+    /// Compact Roman numeral for the world name suffix (cycle tier). Falls back to Arabic past
+    /// the table — a 30th cycle is theoretical, but the name must never break.
+    static func roman(_ n: Int) -> String {
+        let table: [(Int, String)] = [(10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I")]
+        guard n > 0, n < 40 else { return "\(n)" }
+        var v = n, s = ""
+        for (value, sym) in table { while v >= value { s += sym; v -= value } }
+        return s
+    }
+
     static func color(_ v: SIMD3<Float>) -> Color { Color(red: Double(v.x), green: Double(v.y), blue: Double(v.z)) }
     static func color(_ hex: UInt32) -> Color { color(rgb(hex)) }
 

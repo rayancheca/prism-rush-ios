@@ -46,7 +46,7 @@ struct MenuView: View {
     }
 
     private var furthestAccent: Color {
-        Theme.color(Theme.worlds[furthestStartableWorld % 3].accent)
+        Theme.color(Theme.evolvedPalette(ordinal: furthestStartableWorld).accent)
     }
 
     // MARK: zone A — status strip
@@ -143,7 +143,7 @@ struct MenuView: View {
     /// sanctioned spot of world color on the menu (uiux §1.3). Tap → Worlds.
     private var worldProgressChip: some View {
         let worldIdx = furthestStartableWorld   // deepest startable world (reach OR purchase), 0-based
-        let palette = Theme.worlds[worldIdx % 3]
+        let palette = Theme.evolvedPalette(ordinal: worldIdx)
         let checkpointM = Int(Double(worldIdx) * Tuning.worldLength)
         return Button(action: onLevels) {
             HStack(spacing: 5) {

@@ -127,7 +127,9 @@ final class SynthTests: XCTestCase {
     }
 
     func testMusicStepsAreSaneAcrossWorlds() {
-        for world in 0..<3 {
+        // Covers four evolution cycles (worlds 0…11): each cycle layers extra voices (v1.4.3),
+        // so every step must stay finite, non-silent, and below the clip ceiling.
+        for world in 0..<12 {
             for beat in 0..<8 {
                 let s = Synth.step(beat: beat, world: world)
                 XCTAssertEqual(s.count, Synth.stepFrames, "step length")
@@ -135,7 +137,20 @@ final class SynthTests: XCTestCase {
             }
             let bar = (0..<8).flatMap { Synth.step(beat: $0, world: world) }
             XCTAssertGreaterThan(peak(bar), 0.05, "world \(world) bar is silent")
-            XCTAssertLessThanOrEqual(peak(bar), 2.0)
+            XCTAssertLessThanOrEqual(peak(bar), 2.0, "world \(world) bar clips")
+        }
+    }
+
+    /// The cycle layering is actually audible: the same family one cycle deeper (world + 3) must
+    /// differ from cycle 0, proving deep worlds don't sound looped (v1.4.3). Cycle 0 (worlds
+    /// 0/1/2) keeps the original bed because every layer is guarded `layer >= 1`.
+    func testDeepCycleMusicLayersDifferFromBase() {
+        for world in 0..<3 {
+            for beat in 0..<8 {
+                let cycle0 = Synth.step(beat: beat, world: world)
+                let cycle1 = Synth.step(beat: beat, world: world + 3)   // same family, +1 cycle
+                XCTAssertNotEqual(cycle0, cycle1, "cycle 1 should add a layer vs cycle 0 (world \(world))")
+            }
         }
     }
 }

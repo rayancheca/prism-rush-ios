@@ -214,7 +214,7 @@ final class GameModel {
                 self.haptics.tick(dt, playing: self.core.mode == .play && !self.paused)
 
                 if self.paused {
-                    self.synth.musicPump(dt: dt, world: self.core.snapshot.worldTo)
+                    self.synth.musicPump(dt: dt, world: self.core.snapshot.worldOrdinal)
                     return   // freeze the simulation while paused; keep music + UI alive
                 }
 
@@ -234,7 +234,7 @@ final class GameModel {
                 self.core.advance(realDt: dt)
                 self.renderer.advanceVisuals(dt)
                 self.renderer.sync(self.core.snapshot)
-                self.synth.musicPump(dt: dt, world: self.core.snapshot.worldTo)
+                self.synth.musicPump(dt: dt, world: self.core.snapshot.worldOrdinal)
                 self.overTime = self.core.mode == .over ? self.overTime + dt : 0
                 let ready = self.core.mode == .over && self.overTime > 1.0
                 if self.canRestart != ready { self.canRestart = ready }
@@ -442,8 +442,10 @@ final class GameModel {
             synth.play(.deathSweep)
             synth.musicStop()
             recordRunResults()
-        case let .worldChanged(index, ordinal):
-            bannerName = Theme.worlds[index % 3].name
+        case let .worldChanged(_, ordinal):
+            // Evolved name carries the cycle tier ("Neon Metropolis II") so deep worlds read as
+            // distinct, not looped (v1.4.3).
+            bannerName = Theme.evolvedPalette(ordinal: ordinal).name
             bannerOrdinal = ordinal
             bannerID += 1
             synth.play(.worldSweep)
