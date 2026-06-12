@@ -139,8 +139,8 @@ struct ShopView: View {
             case .doubler:
                 kicker("PERMANENT PERK")
                 heroShell(title: "Double Coins", blurb: "Every run pays double. Forever.",
-                          preview: AnyView(doubleCoinsGlyph(size: 56)),
-                          pill: AnyView(goldPricePill(productID: Self.doublerID)),
+                          preview: doubleCoinsGlyph(size: 56),
+                          pill: goldPricePill(productID: Self.doublerID),
                           tag: "ONE PURCHASE · EVERY RUN",
                           a11y: "Double Coins. Every run pays double, forever. Buy for \(iap.displayPrice(Self.doublerID)).") {
                     buy(Self.doublerID)
@@ -148,8 +148,8 @@ struct ShopView: View {
             case .starter:
                 kicker("FIRST PURCHASE OFFER")
                 heroShell(title: "Starter Bundle", blurb: starterBlurb,
-                          preview: AnyView(coinStack(2, size: 26)),
-                          pill: AnyView(goldPricePill(productID: IAPCatalog.starterID)),
+                          preview: coinStack(2, size: 26),
+                          pill: goldPricePill(productID: IAPCatalog.starterID),
                           tag: "FIRST PURCHASE",
                           a11y: "Starter Bundle. \(starterBlurb) Buy for \(iap.displayPrice(IAPCatalog.starterID)).") {
                     buy(IAPCatalog.starterID)
@@ -165,8 +165,8 @@ struct ShopView: View {
         switch id {
         case "coins.medium":
             heroShell(title: "Bag of Coins", blurb: "7,000 coins — the collector's top-up.",
-                      preview: AnyView(coinStack(3, size: 26)),
-                      pill: AnyView(goldPricePill(productID: Self.mediumPackID)),
+                      preview: coinStack(3, size: 26),
+                      pill: goldPricePill(productID: Self.mediumPackID),
                       tag: "TODAY'S FEATURE",
                       a11y: "Today's feature: Bag of Coins, 7,000 coins.") {
                 buy(Self.mediumPackID)
@@ -176,10 +176,10 @@ struct ShopView: View {
             // tease as the select grid, never an owned-bright storefront lie (AUDIT D6-5).
             let skin = SkinCatalog.skin("aurora")
             heroShell(title: skin.name, blurb: skin.flavor,
-                      preview: AnyView(AnimatedCharacterSwatch(
+                      preview: AnimatedCharacterSwatch(
                           skin: skin, size: 52,
-                          silhouette: !ProfileStore.shared.profile.ownedSkins.contains(skin.id))),
-                      pill: AnyView(goldPricePill(productID: Self.auroraID)),
+                          silhouette: !ProfileStore.shared.profile.ownedSkins.contains(skin.id)),
+                      pill: goldPricePill(productID: Self.auroraID),
                       tag: "TODAY'S FEATURE",
                       a11y: "Today's feature: \(skin.name), premium character.") {
                 buy(Self.auroraID)
@@ -190,10 +190,10 @@ struct ShopView: View {
             // Locked tease render, consistent with the select grid it routes to (AUDIT D6-5).
             let skin = SkinCatalog.skin(id)
             heroShell(title: skin.name, blurb: skin.flavor,
-                      preview: AnyView(AnimatedCharacterSwatch(
+                      preview: AnimatedCharacterSwatch(
                           skin: skin, size: 52,
-                          silhouette: !ProfileStore.shared.profile.ownedSkins.contains(skin.id))),
-                      pill: AnyView(coinPricePill(skin.cost)),
+                          silhouette: !ProfileStore.shared.profile.ownedSkins.contains(skin.id)),
+                      pill: coinPricePill(skin.cost),
                       tag: "TODAY'S FEATURE",
                       a11y: "Today's feature: \(skin.name), \(skin.cost) coins. Opens characters to preview.") {
                 model.open(.characters, focusSkin: skin.id)   // stage THAT skin (uiux §4.1)
@@ -204,8 +204,9 @@ struct ShopView: View {
     /// Shared hero chrome: 120 pt spotlight, preview left, copy + price pill right, corner tag.
     /// The pill carries the screen's gold/claim gradient (money language — gradient law: no new
     /// gradient family on this screen).
-    private func heroShell(title: String, blurb: String, preview: AnyView, pill: AnyView,
-                           tag: String, a11y: String, action: @escaping () -> Void) -> some View {
+    private func heroShell<Preview: View, Pill: View>(
+        title: String, blurb: String, preview: Preview, pill: Pill,
+        tag: String, a11y: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: Theme.Space.m) {
                 preview.frame(width: 72)

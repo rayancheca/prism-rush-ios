@@ -503,7 +503,12 @@ final class GameCore {
         laneIndex = 1; px = Tuning.laneX[1]
         jumpY = 0; vy = 0; grounded = true; slideT = 0; sy = 1
         shield = true
-        boostT = 0; flowStreak = 0              // a continue restarts clean — no leftover boost/flow
+        // A continue resets only what could bank *free* momentum: the boost timer and the flow
+        // streak. Earned consumable timers (magnet / doubler / chrono) deliberately carry over —
+        // the player collected them and a paid revive should never confiscate them (decree 5:
+        // advertised bonuses are always delivered). `magnetT`/`doublerT`/`chronoT` are intentionally
+        // left running.
+        boostT = 0; flowStreak = 0
         speed = max(speed, Tuning.speedStart)   // paid continues resume instantly, not from the decel floor
         activeObstacles.removeAll()
         activeGems.removeAll()

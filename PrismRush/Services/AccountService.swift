@@ -14,9 +14,21 @@ final class AccountService {
     private enum Key { static let id = "pr.appleUserID"; static let name = "pr.appleName" }
 
     init() {
-        userID = UserDefaults.standard.string(forKey: Key.id)
-        displayName = UserDefaults.standard.string(forKey: Key.name)
+        userID = Self.loadMigrating(Key.id)
+        displayName = Self.loadMigrating(Key.name)
         refreshCredentialState()
+    }
+
+    /// Read from the Keychain, transparently migrating any value left in the legacy `UserDefaults`
+    /// home (pre-v1.4.3) so existing installs stay signed in. The old copy is then removed.
+    private static func loadMigrating(_ key: String) -> String? {
+        if let value = Keychain.get(key) { return value }
+        if let legacy = UserDefaults.standard.string(forKey: key) {
+            Keychain.set(legacy, for: key)
+            UserDefaults.standard.removeObject(forKey: key)
+            return legacy
+        }
+        return nil
     }
 
     var isSignedIn: Bool { userID != nil }
@@ -59,10 +71,10 @@ final class AccountService {
                 return
             }
             userID = credential.user
-            UserDefaults.standard.set(credential.user, forKey: Key.id)
+            Keychain.set(credential.user, for: Key.id)
             if let given = credential.fullName?.givenName {
                 displayName = given
-                UserDefaults.standard.set(given, forKey: Key.name)
+                Keychain.set(given, for: Key.name)
             }
         }
     }
@@ -70,7 +82,7 @@ final class AccountService {
     func signOut() {
         userID = nil
         displayName = nil
-        UserDefaults.standard.removeObject(forKey: Key.id)
-        UserDefaults.standard.removeObject(forKey: Key.name)
+        Keychain.delete(Key.id)
+        Keychain.delete(Key.name)
     }
 }
