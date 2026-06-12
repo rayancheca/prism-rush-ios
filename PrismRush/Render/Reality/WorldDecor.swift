@@ -207,6 +207,14 @@ final class WorldSky {
     private let sandsRoot = Entity()
     private let famRoots: [Entity]
 
+    // Per-cycle re-tint registry (v1.4.3): every sky element pairs with a recipe that derives its
+    // color from a `WorldPalette`. At each world boundary `restyle` recolors the active family
+    // toward `Theme.evolvedPalette(ordinal:)`, so deep cycles' set pieces hue-shift in lockstep
+    // with the playfield (the renderer backdrop already evolves) instead of staying base-family
+    // cyan against a rotated sky. Built once, applied only at restyle — never per frame.
+    private typealias TintRecipe = (entity: ModelEntity, color: (WorldPalette) -> UIColor)
+    private var famTints: [[TintRecipe]] = [[], [], []]
+
     private var lastWorld = -1
     private var lastRM = false
     private var swapAt: Double = -10        // entrance ease start (the new sky rises ~1 unit in)
@@ -354,14 +362,26 @@ final class WorldSky {
     private func restyle(world: Int) {
         // Deterministic per ABSOLUTE world index: every visit to world n looks identical across
         // runs, every cycle varies, and the run RNG is never consumed (rule 2 safe).
+        let fam = ((world % 3) + 3) % 3
+        retint(fam, Theme.evolvedPalette(ordinal: world))   // v1.4.3: hue-shift set pieces per cycle
         var r = SplitMix64(seed: 0x5B1E_55ED &+ UInt64(bitPattern: Int64(world)) &* 0x9E37_79B9_7F4A_7C15)
         let cycle = world / 3
-        switch world % 3 {
+        switch fam {
         case 0:  restyleMetropolis(&r, cycle: cycle)
         case 1:  restyleCaverns(&r, cycle: cycle)
         default: restyleSands(&r, cycle: cycle)
         }
-        famRoots[world % 3].position.y = 0
+        famRoots[fam].position.y = 0
+    }
+
+    /// Register a sky element so `restyle` can recolor it toward the cycle's evolved palette.
+    private func register(_ e: ModelEntity, fam: Int, _ recipe: @escaping (WorldPalette) -> UIColor) {
+        famTints[fam].append((e, recipe))
+    }
+
+    /// Recolor every registered element of `fam` toward `pal` — runs only at a world boundary.
+    private func retint(_ fam: Int, _ pal: WorldPalette) {
+        for t in famTints[fam] { t.entity.model?.materials = [UnlitMaterial(color: t.color(pal))] }
     }
 
     private func restyleMetropolis(_ r: inout SplitMix64, cycle: Int) {
@@ -380,7 +400,9 @@ final class WorldSky {
         for (b, bld) in farBuildings.enumerated() where abs(farX[b] + bld.x / 2 + farCardX) < 15 {
             eligibleFar.append(b)
         }
-        windowCount = min(Self.capWindows, 16 + 3 * min(cycle, 2))
+        // Counts ramp with the cycle to the pool cap; past the cap, deep worlds keep diverging via
+        // the per-cycle re-tint (`retint`) rather than ever-denser geometry (v1.4.3).
+        windowCount = min(Self.capWindows, 16 + 3 * cycle)
         for (i, w) in windows.enumerated() {
             guard i < windowCount else { w.isEnabled = false; continue }
             let far = i < Self.windowsOnFar
@@ -403,7 +425,7 @@ final class WorldSky {
             windowSpeed[i] = Float(r.range(0.5, 1.4))
             w.isEnabled = true
         }
-        blimpCount = min(Self.capBlimps, 1 + min(cycle, 1))
+        blimpCount = min(Self.capBlimps, 1 + cycle)          // distinction past the cap comes from hue
         for (i, g) in blimps.enumerated() {
             g.isEnabled = i < blimpCount
             blimpBaseX[i] = Float(r.range(-11, 11))
@@ -415,7 +437,7 @@ final class WorldSky {
             // The fin trails: it's built at −x, so flip the hull around when drifting toward −x.
             g.orientation = simd_quatf(angle: blimpSpeed[i] > 0 ? 0 : .pi, axis: SIMD3<Float>(0, 1, 0))
         }
-        beamCount = min(Self.capBeams, 1 + min(cycle, 1))
+        beamCount = min(Self.capBeams, 1 + cycle)
         for (i, b) in beams.enumerated() {
             guard i < beamCount else { b.isEnabled = false; continue }
             // Rooftop anchor — beam 0 from the left half of the visible street, beam 1 right.
@@ -432,7 +454,7 @@ final class WorldSky {
 
     private func restyleCaverns(_ r: inout SplitMix64, cycle: Int) {
         ceiling.position.x = Float(r.range(-5, 5))
-        stalactiteCount = min(Self.capStalactites, 9 + 2 * min(cycle, 2))
+        stalactiteCount = min(Self.capStalactites, 9 + 2 * cycle)
         for (i, s) in stalactites.enumerated() {
             guard i < stalactiteCount else { s.isEnabled = false; continue }
             // Evenly spaced with jitter so the fringe reads as one ceiling, never a clump.
@@ -443,7 +465,7 @@ final class WorldSky {
             s.position = SIMD3<Float>(x, 14 - len / 2, Float(r.range(-52, -42)))
             s.isEnabled = true
         }
-        clusterCount = min(Self.capClusters, 3 + min(cycle, 1))
+        clusterCount = min(Self.capClusters, 3 + cycle)
         for (i, g) in clusters.enumerated() {
             g.isEnabled = i < clusterCount
             let side: Float = i % 2 == 0 ? -1 : 1
@@ -454,7 +476,7 @@ final class WorldSky {
             clusterSpin[i] = Float(r.range(0.15, 0.35))
             clusterPhase[i] = Float(r.range(0, 2 * .pi))
         }
-        restyleMotes(&caveMotes, &r, count: 10 + 4 * min(cycle, 2),
+        restyleMotes(&caveMotes, &r, count: 10 + 4 * cycle,
                      x: (-24, 24), y0: (1, 4), span: (8, 13), rise: (0.3, 0.7),
                      z: (-56, -48), scale: (0.08, 0.15))
         for (i, a) in auroras.enumerated() {
@@ -475,7 +497,7 @@ final class WorldSky {
         sunHalo1.scale = SIMD3<Float>(repeating: sr * 1.6)
         sunHalo2.position = SIMD3<Float>(sx, sy, -62.3)
         sunHalo2.scale = SIMD3<Float>(repeating: sr * 2.35)
-        planetCount = min(Self.capPlanets, 2 + min(cycle, 1))
+        planetCount = min(Self.capPlanets, 2 + cycle)
         for (i, g) in planets.enumerated() {
             g.isEnabled = i < planetCount
             let fi = Float(i)
@@ -495,7 +517,7 @@ final class WorldSky {
             d.position.x = Float(r.range(-7, 7))
             d.scale = SIMD3<Float>(1, Float(r.range(0.9, 1.15)) * (i == 1 ? 1 : 0.85), 1)
         }
-        restyleMotes(&sandMotes, &r, count: 8 + 3 * min(cycle, 2),
+        restyleMotes(&sandMotes, &r, count: 8 + 3 * cycle,
                      x: (-20, 20), y0: (0.5, 3), span: (4, 7), rise: (0.2, 0.45),
                      z: (-52, -47), scale: (0.10, 0.18))
     }
@@ -548,12 +570,15 @@ final class WorldSky {
         nearCard.position = SIMD3<Float>(0, 0, -50.5)
         metroRoot.addChild(farCard)
         metroRoot.addChild(nearCard)
+        register(farCard, fam: 0) { Self.blend($0, $0.accent, 0.12) }
+        register(nearCard, fam: 0) { Self.blend($0, $0.accent, 0.22) }
 
         // Windows + beams ride their card so a restyle x-shift moves the whole street.
         for i in 0..<Self.capWindows {
             let w = ModelEntity(mesh: disc, materials: [matWindow])
             w.isEnabled = false
             (i < Self.windowsOnFar ? farCard : nearCard).addChild(w)
+            register(w, fam: 0) { Self.lift($0.accent2, 0.25) }
             windows.append(w)
         }
         windowPhase = .init(repeating: 0, count: Self.capWindows)
@@ -567,6 +592,8 @@ final class WorldSky {
             fin.position = SIMD3<Float>(-1.8, 0.4, 0)
             g.addChild(body)
             g.addChild(fin)
+            register(body, fam: 0) { Self.blend($0, $0.accent2, 0.40) }
+            register(fin, fam: 0) { Self.blend($0, $0.accent, 0.45) }
             g.isEnabled = false
             metroRoot.addChild(g)
             blimps.append(g)
@@ -581,6 +608,7 @@ final class WorldSky {
             let b = ModelEntity(mesh: beamMesh, materials: [matBeam])
             b.isEnabled = false
             nearCard.addChild(b)
+            register(b, fam: 0) { Self.blend($0, $0.accent, 0.30) }
             beams.append(b)
         }
         beamLean = .init(repeating: 0, count: Self.capBeams)
@@ -602,6 +630,7 @@ final class WorldSky {
         ceiling = ModelEntity(mesh: .generatePlane(width: 120, height: 24), materials: [matCeiling])
         ceiling.position = SIMD3<Float>(0, 25, -49)
         cavernRoot.addChild(ceiling)
+        register(ceiling, fam: 1) { Self.blend($0, $0.accent, 0.15) }
 
         let cone = MeshResource.generateCone(height: 1, radius: 0.30)
         for _ in 0..<Self.capStalactites {
@@ -609,6 +638,7 @@ final class WorldSky {
             s.orientation = simd_quatf(angle: .pi, axis: SIMD3<Float>(0, 0, 1))   // apex DOWN
             s.isEnabled = false
             cavernRoot.addChild(s)
+            register(s, fam: 1) { Self.blend($0, $0.accent, 0.26) }
             stalactites.append(s)
         }
         var r = SplitMix64(seed: 0xCA4E_0001)   // fixed cosmetic seed
@@ -624,6 +654,8 @@ final class WorldSky {
                 let c = ModelEntity(mesh: shard, materials: [k == 1 ? matCrystalB : matCrystalA])
                 c.position = o
                 c.scale = SIMD3<Float>(repeating: Float(r.range(0.5, 1.0)))
+                if k == 1 { register(c, fam: 1) { Self.blend($0, $0.accent2, 0.45) } }
+                else { register(c, fam: 1) { Self.blend($0, $0.accent, 0.50) } }
                 g.addChild(c)
             }
             g.isEnabled = false
@@ -634,14 +666,17 @@ final class WorldSky {
         clusterPhase = .init(repeating: 0, count: Self.capClusters)
         clusterBaseY = .init(repeating: 0, count: Self.capClusters)
         caveMotes = makeMotes(cap: Self.capCaveMotes, mesh: disc, material: matMote, parent: cavernRoot)
+        for e in caveMotes.ents { register(e, fam: 1) { Self.blend($0, $0.accent2, 0.55) } }
         let ribbonA = ModelEntity(
             mesh: ProceduralMesh.ribbon(width: 110, thickness: 1.1, amplitude: 1.3, waves: 2.2, phase: 0.4),
             materials: [matAuroraA])
         ribbonA.position = SIMD3<Float>(0, 6.2, -60.4)
+        register(ribbonA, fam: 1) { Self.blend($0, $0.accent2, 0.30) }
         let ribbonB = ModelEntity(
             mesh: ProceduralMesh.ribbon(width: 110, thickness: 0.8, amplitude: 0.9, waves: 3.1, phase: 2.2),
             materials: [matAuroraB])
         ribbonB.position = SIMD3<Float>(0, 7.6, -59.6)
+        register(ribbonB, fam: 1) { Self.blend($0, $0.accent, 0.24) }
         for a in [ribbonA, ribbonB] {
             cavernRoot.addChild(a)
             auroras.append(a)
@@ -667,6 +702,9 @@ final class WorldSky {
         sunHalo1 = ModelEntity(mesh: disc, materials: [matHalo1])
         sunHalo2 = ModelEntity(mesh: disc, materials: [matHalo2])
         for s in [sunHalo2, sunHalo1, sunCore] { sandsRoot.addChild(s!) }
+        register(sunCore, fam: 2) { Self.lift($0.accent2, 0.45) }
+        register(sunHalo1, fam: 2) { Self.blend($0, $0.accent2, 0.34) }
+        register(sunHalo2, fam: 2) { Self.blend($0, $0.accent, 0.18) }
 
         // Ringed planets: unit sphere + flattened tilted torus, scaled as one group (restyle
         // re-tilts each ring via `planetRings`).
@@ -676,6 +714,12 @@ final class WorldSky {
             let body = ModelEntity(mesh: .generateSphere(radius: 1), materials: [planetMats[i % 3]])
             let ring = ModelEntity(mesh: ringMesh, materials: [matRing])
             ring.scale = SIMD3<Float>(1, 1, 0.25)   // flatten the tube along the hole axis
+            switch i % 3 {
+            case 0:  register(body, fam: 2) { Self.blend($0, $0.accent, 0.42) }
+            case 1:  register(body, fam: 2) { Self.blend($0, $0.accent, 0.30) }
+            default: register(body, fam: 2) { Self.blend($0, $0.accent2, 0.34) }
+            }
+            register(ring, fam: 2) { Self.blend($0, $0.accent2, 0.55) }
             g.addChild(body)
             g.addChild(ring)
             g.isEnabled = false
@@ -701,14 +745,17 @@ final class WorldSky {
         let duneFar = ModelEntity(mesh: ProceduralMesh.ridge(width: 110, heights: crests(base: 1.7, a1: 1.2, a2: 0.6)),
                                   materials: [matDuneFar])
         duneFar.position = SIMD3<Float>(0, 0, -59)
+        register(duneFar, fam: 2) { Self.blend($0, $0.accent, 0.20) }
         let duneNear = ModelEntity(mesh: ProceduralMesh.ridge(width: 110, heights: crests(base: 2.5, a1: 1.9, a2: 0.8)),
                                    materials: [matDuneNear])
         duneNear.position = SIMD3<Float>(0, 0, -52.5)
+        register(duneNear, fam: 2) { Self.blend($0, $0.accent, 0.30) }
         for d in [duneFar, duneNear] {
             sandsRoot.addChild(d)
             dunes.append(d)
         }
         sandMotes = makeMotes(cap: Self.capSandMotes, mesh: disc, material: matMote, parent: sandsRoot)
+        for e in sandMotes.ents { register(e, fam: 2) { Self.blend($0, $0.accent2, 0.50) } }
     }
 
     private func makeMotes(cap: Int, mesh: MeshResource, material: UnlitMaterial, parent: Entity) -> Motes {
