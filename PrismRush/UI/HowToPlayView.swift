@@ -29,7 +29,7 @@ struct HowToPlayView: View {
                     Spacer()
                     Button(action: onClose) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 15, weight: .bold))
+                            .scaledFont(15, weight: .bold, design: .default)
                             .foregroundStyle(.white.opacity(0.85))
                             .frame(width: 38, height: 38)
                             .background(.ultraThinMaterial, in: Circle())
@@ -57,7 +57,7 @@ struct HowToPlayView: View {
                 if page < Self.lastPage { withAnimation { page += 1 } } else { (onDone ?? onClose)() }
             } label: {
                 Text(page < Self.lastPage ? "NEXT" : doneLabel)
-                    .font(.system(size: 17, weight: .heavy, design: .rounded))
+                    .scaledFont(17, weight: .heavy)
                     .tracking(2)
                     .foregroundStyle(.black)
                     .frame(maxWidth: .infinity)
@@ -123,7 +123,7 @@ struct HowToPlayView: View {
                 .accessibilityHidden(true)
 
             Text("Chain gems without missing to climb the streak ladder.")
-                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .scaledFont(14, weight: .medium)
                 .foregroundStyle(.white.opacity(0.85))
                 .multilineTextAlignment(.center)
 
@@ -131,7 +131,7 @@ struct HowToPlayView: View {
             HStack(spacing: 6) {
                 ForEach(1...Tuning.multCap, id: \.self) { mult in
                     Text("×\(mult)")
-                        .font(.system(size: 13, weight: .heavy, design: .rounded))
+                        .scaledFont(13, weight: .heavy)
                         .foregroundStyle(mult == Tuning.multCap ? .black : .white.opacity(0.85))
                         .padding(.horizontal, 10).padding(.vertical, 6)
                         .background(
@@ -228,7 +228,7 @@ struct HowToPlayView: View {
     private func card(title: String, accent: UInt32, @ViewBuilder content: () -> some View) -> some View {
         VStack(spacing: 12) {
             Text(title)
-                .font(.system(size: 22, weight: .black, design: .rounded))
+                .scaledFont(22, weight: .black)
                 .tracking(3)
                 .foregroundStyle(Theme.color(accent))
                 .shadow(color: Theme.color(accent).opacity(0.5), radius: 12)
@@ -245,16 +245,16 @@ struct HowToPlayView: View {
     private func instructionRow(_ symbol: String, _ title: String, _ detail: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 16, weight: .bold))
+                .scaledFont(16, weight: .bold, design: .default)
                 .foregroundStyle(.white)
                 .frame(width: 34, height: 34)
                 .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: 13, weight: .heavy, design: .rounded)).tracking(1)
+                    .scaledFont(13, weight: .heavy).tracking(1)
                     .foregroundStyle(.white)
                 Text(detail)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .scaledFont(12, weight: .medium)
                     .foregroundStyle(.white.opacity(0.6))
             }
             Spacer(minLength: 0)
@@ -265,17 +265,17 @@ struct HowToPlayView: View {
     private func powerRow(_ hex: UInt32, _ symbol: String, _ title: String, _ detail: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .bold))
+                .scaledFont(15, weight: .bold, design: .default)
                 .foregroundStyle(Theme.color(hex))
                 .frame(width: 34, height: 34)
                 .background(Theme.color(hex).opacity(0.14), in: Circle())
                 .overlay(Circle().strokeBorder(Theme.color(hex).opacity(0.5)))
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: 13, weight: .heavy, design: .rounded)).tracking(1)
+                    .scaledFont(13, weight: .heavy).tracking(1)
                     .foregroundStyle(Theme.color(hex))
                 Text(detail)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .scaledFont(12, weight: .medium)
                     .foregroundStyle(.white.opacity(0.7))
             }
             Spacer(minLength: 0)

@@ -41,7 +41,7 @@ struct ProfileView: View {
                     .stroke(Theme.Role.interactive, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                 Text("\(level)")
-                    .font(.system(size: 26, weight: .heavy, design: .rounded))
+                    .scaledFont(26, weight: .heavy)
                     .monospacedDigit()
                     .foregroundStyle(Theme.Role.textPrimary)
             }
@@ -75,7 +75,7 @@ struct ProfileView: View {
     private var settingsGear: some View {
         Button { model.open(.settings) } label: {
             Image(systemName: "gearshape.fill")
-                .font(.system(size: 15, weight: .semibold))
+                .scaledFont(15, weight: .semibold, design: .default)
                 .foregroundStyle(.white.opacity(0.7))
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
@@ -116,14 +116,14 @@ struct ProfileView: View {
             if account.isSignedIn {
                 HStack(spacing: 12) {
                     Image(systemName: "person.crop.circle.fill")
-                        .font(.system(size: 34)).foregroundStyle(Theme.Role.interactive)
+                        .scaledFont(34, design: .default).foregroundStyle(Theme.Role.interactive)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(account.displayName ?? "Signed in").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
-                        Text("Saves sync via iCloud").font(.system(size: 12, design: .rounded)).foregroundStyle(.white.opacity(0.6))
+                        Text(account.displayName ?? "Signed in").scaledFont(16, weight: .bold).foregroundStyle(.white)
+                        Text("Saves sync via iCloud").scaledFont(12).foregroundStyle(.white.opacity(0.6))
                     }
                     Spacer()
                     Button("Sign out") { account.signOut() }
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .scaledFont(13, weight: .semibold)
                         .foregroundStyle(.white.opacity(0.7))
                 }
             } else {
@@ -137,7 +137,7 @@ struct ProfileView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                 if let error = account.lastError {
                     Text(error)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .scaledFont(12, weight: .medium)
                         .foregroundStyle(Theme.Role.danger)
                         .multilineTextAlignment(.center)
                 }
@@ -164,10 +164,10 @@ struct ProfileView: View {
     private var firstRunCard: some View {
         VStack(spacing: 10) {
             Image(systemName: "sparkles")
-                .font(.system(size: 26))
+                .scaledFont(26, design: .default)
                 .foregroundStyle(Theme.Role.reward)
             Text("Your story starts with one run.")
-                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .scaledFont(16, weight: .bold)
                 .foregroundStyle(.white)
             Text("Stats, streaks and worlds will fill in here the moment you hit PLAY.")
                 .font(.system(size: copySize, weight: .medium, design: .rounded))
@@ -231,8 +231,8 @@ struct ProfileView: View {
 
     private func statTile(_ label: String, _ value: String) -> some View {
         VStack(spacing: 4) {
-            Text(value).font(.system(size: 19, weight: .heavy, design: .rounded)).monospacedDigit().foregroundStyle(.white)
-            Text(label).font(.system(size: 10, weight: .semibold, design: .rounded)).tracking(1).foregroundStyle(.white.opacity(0.55))
+            Text(value).scaledFont(19, weight: .heavy).monospacedDigit().foregroundStyle(.white)
+            Text(label).scaledFont(10, weight: .semibold).tracking(1).foregroundStyle(.white.opacity(0.55))
         }
         .frame(maxWidth: .infinity).padding(.vertical, 16)
         .neonCard()
@@ -253,15 +253,15 @@ struct ProfileView: View {
             // Inline signed-out state instead of a row that silently does nothing.
             HStack(spacing: 12) {
                 Image(systemName: "trophy")
-                    .font(.system(size: 17, weight: .semibold))
+                    .scaledFont(17, weight: .semibold, design: .default)
                     .foregroundStyle(.white.opacity(0.4))
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Leaderboards need Game Center")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .scaledFont(14, weight: .semibold)
                         .foregroundStyle(.white.opacity(0.8))
                     Text("Sign in from the Settings app, then relaunch.")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .scaledFont(12, weight: .medium)
                         .foregroundStyle(.white.opacity(0.5))
                 }
                 Spacer()
@@ -274,10 +274,10 @@ struct ProfileView: View {
 
     private func row(_ symbol: String, _ title: String, _ tint: Color) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(tint).frame(width: 24)
-            Text(title).font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundStyle(.white)
+            Image(systemName: symbol).scaledFont(17, weight: .semibold, design: .default).foregroundStyle(tint).frame(width: 24)
+            Text(title).scaledFont(15, weight: .semibold).foregroundStyle(.white)
             Spacer()
-            Image(systemName: "chevron.right").font(.system(size: 13, weight: .bold)).foregroundStyle(.white.opacity(0.4))
+            Image(systemName: "chevron.right").scaledFont(13, weight: .bold, design: .default).foregroundStyle(.white.opacity(0.4))
         }
         .padding(16)
         .neonCard()

@@ -206,6 +206,26 @@ private struct TypeScaleModifier: ViewModifier {
     }
 }
 
+/// Dynamic-Type-aware system font that preserves an explicit weight/design (unlike `typeScale`,
+/// which bundles a token's weight). The point size scales with the user's text size via
+/// `@ScaledMetric`, so screens that need a bespoke size/weight — the tutorial, pause menu, profile
+/// — still respect accessibility text sizes instead of hardcoding `.system(size:)` (v1.4.3, M3).
+private struct ScaledFontModifier: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+    let weight: Font.Weight
+    let design: Font.Design
+
+    init(size: CGFloat, weight: Font.Weight, design: Font.Design, relativeTo: Font.TextStyle) {
+        _size = ScaledMetric(wrappedValue: size, relativeTo: relativeTo)
+        self.weight = weight
+        self.design = design
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: weight, design: design))
+    }
+}
+
 /// The ONE card treatment (uiux §2.4): `Role.surface` fill + token radius + hairline stroke,
 /// no shadow — depth comes from the two surface levels. Every card/cell/row adopts it.
 struct NeonCard: ViewModifier {
@@ -223,6 +243,12 @@ struct NeonCard: ViewModifier {
 extension View {
     /// Apply a `Theme.TypeScale` token (font + tracking, Dynamic Type-backed).
     func typeScale(_ token: Theme.TypeScale) -> some View { modifier(TypeScaleModifier(token: token)) }
+    /// Dynamic-Type-aware `.system` font with an explicit weight/design (see `ScaledFontModifier`).
+    /// Use when a surface needs a bespoke size/weight outside the six `TypeScale` tokens.
+    func scaledFont(_ size: CGFloat, weight: Font.Weight = .regular,
+                    design: Font.Design = .rounded, relativeTo: Font.TextStyle = .body) -> some View {
+        modifier(ScaledFontModifier(size: size, weight: weight, design: design, relativeTo: relativeTo))
+    }
     /// Apply the shared `NeonCard` surface treatment.
     func neonCard(radius: CGFloat = Theme.Radius.m, raised: Bool = false) -> some View {
         modifier(NeonCard(radius: radius, raised: raised))
