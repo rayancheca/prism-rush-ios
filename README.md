@@ -20,8 +20,10 @@ Built with **Swift 6 · SwiftUI · RealityKit**, ground-up by [Claude Code](http
 Prism Rush is a native port of a shipped Three.js web prototype, rebuilt as a real iOS game. A tiny
 glowing slime rides a three-lane track that accelerates the longer you survive. Collect gems to build a
 streak multiplier (×1 → ×5), squeeze past tall blocks for **CLOSE** bonuses, slide under bars for
-**SLICK** ones, and grab Shield / Magnet pickups. Three worlds — Neon Metropolis, Crystal Caverns,
-Solar Sands — crossfade around you every 800 m, then loop back harder.
+**SLICK** ones, and grab Shield / Magnet pickups. Three world families — Neon Metropolis, Crystal
+Caverns, Solar Sands — crossfade around you every 800 m, and each successive cycle visibly
+*evolves* them: the palette hue-rotates, the atmosphere deepens, and the synthwave bed thickens, so
+world 7 reads as a hotter, denser take on its family rather than the same art again.
 
 The interesting part isn't the game; it's how it's built. The entire simulation is a **pure,
 deterministic, renderer-agnostic Swift core** driven by a fixed 1/120 s timestep. Because a single seed
@@ -49,8 +51,10 @@ collisions.
 </tr>
 </table>
 
-> The three worlds **crossfade around the player** every 800 m, then loop with rising difficulty —
-> each with its own palette, obstacle tints, and decor silhouette, all from the same code.
+> The three world families **crossfade around the player** every 800 m and **evolve each cycle**
+> (hue rotation, deepening atmosphere, denser sky, thicker music — a pure function of the absolute
+> world ordinal) — each with its own palette, obstacle tints, and decor silhouette, all from the
+> same code.
 
 ---
 
@@ -232,6 +236,25 @@ strand the copy).
 **Verification:** `./Tools/ci.sh` **158/158** (147 unit + 11 XCUITest) · evidence in
 [`reports/shots/v14/`](reports/shots/v14/), `v141/`, `v142/` (incl. one autoplay run crossing the
 800 m crossfade with Prism's shimmer — never the world accent — on both sides).
+
+---
+
+## v1.4.3 — the worlds evolve (code-review §20)
+
+A strict Opus 4.8 code review ([`CODE_REVIEW.md`](CODE_REVIEW.md), 8.7/10) flagged that the 12-rung
+ladder reused three palette families on a `world % 3` loop — so worlds 6/9/12 were the same three
+reshuffled. They now **evolve with the absolute world ordinal**: `Theme.evolvedPalette(ordinal:)` is
+a pure function that rotates the hue ~49° per cycle (wrapping, so it's safe for unbounded runs),
+intensifies saturation/contrast to a cap, deepens the background for atmosphere, and tags the world
+name with its cycle tier ("Neon Metropolis II"). Everything visible follows it — the playfield
+(grid, lanes, obstacles, backdrop), the side decor, the far-background `WorldSky` set pieces
+(re-tinted at each world boundary), every honest preview (menu, worlds tab, level cards), and the
+synthwave bed (extra voices layer in per cycle). It is **purely visual/audio**: no change to the
+deterministic core, no spawn RNG consumed, `DailyChallenge.layoutVersion` untouched — so the
+200-seed solvability bot stays green and every seed plays byte-identically.
+[`reports/shots/v143/`](reports/shots/v143/) shows the Caverns family at worlds 1 → 4 → 7 going
+teal → blue → violet/maroon. The review's doc-honesty fixes (test counts, IAP count, qualified asset
+/perf claims) and superseded-report banners landed alongside.
 
 ---
 
