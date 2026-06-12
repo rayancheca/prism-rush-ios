@@ -1,7 +1,34 @@
 # PRISM RUSH — Build State
 
 > Single source of truth for session resumability. On any fresh session: read this first, then continue.
-> Last updated: end of **v1.4 (worlds + tease + missions board)**.
+> Last updated: end of **v1.4.2 (owner-decree compliance — Prism identity fix + audit waves)**.
+
+## v1.4.2 — owner decrees enforced (AUDIT_intent fix fleet, 2026-06-11)
+The six owner decrees landed in `CLAUDE.md` (product law, overriding every design doc) together
+with the read-only `reports/AUDIT_intent.md` sweep (`bf75acd`); four serialized fix waves then
+cleared it:
+
+| Commit | Scope |
+|---|---|
+| `7349a19` | **Decree 1 — the 7-surface chameleon kill.** Prism never follows the world: bodyHex-0 sentinel retired (authored `0x00F5FF`/`0xFF2BD6` + `isPrismatic`), pure `SkinCatalog.prismaticColor` 8 s shimmer shared by previews AND rig, `followsWorld` computed deleted, renderer world-tint branches + all 7 world-accent FX fallbacks deleted (`skinTrailColor` non-optional; `trailHex nil` repurposed = shimmer hue), legacy 3-arg `applySkin` shim + dead `struct CharacterSwatch` deleted, SkinCatalogTests pins flipped in the same commit |
+| `c173f37` | Wave 2A — preview/rig fidelity (D2-1/2/3/5 + D2-4): antenna stem = `antennaHex` both sides, per-skin blink range in-run, sway = preview's `bobSpeed·2π·0.8`, shared `CharacterProportions` contract (+ `octahedron(rx:ry:rz:)`, CharacterParityTests), trail wisp in every swatch (Aurora's two-tone sell finally visible at the buy moment) |
+| `37ea7f2` | Wave 2B — state honesty (D3-1/3-3/6-5): canonical `ProfileStore.equippedSkinID` resolver + self-heal in `sanitized()`/`merged()` (unowned-selection contradiction can't persist), menu chip + ambient tint → `highestStartableWorld` (purchases show on the hub; display only), shop locked-skins render the same tease as select |
+| `0bf0094` | Wave 2C — first-run flow + HUD calm (D6-1/2/3/4/6/7, D3-2, D5-2/3, D2-7): `routeRun()` tutorial gate covers ALL run entrances, HowToPlay X never force-starts a run (info mode = GOT IT), new WORLDS card + decree-1 reassurance, DAILY RUSH "PLAY · ENDS H:MM", challenge-death fair-track caption, CLAIM ALL frozen-clock cascade, doubler upsell deferred to ≥3 runs, ghost chip floored at best ≥ 1,000, sub-second Overdrive ring dropped, tutorial numbers derived from `Tuning` |
+
+**Test status: 158/158** (146 unit + 12 XCUITest) via `./Tools/ci.sh` (recorded at `0bf0094`).
+Evidence: `reports/shots/v142/` — Prism holds its own shimmer (never the world accent) across
+the 800 m crossfade; menu hero + glow disc cycle in lockstep with the in-run body.
+**Doc amendments (this commit):** V13_SPEC DECREE-1 REVOCATION + v1.4 amendments,
+DESIGN_characters §1.2 superseded + §8 QA inverted, DESIGN_uiux glow-disc/world-chip rescope,
+README v1.4–v1.4.2 section + honest PERFECT/chameleon copy.
+
+## v1.4.1 — shop conversion + honest pre-launch states (2026-06-11)
+| Commit | Scope |
+|---|---|
+| `5951cb4` | IAP catalog 5 → 7 (Starter Bundle $1.99/3,000 — hidden after first purchase; Crate of Coins $19.99/40,000), four-state availability (loading/ready/notConfigured/offline — quiet "APP STORE SETUP PENDING" footnote instead of a red error), ShopView conversion layout (hero slot, 2×2 coin grid with COMPUTED value badges), first-purchase +50 % coin-pack bonus (flag flips in the same mutate as the payout) |
+| `b0dbb14` | Review findings: per-device G-counter `coinsPurchasedByDevice` (an iCloud merge can never erase a paid grant), replay-idempotent grants via `grantedTransactionIDs`, "MOST POPULAR" → curated "BALANCED PICK" (no fabricated social proof), uniform price source for value badges, ask-to-buy starter hiding |
+
+**Test status: 150/150** (140 unit + 10 XCUITest) via `./Tools/ci.sh`. Evidence: `reports/shots/v141/`.
 
 ## v1.4 — worlds, purchasable ladder, roster 24, missions board (2026-06-11)
 | Commit | Scope |
@@ -16,9 +43,11 @@
 Demo profile (PR_DEMOPROFILE) now pins exact values incl. achievement seeds — sim/screenshot only.
 
 ## Current phase
-**v1.3 CONTENT UPDATE COMPLETE.** Implemented per the binding contract
-`reports/design/V13_SPEC.md` (where it disagrees with the four DESIGN_*.md docs, the spec wins).
-What remains is the App Store ops track (unchanged — see §B below and `docs/SHIP_CHECKLIST.md`).
+**v1.4.2 DECREE COMPLIANCE COMPLETE** (sections above). The v1.3 content update below shipped per
+the binding contract `reports/design/V13_SPEC.md` (where it disagrees with the four DESIGN_*.md
+docs, the spec wins — and the owner decrees in `CLAUDE.md` now override the spec itself; see its
+DECREE-1 REVOCATION addendum). What remains is the App Store ops track (unchanged — see §B below
+and `docs/SHIP_CHECKLIST.md`).
 
 ### v1.3 — what shipped (waves 1–5, serialized, disjoint file ownership)
 | Wave | Commit | Scope |
@@ -66,10 +95,12 @@ All 3 BLOCKERs + actionable WARNs addressed in one commit on top of `7f3e4f1`:
 
 ### v1.3 device QA checklist (manual feel pass — needs the operator + a device)
 Filed as remaining (automated equivalents are covered by the suite + autoplay):
-Bolt trail end-to-end · Prism crossfade regression · Eclipse readability on Caverns (§P parking-lot
-candidate `0x232337` lighten) · Reduce Motion statics · Pebble vs Eclipse silhouettes · 7/7 arc by
-feel · ring PERFECT timing · overdrive runway feel · flow surge cadence · level-up burst · weekly
-board rollover · challenge tier toast.
+Bolt trail end-to-end · ~~Prism crossfade regression~~ **[INVERTED v1.4.2 by decree 1 — the old
+item guarded the violation; now: Prism's body colors/trail do NOT change across a world
+crossfade, the fixed 8 s shimmer is the only motion]** · Eclipse readability on Caverns
+(§P parking-lot candidate `0x232337` lighten) · Reduce Motion statics · Pebble vs Eclipse
+silhouettes · 7/7 arc by feel · ring PERFECT timing · overdrive runway feel · flow surge
+cadence · level-up burst · weekly board rollover · challenge tier toast.
 
 ---
 
@@ -262,8 +293,12 @@ The old soak/ship plan is folded into `docs/SHIP_CHECKLIST.md`. The 500-seed QA 
   whenever spawner/pattern/RNG-consumption changes** — goldens pinned in `DailyChallengeTests`;
   same-day players must see the same track within a layout version.
 - **(v1.3) `V13_SPEC.md` is the binding contract** for the v1.3 surface (R-decisions, §C symbol
-  names, §W file ownership). Legacy shims it parks (3-arg `applySkin`, defaulted MenuView params,
-  `DailyChallengeCard` absorption) are deleted in v1.4 (R13/§P parking lot).
+  names, §W file ownership) — **as amended**: the owner decrees in `CLAUDE.md` override it, and
+  its DECREE-1 REVOCATION + v1.4 amendment blocks (top of §R) record where. Legacy shims it parks
+  (3-arg `applySkin`, defaulted MenuView params, `DailyChallengeCard` absorption) were ~~deleted
+  in v1.4 (R13/§P parking lot)~~ **[CORRECTION (AUDIT D2-6): that deletion never happened in
+  v1.4 — the shims shipped through v1.4/v1.4.1 behind stale "still referenced" comments and were
+  actually deleted in v1.4.2 `7349a19`]**.
 - **(v1.3) Mission-claim character grants land on sheet close**: MissionsView claims straight on
   `ProfileStore` (G3), so `GameModel.closeSheet()` runs `refreshSkinUnlocks` — Drift/Wisp pop on
   the way back to the hub. Run/challenge grants land in `recordRunResults`; launch catch-up in

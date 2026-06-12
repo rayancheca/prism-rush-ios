@@ -12,13 +12,52 @@ Build reality: one Mac, serialized waves 1→5. Waves 1–2 are Linux-verifiable
 
 ## R. RECONCILIATION DECISIONS (conflicts found and settled)
 
+> ### ⚠️ DECREE-1 REVOCATION (owner decree; dated 2026-06-11, code shipped v1.4.2 `7349a19`)
+>
+> The owner decrees in `CLAUDE.md` §Owner decrees **OVERRIDE this spec** wherever they conflict.
+> Decree 1: *"A character NEVER changes identity with the world — including the default."*
+> This **revokes** the "Prism = chameleon / sole `followsWorld`" decision that this spec pinned in
+> six places (§S item 2, §W wave-2/3 DONE gates, §C.2 sentinel + computed, §C.3 shim, §T test row).
+> What shipped instead (v1.4.2):
+> - **No skin ever follows the world palette.** `Skin.followsWorld` and the `bodyHex 0` sentinel
+>   are DELETED. Prism owns authored hexes — body `0x00F5FF`, antenna `0xFF2BD6` — plus
+>   `isPrismatic: Bool` (exactly one: `default`).
+> - Prism's identity is a **fixed, time-based prismatic shimmer** —
+>   `SkinCatalog.prismaticColor(at:)`, a pure 8 s cycle through authored cyan→magenta→amber stops,
+>   identical in every world; phase 0 = `bodyHex` (the static Reduce Motion look). Menu previews
+>   and the in-run body sample the same clock, so they agree at any instant (decree 2).
+> - `trailHex == nil` is **REPURPOSED**: it now means "ride the shimmer hue" (Prism only) — never
+>   "follow the world accent". All renderer FX fallbacks to the world palette were deleted;
+>   `skinTrailColor` is non-optional.
+> - The legacy 3-arg `applySkin(bodyHex:antennaHex:followsWorld:)` shim is DELETED (v1.4.2 —
+>   it outlived its planned v1.4 deletion; see R13 note below).
+>
+> Affected R/S/W/C/T lines below are **struck through or annotated in place — never silently
+> rewritten** — so future readers can see the correction happened. The non-decree staleness
+> (roster 16 → 24, `xpUnlockLevels`) is corrected by the **V1.4 AMENDMENTS** block that follows.
+
+> ### V1.4 AMENDMENTS (roster expansion shipped `9b77316`; tests assert the new truth)
+>
+> - **R1 amended:** `XPCurve.xpUnlockLevels = [3, 6, 8, 12, 18, 25]` — six XP-locked characters:
+>   Pebble L3, Blossom L6, **Circuit L8**, Shard L12, **Nebula L18**, Eclipse L25.
+> - **§C.2 amended:** `SkinCatalog.all` = **24 entries** — the 16 legacy skins frozen
+>   (ids/hexes/costs pinned; sole exception: Prism's revoked sentinel, above) plus the v1.4 eight
+>   on the §S parking-lot rungs: Tide 2,000 / Thorn 3,500 / Golem 5,000 / Monarch 7,500 coins,
+>   Circuit L8 / Nebula L18, Facet `ach.gems` tier 2, Vigil 14 challenge days.
+> - **§T amended:** SkinCatalogTests now pins: 24 unique; legacy 16 frozen; zero world-following
+>   skins (`bodyHex != 0` for all); exactly one `isPrismatic` (`default`); `trailHex == nil` for
+>   exactly `["default"]` (= shimmer source); `xpUnlockLevels == [3, 6, 8, 12, 18, 25]`;
+>   `prismaticColor` purity/8 s-periodicity/authored-stop pins.
+
 **R1 — XP-unlock levels vs roster (characters 3/6/12/25×4 vs progression 3/6/10/15/22×5).**
 DECIDED: the 16-character roster from DESIGN_characters §2 is canonical — **4 XP-locked
-characters: Pebble L3, Blossom L6, Shard L12, Eclipse L25.** Progression's 5th XP slot and
+characters: Pebble L3, Blossom L6, Shard L12, Eclipse L25** *[AMENDED v1.4: roster 24; six
+XP-locked — Circuit L8 and Nebula L18 join]*. Progression's 5th XP slot and
 its L10/L15/L22 beats are covered instead by the achievement unlocks (Drift = `ach.dist` t1,
 Wisp = `ach.close` t1) and Tempo (7 daily-challenge days) — week-1 cadence is preserved with
 more *kinds* of unlock, which is better for the owner's "everything leads somewhere" goal.
-Single source of truth: `XPCurve.xpUnlockLevels = [3, 6, 12, 25]`; `SkinCatalogTests` asserts
+Single source of truth: ~~`XPCurve.xpUnlockLevels = [3, 6, 12, 25]`~~ **[AMENDED v1.4 — now
+`[3, 6, 8, 12, 18, 25]`, see the V1.4 AMENDMENTS block above]**; `SkinCatalogTests` asserts
 the catalog's `.level(n)` skins match this array exactly.
 
 **R2 — XP unlocks persisted vs derived.** Progression said "derived, never persisted";
@@ -84,7 +123,11 @@ rotation gold dot is CUT (v1.4).
 
 **R13 — Serialized-build compat convention (waves 3–4).** Waves 3 and 4 must NEVER break the
 previous waves' call sites: new renderer API is ADDED next to the legacy 3-arg `applySkin`
-shim (kept, unused after wave 5, deleted in v1.4); new view init params get defaults; views
+shim (kept, unused after wave 5, ~~deleted in v1.4~~ **[CORRECTED: the planned v1.4 deletion
+never happened — the shim (and the dead `MenuView` `onSettings`/`onDailyChallenge` params, and
+the legacy `struct CharacterSwatch`) shipped through v1.4/v1.4.1 with stale "still referenced"
+comments (AUDIT D2-6) and were actually deleted in v1.4.2 `7349a19`]**); new view init params get
+defaults; views
 read `ProfileStore.shared` / `IAPManager.shared` directly in `body` (G3-canonical) instead of
 demanding new params from GameView. Wave 5 rewires GameView; dead shims/params are parked.
 
@@ -113,13 +156,16 @@ never feed `startRun(seed:)`).
 **IN (must ship):**
 1. P0 gem-arc fix — gems on the ballistic path, 7/7 collectible, speed-aware (mech §1).
 2. P0 skin visibility — skin-tinted trail/dust/landing/shatter, per-skin rigs (shape/scale/
-   eyes/pupils/antenna), rebuild-on-equip, antenna sway, Prism = sole `followsWorld`.
+   eyes/pupils/antenna), rebuild-on-equip, antenna sway, ~~Prism = sole `followsWorld`~~
+   **[REVOKED by decree 1, v1.4.2 — no skin ever follows the world; Prism is prismatic (fixed
+   time-based shimmer), authored body `0x00F5FF` / antenna `0xFF2BD6` / trail = shimmer hue]**.
 3. Exactly 3 new mechanics: Prism Rings, Overdrive Pads, Flow Surge (+ pacing ladder,
    anti-repeat, `streakPerMult` 6→5). layoutVersion 2.
 4. XP/levels 1–30 (`XPCurve`), level coin grants, `LevelUpResult`, GameOver XP bar + level-up
    burst, menu level ring, Profile level card.
-5. 16-character roster, rarity sections, locked silhouettes + requirement lines, auto-grant +
-   NEW badges (`seenSkins`), idle previews everywhere (`AnimatedCharacterSwatch`).
+5. 16-character roster **[AMENDED v1.4: 24]**, rarity sections, locked silhouettes + requirement
+   lines, auto-grant + NEW badges (`seenSkins`), idle previews everywhere
+   (`AnimatedCharacterSwatch`).
 6. 4 earn loops: level-up grants, weekly missions (3 slots/UTC week), in-run style coins,
    daily-challenge local tiers. Login ladder untouched.
 7. UI reframe: menu Hero/Verb/Rail/Nav (5 zones, 14→9 elements), Theme.Role/TypeScale/Space/
@@ -137,6 +183,7 @@ never feed `startRun(seed:)`).
 - RealityKit hero stage / 3D menu vignette (Canvas swatch ships first; revisit if flat).
 - Persisted per-mechanic stats (`bestFlow`, `ringsPassed` in Profile) + ring/flow missions.
 - Legacy shim deletion: 3-arg `applySkin`, dead defaulted MenuView params (R13).
+  **[Done — but only in v1.4.2 `7349a19`, not v1.4 as planned; see the R13 correction.]**
 - Eclipse body lighten to `0x232337` (only if device QA fails readability on Caverns).
 - Shop "GET COINS" toast auto-scroll animation polish; CLAIM ALL stagger tuning.
 
@@ -202,15 +249,16 @@ NEW `Tests/CoreTests/ProgressionTests.swift`, NEW `Tests/CoreTests/SkinCatalogTe
 
 Tasks:
 1. `SkinCatalog.swift`: Skin v2 struct exactly per §C.2 (Foundation-only — it is in the SPM
-   package); 16-entry catalog per DESIGN_characters §2 **with Fang cost 2,500 (R4)**, ordered
+   package) **[§C.2 since amended — decree-1 revocation + 24 entries, see top of §R]**;
+   16-entry catalog per DESIGN_characters §2 **with Fang cost 2,500 (R4)**, ordered
    rarity→unlock difficulty; compat computeds `premium`/`cost`; `xpUnlockLevels` lives in
    XPCurve (catalog asserts agreement via tests). Not Codable, never persisted.
 2. NEW `Meta/SkinUnlocks.swift`: `earned(_:profile:level:)` + `requirementText(_:)` verbatim
    from DESIGN_characters §3.1 (pure, no UI imports).
 3. NEW `Meta/XPCurve.swift`: per §C.3 — formula, cumulative table, `level(for:)`,
    `xpIntoLevel(for:)`, `coinGrant(forLevel:)` (100/250/500/2,000 bands),
-   `xpUnlockLevels = [3, 6, 12, 25]`, `styleCoins(closes:slicks:multiplier:)`
-   (= `min(closes+slicks, 40) * 2 * multiplier`).
+   ~~`xpUnlockLevels = [3, 6, 12, 25]`~~ **[AMENDED v1.4: `[3, 6, 8, 12, 18, 25]`]**,
+   `styleCoins(closes:slicks:multiplier:)` (= `min(closes+slicks, 40) * 2 * multiplier`).
 4. `MissionCatalog.swift`: `RunSummary.startWorld: Int = 0`; `Mission.Scope.weekly`;
    `weeklyPool` (7 entries, R10); weekly slot draw mirroring the daily one with tag
    `0x5745_454B_4C59_3133`.
@@ -233,7 +281,9 @@ Tasks:
 **Verify:** `swift test -c release` — full Linux suite green (wave-1 + wave-2 tests).
 **DONE:** suite green; legacy-JSON decode test passes with all six fields defaulted; pinned
 XP thresholds (L2=300, L5=2,100, L10=8,100, L20=31,350, L30=69,600) green; catalog integrity
-test (16 skins, legacy hex/cost frozen, exactly one followsWorld, one .iap) green.
+test (~~16 skins, legacy hex/cost frozen, exactly one followsWorld, one .iap~~ **[AMENDED:
+24 skins, legacy frozen, ZERO followsWorld — the computed is deleted; exactly one
+`isPrismatic`, one .iap — see the §T amendment at top of §R]**) green.
 
 ### WAVE 3 — RENDER (skin identity + mechanic visuals)
 
@@ -266,7 +316,9 @@ Tasks:
 sim sanity: `SIMCTL_CHILD_PR_AUTOPLAY=1 xcrun simctl launch booted com.rayancheca.prismrush`
 shows rings/pads rendering and world-accent trail (skin wiring lands in wave 5).
 **DONE:** build green, zero new warnings, all meshes MeshDescriptor (zero binary assets),
-old `applySkin(bodyHex:antennaHex:followsWorld:)` still present and compiling.
+~~old `applySkin(bodyHex:antennaHex:followsWorld:)` still present and compiling~~ **[historical
+wave-3 gate; the shim was DELETED in v1.4.2 `7349a19` — its parameter name is the
+decree-1-banned behavior]**.
 
 ### WAVE 4 — UI + AUDIO (reframe, previews, XP surfacing, SFX)
 
@@ -401,7 +453,15 @@ struct Skin: Identifiable, Sendable {                      // SkinCatalog.swift 
                             var blinkMin = 2.2; var blinkMax = 4.2; var sway = 0.12 }
     let id, name, flavor: String
     let bodyHex, antennaHex: UInt32          // bodyHex 0 = followsWorld (Prism only)
+                                             //   ^ REVOKED v1.4.2 (decree 1): sentinel deleted —
+                                             //     Prism authored 0x00F5FF / 0xFF2BD6; no skin
+                                             //     may have bodyHex 0 (pinned by tests)
     var trailHex: UInt32? = nil              // nil = follow world accent (Prism only)
+                                             //   ^ REPURPOSED v1.4.2: nil = "ride the prismatic
+                                             //     shimmer hue" (Prism only) — NEVER the world
+    var isPrismatic = false                  // ADDED v1.4.2: fixed 8 s time-based shimmer
+                                             //   (SkinCatalog.prismaticColor) — identical in
+                                             //   every world; exactly one (`default`)
     var bodyShape: BodyShape = .sphere
     var scale: Float = 1                     // visual only, 0.85...1.12
     var eyeRadius: Float = 0.13
@@ -412,7 +472,8 @@ struct Skin: Identifiable, Sendable {                      // SkinCatalog.swift 
     var idle: Idle = Idle()
     let rarity: Rarity
     let unlock: Unlock
-    var followsWorld: Bool { bodyHex == 0 }
+    var followsWorld: Bool { bodyHex == 0 }  // DELETED v1.4.2 (decree 1) — replaced by
+                                             //   `isPrismatic` above; nothing follows the world
     var premium: Bool { unlock == .iap }                       // back-compat
     var cost: Int { if case .coins(let c) = unlock { c } else { 0 } }   // back-compat
 }
@@ -420,11 +481,11 @@ struct Skin: Identifiable, Sendable {                      // SkinCatalog.swift 
 
 | Symbol | Exact contract |
 |---|---|
-| `SkinCatalog.all` | 16 entries, DESIGN_characters §2 table, Fang cost **2,500** (R4) |
+| `SkinCatalog.all` | ~~16 entries~~ **[AMENDED v1.4: 24 entries — 16 legacy frozen + the v1.4 eight (Tide 2,000 / Thorn 3,500 / Golem 5,000 / Monarch 7,500 coins, Circuit L8 / Nebula L18, Facet ach.gems t2, Vigil 14 challenge days)]**, DESIGN_characters §2 table, Fang cost **2,500** (R4) |
 | `SkinCatalog.skin(_ id: String) -> Skin` | unchanged fallback `all[0]` |
 | `SkinUnlocks.earned(_ skin: Skin, profile: Profile, level: Int) -> Bool` | coins/iap → false |
 | `SkinUnlocks.requirementText(_ skin: Skin) -> String` | pinned copy per unlock case |
-| `enum XPCurve` | `maxLevel = 30` · `cumulativeXP: [Int]` (L2 = 300 … L30 = 69,600) · `level(for totalXP: Int) -> Int` · `xpIntoLevel(for totalXP: Int) -> (current: Int, needed: Int)` · `xp(for s: RunSummary) -> Int` (clamped 0…2,000; never reads Profile) · `coinGrant(forLevel n: Int) -> Int` (2–9: 100, 10–19: 250, 20–29: 500, 30: 2,000) · `xpUnlockLevels: [Int] = [3, 6, 12, 25]` · `styleCoins(closes: Int, slicks: Int, multiplier: Int) -> Int` = `min(closes+slicks, 40) * 2 * multiplier` |
+| `enum XPCurve` | `maxLevel = 30` · `cumulativeXP: [Int]` (L2 = 300 … L30 = 69,600) · `level(for totalXP: Int) -> Int` · `xpIntoLevel(for totalXP: Int) -> (current: Int, needed: Int)` · `xp(for s: RunSummary) -> Int` (clamped 0…2,000; never reads Profile) · `coinGrant(forLevel n: Int) -> Int` (2–9: 100, 10–19: 250, 20–29: 500, 30: 2,000) · ~~`xpUnlockLevels: [Int] = [3, 6, 12, 25]`~~ **[AMENDED v1.4: `[3, 6, 8, 12, 18, 25]`]** · `styleCoins(closes: Int, slicks: Int, multiplier: Int) -> Int` = `min(closes+slicks, 40) * 2 * multiplier` |
 | `struct LevelUpResult: Equatable, Sendable` | `xpGained, levelBefore, levelAfter, coinsGranted: Int; unlockedLevels: [Int]` |
 | `Profile` new fields | `seenSkins: Set<String> = ["default"]` · `totalXP: Int = 0` · `xpLevelRewarded: Int = 1` · `weeklyMissionDate: Date? = nil` · `challengeRewardTier: Int = 0` · `bestDistanceByWorld: [Int: Double] = [:]` — all `decodeIfPresent ?? default` |
 | `ProfileStore.playerLevel: Int` | computed `XPCurve.level(for: profile.totalXP)` |
@@ -441,7 +502,7 @@ struct Skin: Identifiable, Sendable {                      // SkinCatalog.swift 
 | Symbol | Exact contract |
 |---|---|
 | `RealityRenderer.applySkin(_ skin: Skin)` | stores params, `paletteKey = -1`, `rebuildCharacter()` |
-| `RealityRenderer.applySkin(bodyHex:antennaHex:followsWorld:)` | legacy shim, KEPT until v1.4 (R13) |
+| `RealityRenderer.applySkin(bodyHex:antennaHex:followsWorld:)` | ~~legacy shim, KEPT until v1.4 (R13)~~ **[DELETED v1.4.2 `7349a19` — zero callers; survived v1.4/v1.4.1 contrary to plan (AUDIT D2-6) and its parameter name is the decree-1-banned behavior]** |
 | Renderer consumes | `EntityKind.ring/.boostPad`, all four new FXEvents, `boostRemaining`, `flowStreak` |
 
 ### C.4 Wave 4 → 5 (UI/Audio surface)
@@ -488,7 +549,7 @@ struct Skin: Identifiable, Sendable {                      // SkinCatalog.swift 
 | 1 | SolvabilityBotTests (amend) | +2 | runway containment invariant (5.1 + 36 < 48); forced-boost-into-next-pattern; soaks re-green |
 | 1 | DailyChallenge/Difficulty/RNG (amend) | 0 net | goldens re-pinned for layoutVersion 2 (+ v3 pre-arm pin) |
 | 2 | ProgressionTests (NEW) | 8 | XP curve table; formula+clamp+startWorld+no-IAP-XP; grants+watermark idempotent; weekly determinism/rollover/rollback; styleCoins cap; challenge tiers once/day; legacy decode (6 fields); cloud-merge max |
-| 2 | SkinCatalogTests (NEW) | 4 | 16 unique; legacy hex/cost frozen + aurora premium; scale 0.85…1.12 + exactly one followsWorld/one iap + xpUnlockLevels == [3,6,12,25] + achievement ids exist in MissionCatalog; refreshSkinUnlocks grant-once + requirementText non-empty |
+| 2 | SkinCatalogTests (NEW) | 4 | ~~16 unique; legacy hex/cost frozen + aurora premium; scale 0.85…1.12 + exactly one followsWorld/one iap + xpUnlockLevels == [3,6,12,25] + achievement ids exist in MissionCatalog~~ **[RE-PINNED v1.4 + v1.4.2: 24 unique; legacy 16 frozen (sole exception: Prism's revoked bodyHex-0 sentinel → authored 0x00F5FF/0xFF2BD6); scale 0.85…1.12 + ZERO followsWorld (no bodyHex 0; computed deleted) + exactly one isPrismatic (`default`) + nil-trail == ["default"] (shimmer source) + one iap + xpUnlockLevels == [3,6,8,12,18,25] + achievement ids exist + prismaticColor pure/8 s-periodic/authored stops]**; refreshSkinUnlocks grant-once + requirementText non-empty |
 | 4 | SynthTests (amend) | +2 | six new SFX buffers non-empty/finite |
 | 5 | InteractionUITests (amend) | +2 | hero→Characters→locked requirement; GameOver XP bar present |
 | | **Total new** | **≈26** | **≈121 total (89+26 SPM-side + 6+2 XCUITest)** |

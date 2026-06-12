@@ -25,17 +25,36 @@ Iron-rule compliance up front:
 3. The default skin follows the world accent, so the out-of-box impression is "the world owns my color".
 
 ### 1.2 Decision on `followsWorld`
-**Keep `followsWorld` for exactly one character — "Prism" (id `default`) — and make it the
+
+> ### ⚠️ SUPERSEDED BY DECREE 1 (owner decree; dated 2026-06-11, shipped v1.4.2 `7349a19`)
+>
+> CLAUDE.md §Owner decrees, decree 1: *"A character NEVER changes identity with the world —
+> including the default. The player's pick (colors, shape, trail) is constant across all worlds.
+> No `followsWorld` behavior on any skin."* Origin: v1.2 + v1.4.1 owner feedback — *"what's the
+> point of characters if they change colors every level?"* The chameleon decision below is
+> **REVOKED**, and the V13_SPEC carries a matching DECREE-1 REVOCATION addendum.
+>
+> What shipped instead: Prism owns authored hexes (body `0x00F5FF`, antenna `0xFF2BD6`) plus
+> `isPrismatic` — a **fixed, time-based 8 s shimmer** (`SkinCatalog.prismaticColor(at:)`,
+> cyan→magenta→amber, identical in every world; previews and the rig sample the same clock).
+> `trailHex == nil` is repurposed to mean "ride the shimmer hue" — never the world accent.
+> `Skin.followsWorld` is deleted; `SkinCatalogTests` pins zero world-following skins.
+> New flavor line: *"The first runner. Every world remembers it."*
+
+~~**Keep `followsWorld` for exactly one character — "Prism" (id `default`) — and make it the
 personality, not a fallback.** Prism's flavor line is *"Born of every world, loyal to none."* — the
 chameleon IS its identity. Every other character (15/16) has a fixed body color that **never** reads
 from the palette. Prism's trail stays world-accent (current behavior); every other character gets a
 fixed `trailHex`. Rationale: killing `followsWorld` outright would silently change the look every
 existing player has, and the rainbow-chameleon is genuinely the best "free default" in the roster —
-it makes fixed-color characters feel like an upgrade ("I stopped being everyone").
+it makes fixed-color characters feel like an upgrade ("I stopped being everyone").~~
 
 ### 1.3 Skin-tinted FX (the character claims the screen)
 The trail is on screen ~100% of a run; this is the single highest-leverage identity change.
-All four hooks read one new renderer field `skinTrailColor: UIColor?` (nil = follow world):
+All four hooks read one new renderer field `skinTrailColor: UIColor?` ~~(nil = follow world)~~
+**[REVOKED v1.4.2 (decree 1): `skinTrailColor` is non-optional — every FX bursts the skin's own
+color; Prism's is the live shimmer hue. The world-accent fallbacks in the table below are
+deleted]**:
 
 | Hook | File:line (current) | Change |
 |---|---|---|
@@ -72,6 +91,8 @@ two transform writes per frame.
 
 ### 1.6 Renderer plumbing (fixes "equip does nothing" end-to-end)
 - `applySkin(bodyHex:antennaHex:followsWorld:)` → **`applySkin(_ skin: Skin)`**
+  *(the legacy 3-arg shim lingered un-called until v1.4.2 `7349a19` deleted it — its parameter
+  name is the decree-1-banned behavior)*
   (`RealityRenderer.swift:342`, call sites `GameView.swift:348`). `Skin` is a `Sendable` value type
   in the app target — passing it whole avoids a 10-parameter signature. Core never sees it.
 - `applySkin` stores the skin params, sets `paletteKey = -1` (existing force-rebuild), **and calls
@@ -86,6 +107,13 @@ two transform writes per frame.
   - antenna: `generateCylinder(height: 0.42 * antennaHeightScale, radius: 0.025)`, y position
     `1.21 + 0.21 * antennaHeightScale`; tip `generateSphere(radius: 0.095 * antennaTipScale)` at
     `y = 1.21 + 0.42 * antennaHeightScale + 0.045`
+    **[AMENDED v1.4.2 `c173f37` (decree 2, AUDIT D2-1): stem AND tip are painted `antennaHex` on
+    BOTH sides of the seam — preview and rig. The rig had been painting the stem in body color,
+    erasing Mono/Thorn/Pebble/Golem's sold antenna cue. Same wave: in-run blink re-arms from the
+    skin's `idle.blinkMin/Max` (not a global 2.2–4.2 s), sway uses the preview's exact
+    `bobSpeed·2π·0.8` formula, and a shared `CharacterProportions` contract pins preview/rig
+    shape parity (preview cube at the rig's true 85 % span; crystal gets a real 3D elongation
+    via `ProceduralMesh.octahedron(rx:ry:rz:)`).]**
   - store `skinScale = skin.scale` and fold into the per-frame pose line
     (`RealityRenderer.swift:173`): `playerRig.scale = SIMD3<Float>(sx, sy, sx) * skinScale`
   Rebuild cost: ~7 small entities, only on equip/launch — negligible.
@@ -96,7 +124,12 @@ two transform writes per frame.
 
 ---
 
-## 2. ROSTER — 16 characters, 100% procedural
+## 2. ROSTER — 16 characters *(24 as of v1.4)*, 100% procedural
+
+> **[AMENDED v1.4 `9b77316`: the roster is now 24 — the v1.4 eight (Circuit L8, Tide 2,000,
+> Facet ach.gems t2, Nebula L18, Thorn 3,500, Golem 5,000, Monarch 7,500, Vigil 14 challenge
+> days) take the parking-lot rungs. The 16 below are frozen by tests; row 1 (Prism) is amended
+> per the §1.2 decree-1 revocation.]**
 
 The existing 7 keep their ids, body/antenna hexes, coin costs, and Aurora stays the IAP exclusive.
 They gain `trailHex` + idle params + rarity (additive — owners notice their character got *better*).
@@ -108,7 +141,7 @@ idle = `bobSpeed Hz / bobAmp / blinkMin–blinkMax s / sway rad` · eyes white (
 
 | # | id | Name | Flavor | Body | Antenna | Trail | Shape/Scale | Eyes/Pupil | Antenna H/Tip | Idle | Rarity | Unlock |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `default` | Prism | Born of every world, loyal to none. | 0 (world) | 0 (world) | nil (world) | S / 1.00 | 0.13 dot | 1.0/1.0 | 1.6/0.05/2.2–4.2/0.12 | Common | Free |
+| 1 | `default` | Prism | The first runner. Every world remembers it. *[was "Born of every world, loyal to none." — chameleon lore retired]* | `0x00F5FF` + isPrismatic *[was 0 (world) — REVOKED v1.4.2, decree 1]* | `0xFF2BD6` *[was 0 (world)]* | nil = shimmer hue *[was nil (world)]* | S / 1.00 | 0.13 dot | 1.0/1.0 | 1.6/0.05/2.2–4.2/0.12 | Common | Free |
 | 2 | `ember` | Ember | Runs hot. Cools never. | `0xFF5E3A` | `0xFFD23D` | `0xFF7A3D` | S / 1.00 | 0.13 dot | 1.0/1.0 | 1.9/0.06/2.0–3.6/0.15 | Common | 200 coins |
 | 3 | `void` | Void | It stares back. | `0xB26BFF` | `0x00FFC8` | `0xB26BFF` | S / 1.00 | 0.14 wide | 1.0/1.0 | 1.2/0.04/3.0–5.0/0.08 | Rare | 350 coins |
 | 4 | `toxic` | Toxic | Do not lick. | `0x39FF14` | `0xFF2BD6` | `0x39FF14` | S / 1.00 | 0.13 slit | 1.0/1.0 | 1.7/0.05/2.6–4.6/0.18 | Rare | 500 coins |
@@ -237,6 +270,10 @@ Recommended level→character beats for the XP curve: L3 Pebble, L6 Blossom, L12
 ### 3.4 Locked-card presentation + "every tap leads somewhere"
 Locked characters render as **silhouettes** (§4.2): all shapes filled `#202036`, eyes drawn closed
 (two short dark arcs), no glow, `lock.fill` glyph bottom-trailing, requirement line under the name.
+**[AMENDED v1.4 `985859b`: the dark silhouette became the full-color tease at 0.45 opacity.
+AMENDED v1.4.2 `37ea7f2` (D6-5): the SHOP renders locked skins with the SAME locked tease as the
+select grid it routes to — rail cards and both featured-card previews pass ownership through; no
+more owned-bright storefront vs locked-dim select one tap later.]**
 Tap behavior per unlock type (owner rule — nothing on screen is dead):
 
 | Unlock | Tap on locked card |
@@ -288,7 +325,11 @@ Canvas draw rules (all derived from the same `Skin` recipe the renderer uses —
   `.crystal` → diamond `Path` (square rotated 45°, slightly elongated vertically).
 - **Pupils**: `.dot` circle `0.09·size` · `.wide` `0.13·size` · `.slit` ellipse `0.05×0.14·size` ·
   `.glint` `0.09·size` + white `0.035·size` dot offset (+0.02, −0.02). Eye fill = `eyeTintHex`.
-- **Body fill**: `followsWorld` keeps today's `AngularGradient` rainbow; else flat `bodyHex` with the
+- **Body fill**: ~~`followsWorld` keeps today's `AngularGradient` rainbow; else~~ **[AMENDED
+  v1.4.2 (decree 1): a rainbow/shimmer is allowed ONLY as a fixed, time-based effect identical
+  in-game — never palette-driven. The preview's `isPrismatic` fill is a flat sample of the same
+  shared `SkinCatalog.prismaticColor(at:)` 8 s clock the rig paints with, so menu and run agree
+  at any instant. All other skins:]** flat `bodyHex` with the
   existing glow shadow in `bodyHex` (glow dropped entirely in silhouette mode).
 - **Scale**: drawing scaled by `skin.scale` so Pebble reads small next to Eclipse in the same grid.
 - Frame stays `size × size·1.5` (antenna headroom + bob never clips).
@@ -360,8 +401,12 @@ struct Skin: Identifiable, Sendable {
     let name: String
     let flavor: String                         // one-line personality (hero card + buddy a11y)
     let bodyHex: UInt32                        // 0 = follows world (Prism only)
+                                               //   ^ REVOKED v1.4.2 (decree 1): sentinel deleted;
+                                               //     Prism authored 0x00F5FF + isPrismatic flag
     let antennaHex: UInt32
     var trailHex: UInt32? = nil                // nil = follow world accent (Prism only)
+                                               //   ^ REPURPOSED v1.4.2: nil = ride the prismatic
+                                               //     shimmer hue — NEVER the world accent
     var bodyShape: BodyShape = .sphere
     var scale: Float = 1                       // rig scale, visual only, clamp 0.85...1.12
     var eyeRadius: Float = 0.13
@@ -373,13 +418,14 @@ struct Skin: Identifiable, Sendable {
     let rarity: Rarity
     let unlock: Unlock                         // §3.1
 
-    var followsWorld: Bool { bodyHex == 0 }
+    var followsWorld: Bool { bodyHex == 0 }    // DELETED v1.4.2 (decree 1) — replaced by
+                                               //   `var isPrismatic = false` (exactly one: default)
     // Back-compat for existing call sites (CharacterSelect, Shop, GameView):
     var premium: Bool { unlock == .iap }
     var cost: Int { if case .coins(let c) = unlock { return c }; return 0 }
 }
 ```
-Catalog: 16 entries from §2, **ordered by rarity then unlock difficulty** (the grid renders catalog
+Catalog: 16 entries **[24 as of v1.4]** from §2, **ordered by rarity then unlock difficulty** (the grid renders catalog
 order inside each rarity section). `skin(_:)` fallback to `all[0]` unchanged. **Not Codable, never
 persisted** — only ids are stored, so catalog evolution can't corrupt saves.
 
@@ -428,7 +474,7 @@ var seenSkins: Set<String> = ["default"]   // NEW-badge dedupe for auto-granted 
 **Modified**
 | File | Change |
 |---|---|
-| `PrismRush/Meta/SkinCatalog.swift` | Skin v2 struct (§5.1) + 16-entry catalog (§2) |
+| `PrismRush/Meta/SkinCatalog.swift` | Skin v2 struct (§5.1) + 16-entry catalog (§2) **[24 as of v1.4; Prism amended per §1.2 revocation]** |
 | `PrismRush/Meta/Profile.swift` | `seenSkins` + CodingKeys + decodeIfPresent (§5.2) |
 | `PrismRush/Meta/ProfileStore.swift` | `refreshSkinUnlocks(level:)`, `seenSkins` cloud merge, `markSkinsSeen()` (§3.2/§5.2) |
 | `PrismRush/UI/CharacterSelectView.swift` | Hero card, rarity sections, silhouettes + requirement lines, locked-tap routing, NEW badges, G3 rewrite (§3.4/§4.2/§5.3) |
@@ -449,9 +495,12 @@ color), `ShopView` (aurora flow as-is), `DailyChallenge` / spawner / patterns �
 bump**, solvability bot unaffected.
 
 ## 7. TESTS (new, keeps 95 green + adds)
-1. Catalog integrity: 16 skins, unique ids/names; the 7 legacy ids keep exact body/antenna hexes,
-   costs, and aurora `premium == true`; every skin `0.85...1.12` scale; every locked unlock has
-   non-empty `requirementText`; exactly one `followsWorld`, exactly one `.iap`.
+1. Catalog integrity: 16 skins **[24 as of v1.4]**, unique ids/names; the 7 legacy ids keep exact
+   body/antenna hexes, costs, and aurora `premium == true`; every skin `0.85...1.12` scale; every
+   locked unlock has non-empty `requirementText`; ~~exactly one `followsWorld`~~ **[AMENDED
+   v1.4.2 (decree 1): ZERO followsWorld — the computed is deleted, no skin has `bodyHex == 0`;
+   exactly one `isPrismatic` (`default`), whose nil trail is the shimmer source]**, exactly one
+   `.iap`.
 2. `SkinUnlocks.earned`: level boundary (11 no / 12 yes for shard), achievement tier
    (`achievementTier["ach.close"] = 0/1`), challengeDays (6 no / 7 yes), coins/iap always false.
 3. `refreshSkinUnlocks`: grants once, returns newly granted only, second call returns `[]`
@@ -462,7 +511,10 @@ bump**, solvability bot unaffected.
 
 ## 8. QA CHECKLIST (device pass)
 - Equip Bolt → menu buddy shows Bolt instantly; start run → blue trail, blue slide dust, blue death shatter.
-- Prism equipped → trail still follows world accent through a world crossfade (regression guard).
+- ~~Prism equipped → trail still follows world accent through a world crossfade (regression guard).~~
+  **[INVERTED v1.4.2 (decree 1 — the old item regression-guarded the violation): Prism equipped →
+  body colors and trail do NOT change across a world crossfade. The shimmer keeps its own fixed
+  8 s cycle, never the world accent, in all 12 worlds.]**
 - Eclipse on Caverns: body readable (else lighten to `0x232337`).
 - Reduce Motion: swatches static, no antenna sway in-run, equip ring animation off (existing gate).
 - Pebble vs Eclipse side-by-side in grid: size difference visible; cube vs crystal silhouettes read at 56pt.

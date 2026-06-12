@@ -154,14 +154,16 @@ then slide mid-air to catch the coins"*, *"too loaded with info"*. A two-stage a
 then 6 implementation waves with strictly disjoint file ownership + 5 adversarial reviewers + a
 fixer) shipped, all gates green:
 
-**Characters become the game.** 16 fully procedural characters (zero assets — body shape/scale,
-eye & pupil styles, antenna variants, per-skin idle personality) across 4 rarity tiers. Your pick
-now *stays yours in every world* — fixed body identity plus skin-tinted trail, slide dust, landing
-burst and death shatter (only **Prism**, the free chameleon, still morphs with the world — that's
-its whole personality). Locked characters show as silhouettes with their exact unlock path: coins,
-**XP levels 3/6/12/25**, achievements, 7 daily-challenge days, or the one IAP. Animated **idle
-previews everywhere** (30 Hz Canvas — blink schedules, bob, antenna sway): the menu hero stage and
-a stage-and-shelf character select (preview before you commit).
+**Characters become the game.** 16 fully procedural characters (24 since v1.4 — zero assets:
+body shape/scale, eye & pupil styles, antenna variants, per-skin idle personality) across 4 rarity
+tiers. Your pick *stays yours in every world* — every character, **including the free default**,
+keeps a constant identity: fixed body colors plus skin-tinted trail, slide dust, landing burst and
+death shatter. (Prism, the default, gets a *prismatic shimmer* — a fixed 8-second cyan→magenta→amber
+cycle that is identical in every world; v1.3 shipped it as a world-following chameleon, revoked by
+owner decree in v1.4.2.) Locked characters show their exact unlock path: coins, **XP levels
+3/6/12/25** (3/6/8/12/18/25 since v1.4), achievements, daily-challenge days, or the one IAP.
+Animated **idle previews everywhere** (30 Hz Canvas — blink schedules, bob, antenna sway): the menu
+hero stage and a stage-and-shelf character select (preview before you commit).
 
 **Progression.** XP per run (distance/gems/near-misses/streak) → **30 levels** with banded coin
 grants and character unlocks; XP bar + level-up burst on the death panel, level ring on the menu.
@@ -170,8 +172,9 @@ UTC week), in-run **style coins** for near-miss play, and daily-challenge score 
 
 **The fun fix + 3 new mechanics.** Gem arcs are now laid **on the actual jump parabola**
 (speed-aware — 7/7 collectible with one clean jump, no more mid-air slide). **Prism Rings** to
-thread at apex (PERFECT window pays triple) · **Overdrive Pads** (1 s speed surge in a provably
-safe runway, double gem pay) · **Flow Surge** (every 3rd near-miss erupts a 10-gem fountain) —
+thread at apex (a PERFECT thread pays 12 coins instead of 5) · **Overdrive Pads** (1 s speed surge
+in a provably safe runway, double gem pay) · **Flow Surge** (every 3rd near-miss erupts a 10-gem
+fountain) —
 all proven by the same 200-seed/12,000 m solvability bot with **zero Autopilot changes**, under
 `layoutVersion 2` (daily-challenge goldens re-pinned).
 
@@ -182,10 +185,50 @@ bests, PLAY FROM HERE), a 4-section Shop that survives StoreKit being offline, a
 (ghost-chase chip instead of a static BEST, merged gem/mult pill, icon timer rings, flow pips),
 and a full clickability audit — every element on screen now leads somewhere.
 
-**Verification:** `swift test -c release` **129/129** (Linux-provable) · `./Tools/ci.sh`
-**137/137** (129 unit + 8 XCUITest) · 4-minute autoplay soak on a wiped profile (zero crashes,
-rings/fountains/boosts observed live) · fresh screenshot sweep in
-[`reports/shots/v13/`](reports/shots/v13/).
+**Verification (v1.3-era gate):** `swift test -c release` **129/129** (Linux-provable) ·
+`./Tools/ci.sh` **137/137** (129 unit + 8 XCUITest) · 4-minute autoplay soak on a wiped profile
+(zero crashes, rings/fountains/boosts observed live) · fresh screenshot sweep in
+[`reports/shots/v13/`](reports/shots/v13/). *(The gate has since grown — see v1.4 below.)*
+
+---
+
+## v1.4 → v1.4.2 — worlds for sale, an honest shop, and the owner decrees
+
+**v1.4 — the world ladder.** The three worlds become a **12-rung purchasable ladder**: reach a
+world once to checkpoint there free, or buy a deeper start outright with coins
+(400 → 13,400 per rung, a 59,400-coin total sink — and a reach-credit gate so a purchased start
+never farms reach-based rewards). Every world gets its own **procedural sky identity**
+(`WorldSky`: ringed planets and dunes, layered skylines with blinking windows and blimps,
+stalactites and rotating crystals — pooled, Reduce-Motion-gated, zero assets). The roster grows
+**16 → 24** (new XP beats at levels 8 and 18, coin rungs 2,000/3,500/5,000/7,500, a gems
+achievement, a 14-day challenge pull), locked skins render as a full-color animated tease instead
+of a dark silhouette, and the missions board gets a full overhaul (summary strip, ring cards,
+CLAIM ALL).
+
+**v1.4.1 — shop conversion pass.** The catalog goes 5 → 7 products (a one-time **Starter Bundle**
+shown only before your first purchase, and a top-end coin crate), with computed value badges that
+can't desync from price edits, a **first-purchase +50 % coin bonus** that is paid exactly once
+(replay-idempotent grants, iCloud-merge-safe purchase credits), and honest pre-launch states:
+before App Store Connect exists the shop shows a quiet "prices shown · App Store setup pending"
+footnote — never a red error for a normal situation.
+
+**v1.4.2 — the owner decrees.** Six product decrees now live in `CLAUDE.md` and **override every
+design doc** (a character never changes identity with the world; previews never lie; no
+broken-looking states; everything leads somewhere; zero ads, no dark patterns; clarity beats
+spectacle). A read-only intent audit ([`reports/AUDIT_intent.md`](reports/AUDIT_intent.md)) swept
+the shipped app against them and a four-wave fix fleet landed it all: the **Prism chameleon kill**
+(the default character followed the world palette through seven mutually-reinforcing surfaces —
+now it's a fixed prismatic shimmer, identical in all 12 worlds, with menu previews and the in-run
+body sampling the same clock), preview/rig fidelity (antenna colors, per-skin blink cadence, sway
+speed, body proportions, trail color visible at the buy moment), state honesty (one canonical
+equipped-skin resolver with cloud-merge self-heal; the menu world chip tracks purchases), and a
+calmer first run (tutorial gate covers every run entrance, the info X never force-starts a run, a
+WORLDS card teaches the 800 m transition, tutorial numbers derive from `Tuning` so a retune can't
+strand the copy).
+
+**Verification:** `./Tools/ci.sh` **158/158** (146 unit + 12 XCUITest) · evidence in
+[`reports/shots/v14/`](reports/shots/v14/), `v141/`, `v142/` (incl. one autoplay run crossing the
+800 m crossfade with Prism's shimmer — never the world accent — on both sides).
 
 ---
 
@@ -223,7 +266,7 @@ PrismRush/
             Autopilot, DailyChallenge        Meta/            Profile, ProfileStore, Skin/MissionCatalog
   Audio/    Synth (pure DSP), SynthEngine,   IAP/             IAPCatalog, IAPManager (StoreKit 2)
             Music                            Services/        GameCenter, Account, Haptics
-Tests/CoreTests/  89 deterministic tests (also run on Linux via Package.swift)   UITests/  6 XCUITests
+Tests/CoreTests/  146 deterministic tests (most also run on Linux via Package.swift)   UITests/  12 XCUITests
 Tools/  build / ci / qa / screenshots / gen_icon
 ```
 
@@ -277,8 +320,8 @@ Watch the engine play itself (used for the screenshots above):
 SIMCTL_CHILD_PR_AUTOPLAY=1 xcrun simctl launch booted com.rayancheca.prismrush
 ```
 
-Run the full test suite — 95 on a Mac (89 unit incl. the 200-seed solvability bot and a 10-seed
-12,000 m deep soak, + 6 XCUITest interaction tests):
+Run the full test suite — 158 on a Mac (146 unit incl. the 200-seed solvability bot and a 10-seed
+12,000 m deep soak, + 12 XCUITest interaction tests):
 
 ```bash
 xcodebuild test -project PrismRush.xcodeproj -scheme PrismRush \

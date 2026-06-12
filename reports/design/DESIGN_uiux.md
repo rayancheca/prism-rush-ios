@@ -83,8 +83,10 @@ padding: Theme.Space.l (24) horizontal, zones separated by Space.m (16)
 - **CharacterIdleStage(skinID: profile.selectedSkin)** fills the zone: the procedural slime
   (rounded box + eyes + pupils + blink + antenna, exactly the in-run mesh recipe, rendered via
   the character designer's stage — RealityKit non-AR view or Canvas fallback) standing on an
-  elliptical glow disc tinted by the skin's `bodyHex` (or a slow world-palette cycle for
-  `followsWorld` skins). Subtle floor reflection at 18% opacity.
+  elliptical glow disc tinted by the skin's fixed `bodyHex` ~~(or a slow world-palette cycle for
+  `followsWorld` skins)~~ **[RESCOPED v1.4.2 (decree 1): no skin tracks the world palette. The
+  prismatic default's disc rides the same fixed 8 s `SkinCatalog.prismaticColor` cycle as its
+  body — world-blind, in lockstep with the in-run shimmer]**. Subtle floor reflection at 18% opacity.
   - **Idle motion:** vertical bob ±3 pt, 2.4 s sine; blink every 3–7 s; antenna lag 0.15 s
     behind bob. Squash 1.04×/0.97× at bob extremes.
   - **Tap the character → CharacterSelectView.** The whole stage is one button.
@@ -95,6 +97,11 @@ padding: Theme.Space.l (24) horizontal, zones separated by Space.m (16)
   `WORLD 04 · SOLAR SANDS · 1,800m`, micro caption type, the world's `accent2` used ONLY for
   the small "04" numeral (the one sanctioned spot of world color on the menu). **Tap → Worlds.**
   - VO: "World 4, Solar Sands, checkpoint at 1,800 meters." Hint: "Opens world select."
+  - **[AMENDED v1.4.2 `37ea7f2` (D3-3) — chip semantics:]** the chip (and the menu's 6 % ambient
+    world tint) tracks **`ProfileStore.highestStartableWorld`** — the deepest STARTABLE world,
+    `max(reach, purchase)`, mirroring the Worlds header it routes to — so a v1.4 world purchase
+    shows on the hub immediately. Display only; reach-based systems (achievements, XP, world
+    coin bonus) stay on `maxWorldReached`.
 
 ### 1.4 Zone C — PLAY + best chip
 
@@ -152,7 +159,7 @@ affordable/unlocked since last visit (`lastSeenAffordableSkins` profile set, dec
 | Motion | Default | Reduce Motion |
 |---|---|---|
 | Character idle bob/squash | on | **off** — static pose, blink only (blink is opacity-free lid scale; keep, it's tiny and characterful) |
-| Glow disc shimmer | 8 s hue drift (followsWorld skins) | static |
+| Glow disc shimmer | 8 s hue drift ~~(followsWorld skins)~~ **[RESCOPED v1.4.2: `isPrismatic` only — the fixed `SkinCatalog.prismaticColor` cycle, never world-driven]** | static (shimmer's phase-0 color = bodyHex) |
 | Lit rail cell | static gold (no pulse ever) | same |
 | Sheet transitions | move(.bottom) | crossfade `.opacity` |
 | Coin-burst claim toast | 12 procedural particles, 0.6 s | numeric "+80" fade only |
