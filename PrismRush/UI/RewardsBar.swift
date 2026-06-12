@@ -49,7 +49,8 @@ struct RewardsBar: View {
     private func dailyCell(store: ProfileStore, now: Date, lit: Bool) -> some View {
         let bestToday = store.todaysChallengeBest(now: now)
         let sub = bestToday > 0 ? "BEST \(bestToday)" : "PLAY · ENDS \(trackEndsCountdown(now: now))"
-        return railCell(glyph: "bolt.fill", title: "DAILY RUSH", sub: sub, lit: lit) {
+        return railCell(glyph: "bolt.fill", title: "DAILY RUSH", sub: sub, lit: lit,
+                        tint: Theme.color(0xFF9F1C)) {
             model.startDailyChallenge()
         }
         .accessibilityIdentifier("railDaily")
@@ -67,7 +68,8 @@ struct RewardsBar: View {
         let sub = dailyAvail ? "CLAIM +\(amount)"
             : chestReady ? "CHEST READY"
             : "CHEST \(max(1, Int(store.secondsUntilChest(now: now)) / 60 + 1))M"
-        return railCell(glyph: "gift.fill", title: "REWARDS", sub: sub, lit: lit) {
+        return railCell(glyph: "gift.fill", title: "REWARDS", sub: sub, lit: lit,
+                        tint: Theme.color(0xFFD23D)) {
             if dailyAvail { model.claimDailyReward() }
             else if chestReady { model.openChest() }
             else { showRewardsSheet = true }
@@ -87,7 +89,7 @@ struct RewardsBar: View {
     private func missionsCell(unclaimed: Int, lit: Bool) -> some View {
         railCell(glyph: "target", title: "MISSIONS",
                  sub: unclaimed > 0 ? "CLAIM \(unclaimed)" : "BOARD",
-                 lit: lit, badge: lit ? 0 : unclaimed, action: onMissions)
+                 lit: lit, tint: Theme.color(0xB26BFF), badge: lit ? 0 : unclaimed, action: onMissions)
             .accessibilityIdentifier("railMissions")
             .accessibilityLabel(unclaimed > 0
                                 ? "Missions — \(unclaimed) rewards ready to claim."
@@ -98,10 +100,13 @@ struct RewardsBar: View {
     /// Shared cell anatomy: 64 pt, equal widths, surface fill + hairline; lit = static gold
     /// (never pulses — Reduce Motion and default render identically, uiux §1.8).
     private func railCell(glyph: String, title: String, sub: String, lit: Bool,
-                          badge: Int = 0, action: @escaping () -> Void) -> some View {
+                          tint: Color, badge: Int = 0, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 3) {
-                Image(systemName: glyph).font(.system(size: 15, weight: .semibold))
+                // Un-lit: the glyph carries the cell's identity hue (matching the nav row) so the
+                // rail reads as three distinct things, not flat gray. Lit: black on gold leads.
+                Image(systemName: glyph).font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(lit ? Color.black : tint)
                 Text(title).typeScale(.micro)
                 Text(sub).typeScale(.micro).monospacedDigit()
                     .opacity(lit ? 0.85 : 0.6)
@@ -112,7 +117,7 @@ struct RewardsBar: View {
             .background(lit ? AnyShapeStyle(Theme.goldGradient) : AnyShapeStyle(Theme.Role.surface),
                         in: RoundedRectangle(cornerRadius: Theme.Radius.m))
             .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m)
-                .strokeBorder(lit ? .clear : Theme.Role.hairline))
+                .strokeBorder(lit ? .clear : tint.opacity(0.35)))
             .overlay(alignment: .topTrailing) {
                 if badge > 0 {
                     Text("\(badge)")
