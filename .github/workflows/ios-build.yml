@@ -1,0 +1,65 @@
+name: iOS build + unit tests (macOS)
+
+# The Linux job (core-tests.yml) covers the deterministic layers, but it never compiles the
+# RealityKit renderer, the AVAudioEngine layer, SwiftUI, or StoreKit. This job builds the actual
+# iOS app and runs the unit bundle on a macOS runner so the renderer/audio/UI can't silently rot
+# between local Mac passes (CODE_REVIEW.md M5 / §20.3).
+#
+# NOTE: the project is developed against Xcode 26.5 / iOS 26.5. GitHub's hosted runners may lag
+# that toolchain; this job selects the newest Xcode the runner has and builds against the iOS 18
+# deployment target. The `build-for-testing` step is the load-bearing signal (it compiles the
+# renderer/audio/SwiftUI/StoreKit that Linux never sees); the unit-test run is best-effort on
+# whatever simulator the runner provides. If a runner's SDK is ever older than the repo's language
+# features require, pin the Xcode version in the select step.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: macos-15
+    env:
+      SCHEME: PrismRush
+      PROJECT: PrismRush.xcodeproj
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest installed Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+
+      - name: Show toolchain
+        run: xcodebuild -version && swift --version
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        run: xcodegen generate
+
+      # Compiles EVERY layer — renderer, audio engine, SwiftUI, StoreKit — which the Linux job
+      # never touches. A generic Simulator destination needs no booted device, so this step is the
+      # reliable rot tripwire regardless of which simulator runtimes the runner ships.
+      - name: Build for testing (all layers, no signing)
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project "$PROJECT" -scheme "$SCHEME" \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+
+      # Best-effort: run the deterministic unit bundle (not the UITests) on the newest iPhone
+      # simulator the runner has. `OS=latest` resolves to the newest installed iOS runtime.
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project "$PROJECT" -scheme "$SCHEME" \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -only-testing:PrismRushTests \
+            CODE_SIGNING_ALLOWED=NO
