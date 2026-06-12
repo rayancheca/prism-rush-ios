@@ -19,13 +19,9 @@ import UIKit
 @MainActor
 @Observable
 final class IAPManager {
-    /// Honest store states for the pre-launch window.
-    enum Availability: Equatable, Sendable {
-        case loading        // first load in-flight — shimmer placeholders, no error
-        case ready          // full catalog loaded — real prices everywhere
-        case notConfigured  // request succeeded but returned zero/partial products (pre-ASC)
-        case offline        // request THREW — genuine network/StoreKit failure
-    }
+    /// Honest store states for the pre-launch window. The cases + the pure transitions now live in
+    /// `StoreState` / `StoreAvailability` (Linux-testable); this alias keeps the call sites stable.
+    typealias Availability = StoreState
 
     static let shared = IAPManager()
 
@@ -82,7 +78,8 @@ final class IAPManager {
             retryTask?.cancel(); retryTask = nil; retryAttempt = 0
             // A SUCCESSFUL response with a zero/partial catalog means the IAPs don't (fully)
             // exist in App Store Connect yet — pre-launch reality, not an error. No banner.
-            availability = products.count >= IAPCatalog.products.count ? .ready : .notConfigured
+            availability = StoreAvailability.afterLoad(loadedCount: products.count,
+                                                       catalogCount: IAPCatalog.products.count)
             if availability == .ready { lastError = nil }
         } catch {
             // A THROW is a genuine network/StoreKit failure. Keep any previously-loaded catalog
@@ -91,7 +88,7 @@ final class IAPManager {
             // anything less — first load OR a partial `.notConfigured` subset — truthfully
             // becomes `.offline` so the RETRY card + backoff engage. A partial catalog must
             // never dress a real outage up as "setup pending" (v1.4.1 review).
-            if availability != .ready { availability = .offline }
+            availability = StoreAvailability.afterThrow(current: availability)
             lastError = "Couldn't reach the App Store. \(error.localizedDescription)"
             scheduleBackoffRetry()
         }

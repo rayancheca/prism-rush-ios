@@ -18,10 +18,12 @@ final class SolvabilityBotTests: XCTestCase {
         botSoak(seedCount: 200, targetDistance: 6_000, seedSalt: 0x1234_5678)
     }
 
-    /// Deeper soak: fewer seeds, but to 12,000 m — split bars, chrono slow-mo pickups and moving
-    /// walls all run at full density (difficulty caps at 3,200 m) across several world loops.
+    /// Deeper soak: fewer seeds than the 6,000 m sweep, but to 12,000 m — split bars, chrono
+    /// slow-mo pickups and moving walls all run at full density (difficulty caps at 3,200 m)
+    /// across several world loops. Widened 10 → 64 seeds (still ~1 s; CODE_REVIEW.md §20.6) so the
+    /// full-density tail is sampled far more broadly while staying cheap.
     func testGreedyBotSurvivesDeepRuns() async {
-        botSoak(seedCount: 10, targetDistance: 12_000, seedSalt: 0xDEE9_5EED)
+        botSoak(seedCount: 64, targetDistance: 12_000, seedSalt: 0xDEE9_5EED)
     }
 
     /// v1.3 containment invariant (geometric, no sim): the overdrive runway emits ZERO obstacles,

@@ -125,13 +125,12 @@ struct ShopView: View {
     }
 
     /// Today's rotation pick: first non-owned skin from a UTC-day-seeded shuffle of the pool —
-    /// UI-local SplitMix64, never feeds run RNG (rule 2). All owned → the medium coin pack.
+    /// pure + Linux-tested in `ShopValue.featuredSkin` (rule 2 safe). All owned → the medium pack.
     private var featuredID: String {
-        var rng = SplitMix64(seed: UInt64(bitPattern: Int64(ProfileStore.daysSinceEpoch(Date()))))
-        var pool = Self.featuredPool
-        for i in (1..<pool.count).reversed() { pool.swapAt(i, rng.int(0, i)) }
-        let p = ProfileStore.shared.profile
-        return pool.first { !p.ownedSkins.contains($0) } ?? "coins.medium"
+        ShopValue.featuredSkin(daySeed: ProfileStore.daysSinceEpoch(Date()),
+                               pool: Self.featuredPool,
+                               owned: ProfileStore.shared.profile.ownedSkins,
+                               fallback: "coins.medium")
     }
 
     @ViewBuilder private var heroSection: some View {
@@ -309,32 +308,22 @@ struct ShopView: View {
     }
 
     /// Per-pack value framing, COMPUTED from the catalog + prices (never hardcoded, so a price
-    /// or coin-amount edit can't desync a badge): the cheapest pack is the baseline, the best
-    /// coins-per-price pack wins BEST VALUE, everything else better than baseline gets its
-    /// computed +N% BONUS. The designated mid pack carries the curated BALANCED PICK tag — a
-    /// claim that is true by construction; never a fabricated popularity stat in a pre-launch
-    /// app (Decree 5: monetization is honest, v1.4.1 review).
-    private enum PackBadge: Equatable { case none, bonus(Int), balancedPick, bestValue }
-
-    /// Coins-per-price from a UNIFORM price source per render: live storefront prices only once
-    /// the FULL catalog is loaded (`.ready`), otherwise the USD fallbacks for EVERY pack. A
-    /// partial load on a non-USD storefront must never mix currencies across packs — that could
-    /// crown the wrong BEST VALUE and break the +N% math (v1.4.1 review).
-    private func coinsPerUnit(_ p: IAPProduct) -> Double {
+    /// or coin-amount edit can't desync a badge). The math is pure and Linux-tested in `ShopValue`
+    /// (v1.4.3); this view only resolves each product to a `ShopPack` with a UNIFORM price source.
+    ///
+    /// Coins-per-price from that uniform source: live storefront prices only once the FULL catalog
+    /// is loaded (`.ready`), otherwise the USD fallbacks for EVERY pack. A partial load on a
+    /// non-USD storefront must never mix currencies across packs — that could crown the wrong BEST
+    /// VALUE and break the +N% math (v1.4.1 review).
+    private func shopPack(_ p: IAPProduct) -> ShopPack {
         let price = iap.availability == .ready
             ? (iap.priceValue(p.id) ?? p.fallbackValue)
             : p.fallbackValue
-        return price > 0 ? Double(p.coinAmount) / price : 0
+        return ShopPack(id: p.id, coins: p.coinAmount, price: price)
     }
 
-    private func badge(for pack: IAPProduct) -> PackBadge {
-        let packs = coinPacks
-        guard let baseline = packs.first, pack.id != baseline.id,
-              let best = packs.max(by: { coinsPerUnit($0) < coinsPerUnit($1) }) else { return .none }
-        if pack.id == best.id { return .bestValue }
-        if pack.id == Self.mediumPackID { return .balancedPick }
-        let pct = Int((((coinsPerUnit(pack) / max(coinsPerUnit(baseline), 0.001)) - 1) * 100).rounded())
-        return pct > 0 ? .bonus(pct) : .none
+    private func badge(for product: IAPProduct) -> PackBadge {
+        ShopValue.badge(for: shopPack(product), in: coinPacks.map(shopPack), mediumID: Self.mediumPackID)
     }
 
     @ViewBuilder private func badgeTag(_ badge: PackBadge) -> some View {
