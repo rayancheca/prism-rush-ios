@@ -129,6 +129,29 @@ Optional later: per-world music (`Synth.beds` 12-entry table); richer per-world 
   XCUITest** (loadout strip didn't disturb the menu/XCUITests), on-sim (`reports/shots/v15/loadout_hub.png`).
   Adversarial 2-lens review: 0 remaining after the merge-policy fix.
 
+- **5c DONE — Shop coin-spend items (Mystery Box + packs).** New "POWER-UP PACKS" section in
+  `ShopView` (always shown — coin items work in every store state, even offline; decree 4). **Mystery
+  Box** (300 coins) — a gacha rolled with a META RNG (`Double.random`, NEVER the Core sim — iron rule
+  2), honest weighted table in `ShopConsumables.mysteryReward` (40% 200c / 22% 400c / 16% slow-mo×2 /
+  12% head-start×1 / 8% coin-surge×1 / 2% 1,200c jackpot — coin-only EV 192 < 300 cost, so it's a fair
+  gamble, not a money printer), full-screen reveal overlay. **Packs:** Slow-Mo (250→+3), Head Start
+  (300→+3), Coin Surge (450→+3). `ProfileStore.buyConsumablePack`/`openMysteryBox(roll:)` (test-
+  injectable) spend via `spendCoins` and grant atomically; won/bought coins do NOT count as
+  `totalCoinsEarned` (iron rule 9 / grantCoinPack precedent — gacha can't farm coin-earned missions).
+  Pure catalog + odds in `ShopValue.swift` (Linux-tested). **Adversarial-review fixes (2× MED):**
+  unaffordable cards now `.disabled` (not dimmed-but-tappable), and the reveal dismisses on a tap
+  ANYWHERE (was backdrop-only — "TAP TO CONTINUE" is now honest). Verified: **SPM 171/171** (gacha
+  odds + spend/grant/gate tests), **Mac 178 unit + 11 XCUITest**, on-sim (`reports/shots/v15/shop_top.png`).
+- **5d DONE — per-world themed music.** `Synth.beds` is now a 12-entry table (root shift + scale +
+  arp + hat per world), keyed by `world % 12`; the cycle (`world / 12`) still layers extra voices for
+  deep loops. Beds 0/1/2 reproduce the shipped three-world bed EXACTLY (byte-identical), 3…11 are new
+  and matched to each world's character (Orbital floaty … Singularity radiant). The `world →
+  Synth.step` plumbing already existed end-to-end (`musicPump(dt:world:)`), so no Music/SynthEngine
+  edit. SynthTests updated: sanity across 0…23 (12 beds + first deep cycle), adjacent worlds distinct,
+  deep cycle (world+12) layers. Synth is pure/Linux-tested. **SPM 171/171.** (Minor known lag: the bed
+  switch trails a world boundary by the ~0.45 s scheduled-buffer lookahead; a crisp flush is deferred
+  polish.)
+
 ### ▶ RESUME HERE (next session)
 Continuing the deferred power-up backlog on Fable 5 (ultracode). All committed to `main`, NOT
 pushed. Last verified: **SPM 164/164** (incl. 200-seed bot), **Mac 171 unit + 11 XCUITest**.
@@ -137,18 +160,16 @@ Remaining backlog (owner said "keep working on what's next, push at the end"):
    3; next pre-arm is 4 (`0x2E28_5014_7596_8B7D`).
 2. ~~pre-run consumables (Head Start + Score Booster)~~ **DONE (Phase 5b above)** — "Score Booster"
    shipped as the fair "Coin Surge" (×2 coins, off-leaderboard).
-3. **NEXT: Shop coin-spend items** — **Mystery Box** coin gacha (meta-side RNG, NOT the Core sim RNG —
-   use the `openFreeChest(reward:)` `Int.random`+override precedent; rewards = coins + consumable
-   charges: headStart/coinSurge/slowMo), **slow-mo refill pack**, **consumable packs** (top up
-   headStart/coinSurge). Coin-spend (NOT IAP) — a new coin-spend section in `ShopView` using
-   `coinPricePill` + `ProfileStore.spendCoins`. Add a `ProfileStore.openMysteryBox(roll:)` (test-
-   injectable) + EconomyTests. Honest odds (decree 5). Reveal UI for the box.
-4. Per-world themed music (`Synth.beds` 12-entry table — Synth.swift pure/Linux-tested; MUST keep
-   cycle-0 worlds 0/1/2 byte-identical per SynthTests goldens).
-5. Gameplay difficulty / slide→jump fairness pass (protected sim — layoutVersion bump; best after
-   on-device play). Still deferred.
-Then the **pre-push gate**: capture live `docs/screenshots/` golden-path set, then `git push`.
-- Deferred polish: dedicated Super Sneakers SFX (currently reuses `.boostStart`).
+3. ~~Shop coin-spend items (Mystery Box + packs)~~ **DONE (Phase 5c above)**.
+4. ~~Per-world themed music~~ **DONE (Phase 5d above)**.
+5. **STILL DEFERRED:** gameplay difficulty / slide→jump fairness pass (protected sim — needs a
+   layoutVersion 3→4 bump (pre-arm `0x2E28_5014_7596_8B7D`) + bot re-verify + golden re-pin; owner:
+   best after on-device play).
+**NEXT: the pre-push gate** — the power-up backlog (5a–5d) is COMPLETE. Capture the live
+`docs/screenshots/` golden-path set (incl. the new Super Sneakers / loadout / shop screens), refresh
+the README counts, then `git push` (everything is committed on `main`, NOT yet pushed).
+- Deferred polish: dedicated Super Sneakers SFX (reuses `.boostStart`); per-world music bed-switch
+  flush at world boundaries (currently lags ~0.45 s); Mystery Box exact-odds disclosure UI.
 Invariants to keep: iron rules 2/3/4 (no run-RNG/spawn change without a layoutVersion bump + bot
 green), decrees 1/2/6, Swift 6 @MainActor, zero binary assets. Verify every increment: SPM bot +
 Mac `xcodebuild test` + an on-sim screenshot (PR_SKIP_SPLASH / PR_WORLD / PR_SCREEN / PR_SHIELD /

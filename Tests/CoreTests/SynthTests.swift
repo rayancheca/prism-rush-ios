@@ -127,9 +127,9 @@ final class SynthTests: XCTestCase {
     }
 
     func testMusicStepsAreSaneAcrossWorlds() {
-        // Covers four evolution cycles (worlds 0…11): each cycle layers extra voices (v1.4.3),
-        // so every step must stay finite, non-silent, and below the clip ceiling.
-        for world in 0..<12 {
+        // v1.5: 12 distinct themed beds (worlds 0…11) PLUS the first deep cycle (12…23, layer 1).
+        // Every step must stay finite, non-silent, and below the clip ceiling.
+        for world in 0..<24 {
             for beat in 0..<8 {
                 let s = Synth.step(beat: beat, world: world)
                 XCTAssertEqual(s.count, Synth.stepFrames, "step length")
@@ -141,15 +141,21 @@ final class SynthTests: XCTestCase {
         }
     }
 
-    /// The cycle layering is actually audible: the same family one cycle deeper (world + 3) must
-    /// differ from cycle 0, proving deep worlds don't sound looped (v1.4.3). Cycle 0 (worlds
-    /// 0/1/2) keeps the original bed because every layer is guarded `layer >= 1`.
-    func testDeepCycleMusicLayersDifferFromBase() {
-        for world in 0..<3 {
+    /// v1.5: each of the 12 worlds has its OWN themed bed (neighbours sound distinct), AND a full
+    /// loop deeper (world + 12, one cycle up) still layers extra voices — so neither neighbouring
+    /// worlds nor deep loops ever sound identical. Worlds 0/1/2 keep the shipped bed (see `beds`).
+    func testPerWorldBedsAndDeepCyclesDiffer() {
+        let n = Synth.beds.count
+        for world in 0..<(n - 1) {                            // every adjacent world bar differs
+            let a = (0..<8).flatMap { Synth.step(beat: $0, world: world) }
+            let b = (0..<8).flatMap { Synth.step(beat: $0, world: world + 1) }
+            XCTAssertNotEqual(a, b, "world \(world) and \(world + 1) must sound distinct")
+        }
+        for world in 0..<3 {                                  // one cycle deeper layers extra voices
             for beat in 0..<8 {
-                let cycle0 = Synth.step(beat: beat, world: world)
-                let cycle1 = Synth.step(beat: beat, world: world + 3)   // same family, +1 cycle
-                XCTAssertNotEqual(cycle0, cycle1, "cycle 1 should add a layer vs cycle 0 (world \(world))")
+                XCTAssertNotEqual(Synth.step(beat: beat, world: world),
+                                  Synth.step(beat: beat, world: world + n),
+                                  "cycle 1 (world \(world + n)) should layer vs cycle 0 (world \(world))")
             }
         }
     }

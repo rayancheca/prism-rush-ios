@@ -255,34 +255,55 @@ enum Synth {
     static var stepDuration: Float { 60 / bpm / 2 }          // 8th note
     static var stepFrames: Int { Int(stepDuration * sampleRate) }
 
-    private static let rootShift = [0, 2, -2]
-    private static let scales = [[0, 3, 7, 10], [0, 3, 7, 12], [0, 5, 7, 12]]
     private static let bassPattern = [0, 0, 2, 1, 0, 0, 3, 2]
     /// Cap on the music cycle-layering (v1.4.3): deeper evolution cycles add voices up to here,
     /// then hold — so the bed thickens with the worlds without ever clipping.
     static let musicLayerCap = 3
 
-    /// One 8th-note step. `world` is the ABSOLUTE ordinal (v1.4.3): the family (`% 3`) sets the
-    /// root/scale/character as before, and the cycle (`/ 3`) layers extra voices so deep worlds
-    /// sound progressively richer rather than looping. Cycle 0 (worlds 0/1/2) is byte-identical to
-    /// the original three-world bed.
+    /// One themed bed per distinct world (v1.5). `rootShift` transposes the key, `scale` (4 degrees)
+    /// sets the mood, `arp` toggles the sparkle voice, `hatVol` the offbeat hat. Beds 0/1/2 reproduce
+    /// the shipped three-world bed EXACTLY (rootShift 0/2/−2, the original scales, arp off/on/on,
+    /// hat 0.06/0.08/0.10 = the old `0.06 + w·0.02`), so worlds 0/1/2 stay byte-identical; 3…11 are
+    /// new, each matched to its world's palette/sky character (Orbital floaty … Singularity radiant).
+    struct Bed: Sendable { let rootShift: Int; let scale: [Int]; let arp: Bool; let hatVol: Float }
+    static let beds: [Bed] = [
+        Bed(rootShift:  0, scale: [0, 3, 7, 10], arp: false, hatVol: 0.06),  // 0 Pulse City (shipped)
+        Bed(rootShift:  2, scale: [0, 3, 7, 12], arp: true,  hatVol: 0.08),  // 1 Geode Deep (shipped)
+        Bed(rootShift: -2, scale: [0, 5, 7, 12], arp: true,  hatVol: 0.10),  // 2 Solar Sands (shipped)
+        Bed(rootShift:  5, scale: [0, 3, 7, 10], arp: true,  hatVol: 0.07),  // 3 Orbital Drift (floaty)
+        Bed(rootShift: -4, scale: [0, 5, 7, 12], arp: true,  hatVol: 0.08),  // 4 Tidal Glow (flowing)
+        Bed(rootShift: -7, scale: [0, 3, 6, 10], arp: false, hatVol: 0.10),  // 5 Ashfall (heavy/dark)
+        Bed(rootShift:  7, scale: [0, 4, 7, 11], arp: true,  hatVol: 0.07),  // 6 Borealis (bright maj7)
+        Bed(rootShift:  0, scale: [0, 2, 7, 9],  arp: true,  hatVol: 0.12),  // 7 Datastream (driving)
+        Bed(rootShift:  3, scale: [0, 5, 7, 12], arp: true,  hatVol: 0.06),  // 8 Bloomfall (gentle sus)
+        Bed(rootShift: -5, scale: [0, 3, 8, 10], arp: true,  hatVol: 0.08),  // 9 Eventide (dusky b6)
+        Bed(rootShift:  2, scale: [0, 3, 7, 10], arp: false, hatVol: 0.13),  // 10 Tempest (turbulent)
+        Bed(rootShift:  9, scale: [0, 4, 7, 12], arp: true,  hatVol: 0.10),  // 11 Singularity (radiant)
+    ]
+
+    /// One 8th-note step. `world` is the ABSOLUTE ordinal: `world % 12` picks the themed bed (12
+    /// distinct worlds, v1.5), and the cycle (`/ 12`) layers extra voices so deep loops sound
+    /// progressively richer rather than identical. Cycle 0 (worlds 0…11) is the base bed; worlds
+    /// 0/1/2 stay byte-identical to the original three-world bed (see `beds`).
     static func step(beat: Int, world: Int) -> [Float] {
-        let w = ((world % 3) + 3) % 3
-        let cycle = max(0, world) / 3
+        let n = Synth.beds.count
+        let w = ((world % n) + n) % n
+        let cycle = max(0, world) / n
         var b = [Float](repeating: 0, count: stepFrames)
-        let root = 45 + rootShift[w]
-        let scale = scales[w]
+        let bed = Synth.beds[w]
+        let root = 45 + bed.rootShift
+        let scale = bed.scale
 
         if beat % 4 == 0 {                                   // kick on quarters
             tone(&b, 140, 42, dur: 0.16, .sine, vol: 0.5)
         }
         if beat % 2 == 1 {                                   // hat on offbeats
-            noise(&b, dur: 0.03, vol: 0.06 + Float(w) * 0.02, cutoff: 6000, highpass: true)
+            noise(&b, dur: 0.03, vol: bed.hatVol, cutoff: 6000, highpass: true)
         }
         let bassMidi = root + scale[bassPattern[beat % 8]]   // sawtooth bass every 8th
         tone(&b, freq(bassMidi), freq(bassMidi), dur: 0.16, .saw, vol: 0.12)
 
-        if w >= 1, beat % 2 == 0 {                           // sparkle arp from World 2
+        if bed.arp, beat % 2 == 0 {                          // sparkle arp (per-bed)
             let arpMidi = root + 24 + scale[(beat >> 1) % 4]
             tone(&b, freq(arpMidi), freq(arpMidi), dur: 0.2, .triangle, vol: 0.05)
         }
