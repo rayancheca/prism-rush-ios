@@ -111,6 +111,17 @@ enum ShopConsumables {
         default:      return .coins(1200)   //  2% — jackpot
         }
     }
+
+    /// The honest odds table for the reveal screen (decree 5: show real odds). Best-first; the
+    /// percentages match `mysteryReward`'s bands exactly. (label, percent, tint hex.)
+    static let mysteryOdds: [(label: String, pct: Int, hex: UInt32)] = [
+        ("1,200 coins — JACKPOT", 2, 0xFFD23D),
+        ("Coin Surge ×1",         8, 0xFFD23D),
+        ("Head Start ×1",        12, 0xFF9F1C),
+        ("Slow-Mo ×2",           16, 0x9BF0FF),
+        ("400 coins",            22, 0xFFD23D),
+        ("200 coins",            40, 0xFFD23D),
+    ]
 }
 
 /// Honest store states for the pre-launch window (the former `IAPManager.Availability`).
