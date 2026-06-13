@@ -50,6 +50,12 @@ enum Tuning {
     static let invulnDuration: Double = 0.4
     static let streakPerMult: Int = 5, multCap: Int = 5   // v1.3: ×5 at 20 gems — minute one escalates visibly
     static let spawnHorizon: Double = 115
+    // Guaranteed power-up cadence (v1.6): on top of the pattern pickups, drop one power-up every
+    // `powerUpCadence` m cycling through ALL kinds, so the player reliably meets each one. Placed in
+    // a FREE lane near the mark (no obstacle overlap), deterministically (no RNG → the seeded spawn
+    // stream + PatternOrderTests are untouched; the added entities DO change the daily track, so it
+    // rides the layoutVersion 3→4 bump).
+    static let powerUpCadence: Double = 350, powerUpFirstAt: Double = 150, cadenceClearance: Double = 5
     static let gapMax: Double = 11, gapMin: Double = 5, diffFullAt: Double = 3200
     static let tickDt: Double = 1.0 / 120.0
 

@@ -75,6 +75,8 @@ final class GameCore {
     @ObservationIgnored private var spawner = Spawner()
     @ObservationIgnored private var accumulator: Double = 0
     @ObservationIgnored private var nextId: Int = 0
+    @ObservationIgnored private var powerUpCursor: Double = Tuning.powerUpFirstAt  // next guaranteed power-up mark
+    @ObservationIgnored private var powerUpIndex: Int = 0   // cycles the cadence through all kinds
 
     init(seed: UInt64 = .random(in: .min ... .max)) {
         rng = SplitMix64(seed: seed)
@@ -103,6 +105,7 @@ final class GameCore {
             distance = startDistance
             scoreOffset = startDistance
             spawner.cursor = startDistance + 60
+            powerUpCursor = startDistance + Tuning.powerUpFirstAt
             let wn = Int((startDistance / Tuning.worldLength).rounded(.down))
             let wi = ((wn % 3) + 3) % 3
             maxWorld = wn; world = wi; worldFrom = wi; worldTo = wi; worldBlend = 1
@@ -147,6 +150,7 @@ final class GameCore {
         activeGems.removeAll(keepingCapacity: true)
         activePickups.removeAll(keepingCapacity: true)
         accumulator = 0; nextId = 0
+        powerUpCursor = Tuning.powerUpFirstAt; powerUpIndex = 0
     }
 
     // MARK: - Driving
@@ -275,6 +279,47 @@ final class GameCore {
     private func spawn() {
         spawner.fill(to: distance + Tuning.spawnHorizon, dist: distance, rng: &rng) { [weak self] cmd in
             self?.apply(cmd)
+        }
+        // Guaranteed power-up cadence (v1.6) — runs AFTER fill, so the patterns up to the horizon are
+        // already placed and `freeLaneNear` sees them (no overlap; both cursors advance past the
+        // horizon together so a later pattern can't land on an emitted pickup). Zero RNG.
+        let horizon = distance + Tuning.spawnHorizon
+        while powerUpCursor < horizon {
+            if let lane = freeLaneNear(powerUpCursor) {
+                apply(cadenceCommand(powerUpIndex, d: powerUpCursor, lane: lane))
+                powerUpIndex += 1
+            }
+            powerUpCursor += Tuning.powerUpCadence
+        }
+    }
+
+    /// A lane with no obstacle within `cadenceClearance` of `d` (prefers centre). Full-span/sweeping
+    /// obstacles (bar/splitBar/movingTall) near the mark block every lane → returns nil (skip). Pure
+    /// of the obstacle set, which is deterministic from the seed — so the cadence stays deterministic.
+    private func freeLaneNear(_ d: Double) -> Int? {
+        for lane in [1, 0, 2] {
+            var blocked = false
+            for o in activeObstacles where abs(o.d - d) <= Tuning.cadenceClearance {
+                switch o.kind {
+                case .bar, .splitBar, .movingTall: blocked = true
+                case .tall, .low: if o.lane == lane { blocked = true }
+                default: break
+                }
+                if blocked { break }
+            }
+            if !blocked { return lane }
+        }
+        return nil
+    }
+
+    /// The cadence's power-up for `index`, cycling through all five kinds so the player meets each.
+    private func cadenceCommand(_ index: Int, d: Double, lane: Int) -> SpawnCmd {
+        switch ((index % 5) + 5) % 5 {
+        case 0:  return .shield(d: d, lane: lane)
+        case 1:  return .magnet(d: d, lane: lane)
+        case 2:  return .doubler(d: d, lane: lane)
+        case 3:  return .chrono(d: d, lane: lane)
+        default: return .superSneakers(d: d, lane: lane)
         }
     }
 

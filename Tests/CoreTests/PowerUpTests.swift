@@ -218,4 +218,25 @@ final class PowerUpTests: XCTestCase {
         XCTAssertFalse(core.activateHeadStart())
         XCTAssertEqual(core.boostT, 0)
     }
+
+    // MARK: guaranteed power-up cadence (v1.6)
+
+    func testPowerUpCadenceDeliversEveryKind() async {
+        // The cadence cycles all five power-ups, so over a few thousand metres every kind shows up
+        // on the track (the old behaviour buried doubler/sneakers ~1,100–1,500 m apart).
+        let core = GameCore(seed: 1)
+        core.startRun(seed: 7)
+        var seen = Set<EntityKind>()
+        var ticks = 0
+        while core.distance < 4_000 && ticks < 80_000 {
+            Autopilot.drive(core)
+            core.tick(Tuning.tickDt)
+            for p in core.activePickups { seen.insert(p.kind) }
+            ticks += 1
+        }
+        for k in [EntityKind.shield, .magnet, .doubler, .chrono, .superSneakers] {
+            XCTAssertTrue(seen.contains(k), "the cadence must deliver \(k) within 4,000 m")
+        }
+        XCTAssertEqual(core.mode, .play, "the cadence pickups are non-lethal — the run survives")
+    }
 }
