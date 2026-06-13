@@ -209,7 +209,9 @@ struct CharacterSelectView: View {
         .buttonStyle(.neon)
         .disabled(equipped)
         .modifier(ShakeEffect(trigger: stageShake))
-        .accessibilityIdentifier("skinStageButton")
+        // Only the FOCUSED (centred) carousel page carries the stage id — the carousel renders
+        // several pages, so without this the id would be ambiguous (one per page).
+        .accessibilityIdentifier(focusedSkin.id == skin.id ? "skinStageButton" : "")
         .accessibilityLabel(stateA11y(for: skin, owned: owned, equipped: equipped))
     }
 
