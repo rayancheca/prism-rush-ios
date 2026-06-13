@@ -1,7 +1,34 @@
 # PRISM RUSH — Build State
 
 > Single source of truth for session resumability. On any fresh session: read this first, then continue.
-> Last updated: end of **v1.4.2 (owner-decree compliance — Prism identity fix + audit waves)**.
+> Last updated: end of **v1.6 (Power-ups, Polish & Progression — all waves complete; NOT yet pushed→pushed)**.
+
+## v1.6 — "Power-ups, Polish & Progression" — COMPLETE (2026-06-13)
+Owner-driven, fed by a live play session. Full plan + progress: `reports/design/V16_PLAN.md`.
+All committed locally and built/tested green at each step (SPM 178/Linux; Mac 185 unit + 11 XCUITest).
+- **Waves 1–2 (prior session):** wall-vault + visible shoes; Head Start/coin-popup/revive/worlds-beyond-12
+  fixes; shield-break glass shatter; guaranteed power-up cadence (`layoutVersion` 3→4); HUD rework +
+  Speed-Up deploy; stacked deploy layout + Shield deploy; world decor obstruction; Mystery Box reveal.
+- **G1 coin routing** (`42eb607`): path-aware gap breadcrumb → each pattern's safe entry lane + pattern-7
+  gem line. Zero RNG → `DailyChallenge.layoutVersion` **4→5**; 200-seed bot + 12 k soak green; goldens
+  re-pinned (v6 pre-arm `0xCF1D_7FAA_DFEF_898D`). Verified in-run.
+- **C2 rarity crests + auras** (`93544d3`): cosmetic `Crest` enum + `hasAura`, id-keyed overlay over the
+  authored roster (legacy pins untouched); `crestHex` body-hue fallback for dark antennas (Mono/Fang);
+  drawn by BOTH the Canvas swatch + the RealityKit rig (decree 2); verified select + in-run. Hooks
+  `PR_FOCUS`/`PR_SKIN`.
+- **C3 character carousel** (`cf8ed43`, fix `f263425`): paged slider through all 24 with per-page unlock
+  requirement + progress bar; rarity page dots. Fixed `skinStageButton` id scoping (carousel renders
+  several pages).
+- **S1 pack reveal burst** (`bdd4306`): `PackRewardBurst` on coin-spend pack purchase. Hook `PR_BUYPACK`.
+- **P3 bespoke glyphs + Power-Ups catalog** (`bc7edeb`): `PowerUpGlyph` (10 procedural icons) across HUD
+  chips, deploy buttons, the catalog + the How-to-Play card; catalog now covers deploys + loadout. B4
+  meters label = by-design (no change). Hook `PR_POWERUPS`.
+- **Pre-push gate:** full suite green (185 unit + 11 XCUITest, 0 failures); v1.6 README section + fresh
+  `docs/screenshots/20–25` + refreshed `11_characters.png`; pushed.
+
+---
+
+## v1.4.2 and earlier — archived below.
 
 ## v1.5 — "Depth & Clarity" overhaul (in progress, 2026-06-12)
 Owner-driven redesign. Full plan + locked decisions: `reports/design/V15_PLAN.md`. Order: (1) home/

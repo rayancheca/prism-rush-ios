@@ -296,6 +296,46 @@ expected `DailyChallenge.layoutVersion` 2 → 3 bump (its golden was pre-armed a
 
 ---
 
+## v1.6 — Power-ups, Polish & Progression
+
+A large owner-driven pass, fed by a live play session, that made the meta-game *legible* and the
+roster *covetable*. **Subway-style coin routing** — a gem breadcrumb now leads through every gap into
+the pattern's safe entry lane, so following the coins is always a takeable route. The **rarity ladder
+is finally visible on the characters themselves**: common runners stay plain, rares gain a creature
+feature (cat ears / floppy ears / dorsal fin), epics a bold crest (horns / crown), and the four
+legendaries a signature crest **plus an orbiting aura ring** — all cosmetic, never an advantage. The
+single equipped card became a **swipeable carousel** through all 24 characters, each page showing its
+unlock requirement *and a live progress bar*. Power-up icons are now **bespoke procedural glyphs** (no
+SF Symbols), shared by the HUD, the corner deploy buttons, and a new **Power-Ups catalog** that
+documents every pickup, deploy and pre-run perk. Coin-spend packs get a **reveal burst** on purchase.
+
+Every screenshot is the **actual app on an iPhone 17 Pro Max simulator**, driven through the launch
+hooks (`PR_SCREEN` / `PR_FOCUS` / `PR_SKIN` / `PR_AUTOPLAY` / `PR_MYSTERYBOX` / `PR_BUYPACK` / `PR_POWERUPS`).
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/20_carousel.png" width="200"><br><sub><b>1 · Character carousel</b><br>Swipe all 24 — crest + rarity dots + a live unlock progress bar (C3)</sub></td>
+<td align="center"><img src="docs/screenshots/25_aura_run.png" width="200"><br><sub><b>2 · Legendary in-run</b><br>Monarch's gold crown + orbiting aura on the 3D rig (C2) — previews never lie</sub></td>
+<td align="center"><img src="docs/screenshots/24_run_glyphs.png" width="200"><br><sub><b>3 · Bespoke glyphs + coin trail</b><br>Custom power-up icons, thumb-reach deploy buttons, Subway-style coin route (P3/G1)</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/21_powerups.png" width="200"><br><sub><b>4 · Power-Ups catalog</b><br>Every pickup, deploy & loadout perk — durations from <code>Tuning</code></sub></td>
+<td align="center"><img src="docs/screenshots/22_mystery.png" width="200"><br><sub><b>5 · Mystery Box</b><br>Honest, visible odds (decree 5) + a 1,200-coin jackpot</sub></td>
+<td align="center"><img src="docs/screenshots/23_packreveal.png" width="200"><br><sub><b>6 · Pack reveal</b><br>A ring/spark/medallion burst confirms exactly what landed (S1)</sub></td>
+</tr>
+</table>
+
+The load-bearing engineering decision was **path-aware coin routing without breaking determinism**.
+Coins must trace a takeable line, but a naïve centre breadcrumb walks the player into centre obstacles.
+The spawner now reads each freshly-built pattern, picks a laterally-safe entry lane (no tall / moving
+wall / split-bar cover in the first ~8.5 m), and lays the breadcrumb there — using only the
+already-computed spawns and fixed spacing, so it consumes **zero RNG**: the seeded stream and the pinned
+`PatternOrderTests` counts are byte-identical. The added gems are still new track entities, so the
+shared daily seed reshuffles — the expected `DailyChallenge.layoutVersion` 4 → 5 bump, goldens
+re-pinned, with the 200-seed solvability bot and the 12 k-metre deep soak staying green.
+
+---
+
 ## Architecture
 
 ```
@@ -424,6 +464,8 @@ Built phase-by-phase, each gate verified by a real build + on-device screenshot 
 | E5 | World checkpoints / level select (start from any reached world) | ✅ |
 | E6 | Sign in with Apple + Game Center friends leaderboard | ✅ |
 | — | **v1.2 multi-agent overhaul** — Linux CI, bug sweep, new content, perf, a11y (see above) | ✅ |
+| — | **v1.3 → v1.5** — characters, progression, 12 evolving worlds, the power-up suite (see above) | ✅ |
+| — | **v1.6 Power-ups, Polish & Progression** — coin routing, rarity crests + auras, character carousel, bespoke glyphs + catalog, pack reveal | ✅ |
 | — | Mac build + visual pass · App Store archive · live IAP/accounts | ⏳ needs your Mac + Apple account |
 
 ## Shipping (your Apple Developer account)
