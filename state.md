@@ -78,12 +78,23 @@ Optional later: per-world music (`Synth.beds` 12-entry table); richer per-world 
   PR_SHIELD=1 sim QA hook.
 - **4b DONE** (commit a6d1f00): discoverable `PowerUpsView` (every power-up: icon/effect/duration +
   revive), reached from a clear "Power-Ups" row in Settings (2 taps from the prominent hub gear).
-- **4c/4d — TO DISCUSS with owner before building** (owner explicitly wanted to co-design power-ups
-  + abilities): the manual-trigger saved power-up (deploy slow-mo on demand via a HUD button — build
-  as a NEW consumable, NOT a change to the auto-chrono, or the solvability bot breaks); new power-ups
-  (super sneakers/higher jump, head start, score booster, mystery box); character rarity passives
-  (cosmetic identity + honest higher-tier passive + equippable loadout — the locked decision); inline
-  first-run tutorial enhancement. These touch Core mechanics + economy + balance → design-gated.
+- **4c DONE** (commit ba226f4): just-in-time first-run tutorial — contextual "SWIPE UP/DOWN/SIDE"
+  prompts the first time each obstacle type approaches on a genuine first run (totalRuns==0, not
+  autoplay). Pure presentation off the snapshot (bot-unaffected). PR_TUTORIAL=1 QA hook.
+- **Owner decision (this round):** characters stay **pure cosmetic** — NO passives (all power, if
+  added, lives in a future loadout). Owner selected ONLY the tutorial for the build-now list.
+- **DEFERRED (owner did not select; revisit when asked):** manual-trigger saved power-up (build as a
+  NEW consumable + tappable HUD button, NOT a change to the auto-chrono or the bot breaks); new
+  power-ups (super sneakers/higher jump, head start, score booster, mystery box); equippable loadout;
+  per-world themed music; the gameplay difficulty / slide→jump pattern-fairness pass (needs a
+  layoutVersion 2→3 bump + bot re-verify + golden re-pin — subjective, best after on-device play).
+
+## v1.5 session status (2026-06-12)
+All work committed to `main`, **NOT pushed** (owner holding the push). Commits: 62352d4, 66f9f24,
+50d767b (Phase 1 + follow-ups) · 1c76022, 9d699bf, 43d80e0 (Phase 2 — 12 worlds) · 9e003cd (3a HUD)
+· b4ae596, a6d1f00, ba226f4 (4a/4b/4c) · 8958e41 (docs). Mac `xcodebuild test` 178/178, SPM 160/160
+incl. the 200-seed bot. No Core sim-logic / spawn-RNG change shipped; `DailyChallenge.layoutVersion`
+unchanged. Pre-push gate (live screenshots in `docs/screenshots/`) still TODO before any GitHub push.
 
 ## v1.4.3 — CODE_REVIEW.md §20 implementation (in progress, 2026-06-12)
 Executing the prioritized plan from `CODE_REVIEW.md` (Opus 4.8 strict pass, 8.7/10). Ordered steps;
