@@ -424,5 +424,33 @@ final class EconomyTests: XCTestCase {
         // …and the v1.4.1 review fields (purchased-coin G-counter + replay ledger).
         XCTAssertTrue(p.coinsPurchasedByDevice.isEmpty)
         XCTAssertTrue(p.grantedTransactionIDs.isEmpty)
+        // v1.5 pre-run consumable counters default on legacy saves (one each — the goodwill intro).
+        XCTAssertEqual(p.slowMoCharges, 2)
+        XCTAssertEqual(p.headStartCharges, 1)
+        XCTAssertEqual(p.coinSurgeCharges, 1)
+    }
+
+    func testConsumablesStayDeviceLocalOnCloudMerge() async throws {
+        // Consumable inventory is deliberately device-local: the LOCAL value wins, so a stale remote
+        // can never resurrect spent charges (a max() merge would — see ProfileStore.merged docstring).
+        var local = Profile(); local.headStartCharges = 0; local.coinSurgeCharges = 4; local.slowMoCharges = 1
+        var remote = Profile(); remote.headStartCharges = 9; remote.coinSurgeCharges = 9; remote.slowMoCharges = 9
+        let m = ProfileStore.merged(local: local, remote: remote)
+        XCTAssertEqual(m.headStartCharges, 0, "spent Head Start charges are not resurrected by a merge")
+        XCTAssertEqual(m.coinSurgeCharges, 4, "consumables keep the local value (device-local)")
+        XCTAssertEqual(m.slowMoCharges, 1)
+    }
+
+    func testConsumableCountersRoundTripAndCanBeSpent() async throws {
+        // A profile carrying spent/earned consumable counts must encode + decode exactly (no wipe).
+        var p = Profile()
+        p.headStartCharges = 3
+        p.coinSurgeCharges = 0
+        p.slowMoCharges = 5
+        let data = try JSONEncoder().encode(p)
+        let back = try JSONDecoder().decode(Profile.self, from: data)
+        XCTAssertEqual(back.headStartCharges, 3)
+        XCTAssertEqual(back.coinSurgeCharges, 0)
+        XCTAssertEqual(back.slowMoCharges, 5)
     }
 }

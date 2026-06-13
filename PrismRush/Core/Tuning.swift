@@ -97,6 +97,9 @@ enum Tuning {
     static let boostFactor: Double = 1.3
     static let boostSpeedMax: Double = 36
     static let boostScoreBonus: Int = 60
+    // Pre-run "Head Start" consumable: launch with this many seconds of Overdrive boost (a momentum
+    // head start, not a score grant). Longer than a pad boost; leaderboard-safe (no usedCheckpoint).
+    static let headStartBoostDuration: Double = 3.0
     static let boostGemBonus: Int = 1         // each gem pays this many extra coins while boosting
     static let capBoostPad = 2
 

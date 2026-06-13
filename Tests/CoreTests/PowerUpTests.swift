@@ -190,4 +190,32 @@ final class PowerUpTests: XCTestCase {
         XCTAssertEqual(apex, Tuning.jumpV0 * Tuning.jumpV0 / (2 * Tuning.gravity), accuracy: 0.05,
                        "jump height restores after the buff ends")
     }
+
+    // MARK: Head Start (pre-run consumable, v1.5)
+
+    func testHeadStartLaunchesWithBoostAndIsLeaderboardSafe() async {
+        let core = GameCore(seed: 3)
+        core.startRun(seed: 3)
+        XCTAssertEqual(core.boostT, 0, "a fresh run has no boost")
+        XCTAssertFalse(core.usedCheckpoint, "a normal run is leaderboard-eligible")
+
+        XCTAssertTrue(core.activateHeadStart())
+        XCTAssertEqual(core.boostT, Tuning.headStartBoostDuration, accuracy: 1e-9,
+                       "Head Start launches with a multi-second overdrive boost")
+        XCTAssertGreaterThan(core.effectiveSpeed, core.speed,
+                             "the boost actually speeds the world up at launch")
+        XCTAssertFalse(core.usedCheckpoint,
+                       "Head Start must NOT mark the run as a checkpoint (stays leaderboard-eligible)")
+
+        // It expires like any boost, restoring the raw ramp.
+        for _ in 0..<(Int(Tuning.headStartBoostDuration / Tuning.tickDt) + 30) { core.tick(Tuning.tickDt) }
+        XCTAssertEqual(core.boostT, 0)
+        XCTAssertEqual(core.effectiveSpeed, core.speed, accuracy: 1e-9)
+    }
+
+    func testHeadStartIgnoredOutsidePlay() async {
+        let core = GameCore(seed: 1)   // never started → .menu
+        XCTAssertFalse(core.activateHeadStart())
+        XCTAssertEqual(core.boostT, 0)
+    }
 }

@@ -590,6 +590,12 @@ final class ProfileStore {
     /// the grant watermark, a merge that raises level without a run can never double-pay.
     /// `weeklyMissionDate`/`challengeRewardTier` are deliberately NOT merged: device-local boards
     /// (missionProgress already merges by max; same accepted risk class as the daily board).
+    /// CONSUMABLE COUNTERS (`slowMoCharges`/`headStartCharges`/`coinSurgeCharges`) are also
+    /// deliberately device-local (they ride `var merged = local`, last-writer-wins): a `max()`
+    /// merge would RESURRECT spent charges on every sync (a cross-device dupe), and a correct
+    /// convergent fix needs a per-device earned/spent G-counter — overkill for inventory bought
+    /// with COINS, which already sync safely via `coinsPurchasedByDevice`. So the player's money is
+    /// cross-device; their in-flight consumable inventory is per-device and cheaply re-bought.
     ///
     /// COINS (v1.4.1 BLOCKER fix): earned coins keep the conservative max(), but the winning
     /// balance is then credited with every PAID coin-pack payout it has never seen. The
@@ -623,6 +629,8 @@ final class ProfileStore {
         merged.xpLevelRewarded = max(merged.xpLevelRewarded, remote.xpLevelRewarded)
         merged.seenSkins.formUnion(remote.seenSkins)
         merged.bestDistanceByWorld.merge(remote.bestDistanceByWorld) { mine, theirs in max(mine, theirs) }
+        // slowMoCharges / headStartCharges / coinSurgeCharges are intentionally NOT merged here —
+        // device-local consumable inventory (see the docstring above). They keep `local`'s value.
         // Selection self-heal LAST — after the ownership union above — so a selection whose
         // unlock arrives in this very merge survives, while a selection nobody owns can't
         // outlive the merge as an EQUIPPED-on-locked contradiction (AUDIT D3-1).

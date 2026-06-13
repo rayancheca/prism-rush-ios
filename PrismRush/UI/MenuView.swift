@@ -17,6 +17,8 @@ struct MenuView: View {
     /// the owner's ask — no longer three taps deep behind Profile.
     var onSettings: () -> Void = {}
     var rewards: AnyView = AnyView(EmptyView())
+    /// Pre-run loadout chips (LoadoutStrip) — shown only when the player owns a consumable.
+    var loadout: AnyView = AnyView(EmptyView())
     /// FIRST RUN › destination when best == 0 (HowToPlay). Falls back to `onPlay`, whose
     /// first-run gate already routes through the tutorial; wave 5 wires it directly.
     var onHowToPlay: (() -> Void)? = nil
@@ -26,6 +28,7 @@ struct MenuView: View {
             statusStrip          // A — level ring ←→ coin badge (44 pt)
             heroZone             // B — wordmark, idle character stage, world chip (flex)
             playZone             // C — PLAY + best chip
+            loadout              // C2 — pre-run loadout chips (only if a consumable is owned)
             rewards              // D — the 3-cell rewards rail (RewardsBar)
             navRow               // E — Characters | Shop | Worlds
         }

@@ -8,6 +8,13 @@ struct Profile: Codable, Equatable, Sendable {
     /// new or existing-on-update — starts with a couple to discover the feature; replenished by
     /// levelling up. Deployed via the in-run HUD button.
     var slowMoCharges: Int = 2
+    /// Pre-run loadout consumables (armed on the hub, consumed at run start; one each free to
+    /// discover, then bought via the Mystery Box / shop). Head Start launches with an Overdrive
+    /// boost; Coin Surge pays ×2 coins for the whole run. Not used on the competitive Daily run.
+    /// Device-local like `slowMoCharges` — NOT cloud-merged (see `ProfileStore.merged`): coins sync,
+    /// consumable inventory does not (a max() merge would resurrect spent charges). Re-bought cheaply.
+    var headStartCharges: Int = 1
+    var coinSurgeCharges: Int = 1
 
     // Lifetime stats.
     var bestScore: Int = 0
@@ -92,7 +99,8 @@ extension Profile {
 // to decode (and never silently wipes a saved profile). The memberwise + synthesized `encode` remain.
 extension Profile {
     enum CodingKeys: String, CodingKey {
-        case coins, slowMoCharges, bestScore, totalRuns, totalDistance, totalGems, totalCoinsEarned, bestStreak
+        case coins, slowMoCharges, headStartCharges, coinSurgeCharges
+        case bestScore, totalRuns, totalDistance, totalGems, totalCoinsEarned, bestStreak
         case maxWorldReached, ownedSkins, selectedSkin
         case lastDailyClaim, loginStreak, lastChestOpen
         case missionProgress, claimedMissions, achievementTier, dailyMissionDate
@@ -110,6 +118,8 @@ extension Profile {
         let d = Profile()   // defaults
         coins = try c.decodeIfPresent(Int.self, forKey: .coins) ?? d.coins
         slowMoCharges = try c.decodeIfPresent(Int.self, forKey: .slowMoCharges) ?? d.slowMoCharges
+        headStartCharges = try c.decodeIfPresent(Int.self, forKey: .headStartCharges) ?? d.headStartCharges
+        coinSurgeCharges = try c.decodeIfPresent(Int.self, forKey: .coinSurgeCharges) ?? d.coinSurgeCharges
         bestScore = try c.decodeIfPresent(Int.self, forKey: .bestScore) ?? d.bestScore
         totalRuns = try c.decodeIfPresent(Int.self, forKey: .totalRuns) ?? d.totalRuns
         totalDistance = try c.decodeIfPresent(Double.self, forKey: .totalDistance) ?? d.totalDistance

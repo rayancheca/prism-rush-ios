@@ -50,6 +50,18 @@ struct PowerUpsView: View {
 
                 ForEach(powerUps) { pu in row(pu) }
 
+                // Consumables you BRING into a run (armed on the hub, not collected on the track) —
+                // segregated so the "collect these on the track" intro above never lies (decree 2).
+                Text("BROUGHT INTO THE RUN")
+                    .font(.system(size: 11, weight: .heavy, design: .rounded)).tracking(1.5)
+                    .foregroundStyle(Theme.Role.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, Theme.Space.s)
+                consumableRow("bolt.horizontal.fill", 0xFF9F1C, "HEAD START",
+                              "Launch the run already flying with an overdrive boost. Arm it on the hub.")
+                consumableRow("dollarsign.circle.fill", 0xFFD23D, "COIN SURGE",
+                              "Doubles every coin you earn for the whole run. Arm it on the hub before you play.")
+
                 // The revive is not a track pickup — call it out separately so it's not mistaken for one.
                 reviveRow
             }
@@ -90,6 +102,31 @@ struct PowerUpsView: View {
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m).strokeBorder(tint.opacity(0.35), lineWidth: 1))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(pu.name). \(pu.desc). \(pu.timing).")
+    }
+
+    private func consumableRow(_ icon: String, _ hex: UInt32, _ name: String, _ desc: String) -> some View {
+        let tint = Theme.color(hex)
+        return HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 46, height: 46)
+                .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: Theme.Radius.s))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(name)
+                    .font(.system(size: 15, weight: .heavy, design: .rounded)).tracking(1)
+                    .foregroundStyle(Theme.Role.textPrimary)
+                Text(desc)
+                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                    .foregroundStyle(Theme.Role.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .background(Theme.Role.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.m))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m).strokeBorder(tint.opacity(0.3), lineWidth: 1))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(name). \(desc)")
     }
 
     private var reviveRow: some View {

@@ -223,6 +223,18 @@ final class GameCore {
         return true
     }
 
+    /// Pre-run "Head Start" consumable: launch the run with a multi-second Overdrive boost — a
+    /// momentum head start, not a score grant. RNG-free (input-driven like activateSlowMo) and
+    /// leaderboard-safe (it never sets `usedCheckpoint`), so the seeded sim and bot are untouched.
+    /// Returns true only if it actually armed (in play).
+    @discardableResult
+    func activateHeadStart() -> Bool {
+        guard mode == .play else { return false }
+        boostT = Tuning.headStartBoostDuration
+        emit(.boostStarted(x: px))
+        return true
+    }
+
     func slide() {
         guard mode == .play else { return }
         slideT = Tuning.slideDuration

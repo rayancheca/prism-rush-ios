@@ -110,19 +110,39 @@ Optional later: per-world music (`Synth.beds` 12-entry table); richer per-world 
   green), **Mac 171 unit + 11 XCUITest**, on-sim (`reports/shots/v15/sneakers_active_*.png` — active
   ring + amber sparks across Orbital Drift). Adversarial 4-lens review: 0 CRITICAL/HIGH/MEDIUM.
 
+- **5b DONE — pre-run consumables (Head Start + Coin Surge).** Armed on the hub via a new
+  `LoadoutStrip` (shown only when owned — no dead UI), consumed at run start in `beginRun`. **Head
+  Start** = launch with `Tuning.headStartBoostDuration` 3 s of Overdrive boost (`GameCore.
+  activateHeadStart`, RNG-free, leaderboard-safe — never sets `usedCheckpoint`). **Coin Surge** =
+  ×2 coins for the whole run via the existing payout `mult` in `recordRunResults` (`coinSurgeActiveThisRun`
+  captured at run start, stable across revives so the per-death watermark deltas never drift; touches
+  COINS only, never `core.score`/leaderboard — iron rule 9 intact). **Naming:** the backlog's "Score
+  Booster" was implemented as a fair COIN booster ("Coin Surge") and named for its effect (decree 2) —
+  a literal leaderboard-score booster would be pay-to-win (decree 5). Consumables are gated OFF the
+  competitive Daily run (`beginRun(consumeLoadout:false)`). `Profile.headStartCharges`/`coinSurgeCharges`
+  (default 1 each — goodwill intro; decodeIfPresent ?? default, iron rule 7). **Cloud policy
+  (adversarial-review HIGH+MED, resolved):** consumable counters are deliberately DEVICE-LOCAL (not in
+  `ProfileStore.merged`, like `slowMoCharges`) — a max() merge would resurrect spent charges; coins
+  (the real value) already sync via the G-counter. Documented in `merged()` + Profile + pinned by
+  `testConsumablesStayDeviceLocalOnCloudMerge`. PowerUpsView: a segregated "BROUGHT INTO THE RUN"
+  section (NOT the track-pickup list — decree 2). Verified: **SPM 168/168**, **Mac 174 unit + 11
+  XCUITest** (loadout strip didn't disturb the menu/XCUITests), on-sim (`reports/shots/v15/loadout_hub.png`).
+  Adversarial 2-lens review: 0 remaining after the merge-policy fix.
+
 ### ▶ RESUME HERE (next session)
 Continuing the deferred power-up backlog on Fable 5 (ultracode). All committed to `main`, NOT
 pushed. Last verified: **SPM 164/164** (incl. 200-seed bot), **Mac 171 unit + 11 XCUITest**.
 Remaining backlog (owner said "keep working on what's next, push at the end"):
 1. ~~**Super Sneakers** (higher-jump in-run pickup)~~ **DONE (Phase 5a above)** — layoutVersion is now
    3; next pre-arm is 4 (`0x2E28_5014_7596_8B7D`).
-2. **NEXT: pre-run consumables** — **Head Start** (launch with a few seconds of Overdrive boost;
-   leaderboard-safe, does NOT route through `fromWorld`/`usedCheckpoint`) + **Score Booster** (run-
-   scoped payout multiplier — implement as a fair, honest variant; see decision note). No spawner/RNG
-   touch → no layoutVersion bump. Needs a lightweight pre-run loadout arm UI + consume in `beginRun`.
-3. **Shop coin-spend items**: **Mystery Box** coin gacha (meta-side RNG, NOT the Core sim RNG — use
-   the `openFreeChest(reward:)` `Int.random`+override precedent), **slow-mo refill pack**, consumable
-   packs. Coin-spend (NOT IAP) — a new `ShopConsumables`/section using `coinPricePill` + `spendCoins`.
+2. ~~pre-run consumables (Head Start + Score Booster)~~ **DONE (Phase 5b above)** — "Score Booster"
+   shipped as the fair "Coin Surge" (×2 coins, off-leaderboard).
+3. **NEXT: Shop coin-spend items** — **Mystery Box** coin gacha (meta-side RNG, NOT the Core sim RNG —
+   use the `openFreeChest(reward:)` `Int.random`+override precedent; rewards = coins + consumable
+   charges: headStart/coinSurge/slowMo), **slow-mo refill pack**, **consumable packs** (top up
+   headStart/coinSurge). Coin-spend (NOT IAP) — a new coin-spend section in `ShopView` using
+   `coinPricePill` + `ProfileStore.spendCoins`. Add a `ProfileStore.openMysteryBox(roll:)` (test-
+   injectable) + EconomyTests. Honest odds (decree 5). Reveal UI for the box.
 4. Per-world themed music (`Synth.beds` 12-entry table — Synth.swift pure/Linux-tested; MUST keep
    cycle-0 worlds 0/1/2 byte-identical per SynthTests goldens).
 5. Gameplay difficulty / slide→jump fairness pass (protected sim — layoutVersion bump; best after

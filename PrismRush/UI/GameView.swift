@@ -91,6 +91,14 @@ final class GameModel {
     @ObservationIgnored private var slidesThisRun = 0
     var nearMisses: Int { nearMissesThisRun }
 
+    // Pre-run loadout (v1.5): transient arm-state toggled on the hub. Consumed at run start in
+    // `beginRun` (normal runs only — never the competitive Daily). `coinSurgeActiveThisRun` is
+    // captured at run start and held stable for the whole run (incl. post-revive deaths), so the
+    // coin payout multiplier never drifts mid-run.
+    var armedHeadStart = false
+    var armedCoinSurge = false
+    @ObservationIgnored private(set) var coinSurgeActiveThisRun = false
+
     @ObservationIgnored private let autoplay = ProcessInfo.processInfo.environment["PR_AUTOPLAY"] == "1"
     @ObservationIgnored private let demo = ProcessInfo.processInfo.environment["PR_DEMO"] == "1"
 
@@ -338,10 +346,27 @@ final class GameModel {
         }
     }
 
-    /// The actual run start — everything below the first-run gate.
-    private func beginRun(fromWorld: Int, seed: UInt64?) {
+    /// The actual run start — everything below the first-run gate. `consumeLoadout` is false for the
+    /// competitive Daily run (pre-run consumables would be pay-to-win on the shared board — decree 5).
+    private func beginRun(fromWorld: Int, seed: UInt64?, consumeLoadout: Bool = true) {
         applyCurrentSkin()
         core.startRun(seed: seed, startDistance: Double(fromWorld) * Tuning.worldLength)
+        // Pre-run loadout: consume armed + available consumables now that the run is in `.play`.
+        // Each is RNG-free and leaderboard-safe; Coin Surge only multiplies COINS, never the score.
+        coinSurgeActiveThisRun = false
+        if consumeLoadout {
+            let store = ProfileStore.shared
+            if armedHeadStart, store.profile.headStartCharges > 0 {
+                store.mutate { $0.headStartCharges = max(0, $0.headStartCharges - 1) }
+                core.activateHeadStart()
+                if store.profile.headStartCharges == 0 { armedHeadStart = false }
+            }
+            if armedCoinSurge, store.profile.coinSurgeCharges > 0 {
+                store.mutate { $0.coinSurgeCharges = max(0, $0.coinSurgeCharges - 1) }
+                coinSurgeActiveThisRun = true
+                if store.profile.coinSurgeCharges == 0 { armedCoinSurge = false }
+            }
+        }
         renderer.resetEntities()
         // PLAY / RUN AGAIN must never inherit the challenge flag — `startDailyChallenge` re-sets
         // it AFTER this returns (AGENT_meta.md §3).
@@ -392,7 +417,7 @@ final class GameModel {
     func startDailyChallenge() {
         routeRun { [weak self] in
             guard let self else { return }
-            beginRun(fromWorld: 0, seed: ProfileStore.shared.todaysChallengeSeed())
+            beginRun(fromWorld: 0, seed: ProfileStore.shared.todaysChallengeSeed(), consumeLoadout: false)
             isChallengeRun = true
         }
     }
@@ -641,7 +666,9 @@ final class GameModel {
         // checkpoint start must not pay for the skipped worlds), then the Double-Coins multiplier.
         // Computed per component so the death panel's breakdown is the exact delta split — each
         // component is an Int before the multiplier, so the sum equals the old single-base figure.
-        let mult = store.profile.coinMultiplier
+        // Coin Surge (pre-run consumable) stacks atop the Double-Coins IAP for THIS run only.
+        // Captured at run start (stable across revives), so the watermark deltas never drift.
+        let mult = store.profile.coinMultiplier * (coinSurgeActiveThisRun ? 2 : 1)
         let worldsCrossed = max(0, core.maxWorld - runStartWorld)
         lastCoinsFromGems = max(0, core.gemCount * mult - gemCoinsAwarded)
         gemCoinsAwarded += lastCoinsFromGems
@@ -755,6 +782,20 @@ final class GameModel {
             nextMilestoneAt = uiClock + Self.milestoneSpacing
         }
         if rewardToast != nil, uiClock > toastClearAt { rewardToast = nil }
+    }
+
+    // MARK: pre-run loadout (hub chips) — arm a consumable to bring into the next run.
+
+    func toggleHeadStart() {
+        guard ProfileStore.shared.profile.headStartCharges > 0 else { return }
+        armedHeadStart.toggle()
+        synth.play(.uiTick)
+    }
+
+    func toggleCoinSurge() {
+        guard ProfileStore.shared.profile.coinSurgeCharges > 0 else { return }
+        armedCoinSurge.toggle()
+        synth.play(.uiTick)
     }
 
     /// Whether the slow-mo button is live: in play, a charge banked, none already running.
@@ -956,6 +997,7 @@ struct GameView: View {
                              onProfile: { model.open(.stats) },
                              onSettings: { model.open(.settings) },
                              rewards: AnyView(RewardsBar(model: model, onMissions: { model.open(.missions) })),
+                             loadout: AnyView(LoadoutStrip(model: model)),
                              onHowToPlay: { showHowToPlayInfo = true })
                 }
             case .over:
