@@ -226,7 +226,8 @@ final class GameCore {
         if worldBlend < 1 { worldBlend = min(1, worldBlend + dt * Tuning.worldBlendRate) }
         guard mode == .play else { return }
         let wn = Int((distance / Tuning.worldLength).rounded(.down))
-        let wi = ((wn % 3) + 3) % 3
+        let fc = Tuning.worldFamilyCount
+        let wi = ((wn % fc) + fc) % fc
         if wn > maxWorld {
             maxWorld = wn
             if wi != worldTo { worldFrom = worldTo; worldTo = wi; worldBlend = 0 }

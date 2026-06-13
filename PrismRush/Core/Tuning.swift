@@ -6,6 +6,11 @@ import Foundation
 enum Tuning {
     static let laneX: [Double] = [-2.2, 0, 2.2]
     static let worldLength: Double = 800
+    /// Number of distinct world families before the palette/sky set evolves and repeats (v1.5: 12).
+    /// `Core/` can't import the UI `Theme`, so this mirrors `Theme.worlds.count`; a test pins them
+    /// equal. Purely cosmetic — `stepWorld` folds the absolute ordinal to this for the family index,
+    /// consuming no RNG, so changing it never touches the spawn stream (no `layoutVersion` bump).
+    static let worldFamilyCount = 12
     static let worldBlendRate: Double = 0.6   // crossfade speed → ~1.7 s cinematic world transition
     static let speedStart: Double = 17, speedRamp: Double = 0.0052, speedCap: Double = 33
     static let menuSpeed: Double = 7

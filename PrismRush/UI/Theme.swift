@@ -12,10 +12,26 @@ struct WorldPalette: Sendable {
 }
 
 enum Theme {
+    /// The 12 distinct worlds (v1.5). Each is its own theme, palette and (worlds 4–12) bespoke sky
+    /// motif — no longer three families on a loop. Worlds 0–2 keep the original three families'
+    /// identities (renamed); worlds 3–11 are new. `evolvedPalette` returns these unchanged for
+    /// cycle 0 (ordinal 0–11) and only starts hue-rotating at ordinal 12 (the infinite-run tail).
+    /// Every bg stays dark enough for dark-on-glow obstacles (decree 6) — including Singularity,
+    /// whose "white endgame" reads through a radiant white motif on a deep-violet field, not a
+    /// white background (which would break the dark-bg-only obstacle/ground/gem/FX materials).
     static let worlds: [WorldPalette] = [
-        WorldPalette(name: "Neon Metropolis", bg: rgb(0x07021A), grid: rgb(0xFF2BD6), accent: rgb(0x00F5FF), accent2: rgb(0xFF2BD6)),
-        WorldPalette(name: "Crystal Caverns", bg: rgb(0x02141A), grid: rgb(0x00FFC8), accent: rgb(0xB26BFF), accent2: rgb(0x00FFC8)),
-        WorldPalette(name: "Solar Sands",     bg: rgb(0x1C0A02), grid: rgb(0xFFB13D), accent: rgb(0xFF5E3A), accent2: rgb(0xFFD23D)),
+        WorldPalette(name: "Pulse City",    bg: rgb(0x06021C), grid: rgb(0xFF2BD6), accent: rgb(0x18F0FF), accent2: rgb(0xFF49DE)),
+        WorldPalette(name: "Geode Deep",    bg: rgb(0x02131A), grid: rgb(0x00FFC8), accent: rgb(0xB26BFF), accent2: rgb(0x35FFD8)),
+        WorldPalette(name: "Solar Sands",   bg: rgb(0x1C0A02), grid: rgb(0xFFB13D), accent: rgb(0xFF5E3A), accent2: rgb(0xFFD23D)),
+        WorldPalette(name: "Orbital Drift", bg: rgb(0x01030E), grid: rgb(0x2E5BFF), accent: rgb(0x6FE8FF), accent2: rgb(0xE9F4FF)),
+        WorldPalette(name: "Tidal Glow",    bg: rgb(0x010F12), grid: rgb(0x0AE0D2), accent: rgb(0x33FFE0), accent2: rgb(0xB17BFF)),
+        WorldPalette(name: "Ashfall",       bg: rgb(0x140402), grid: rgb(0xFF7A1A), accent: rgb(0xFF3D1A), accent2: rgb(0xFFC23D)),
+        WorldPalette(name: "Borealis",      bg: rgb(0x040A14), grid: rgb(0x4FFFB0), accent: rgb(0x6FD8FF), accent2: rgb(0xC8A8FF)),
+        WorldPalette(name: "Datastream",    bg: rgb(0x000308), grid: rgb(0x00E5FF), accent: rgb(0x18FFE0), accent2: rgb(0xFFFFFF)),
+        WorldPalette(name: "Bloomfall",     bg: rgb(0x0E0414), grid: rgb(0xFF8FC8), accent: rgb(0xFFB3D9), accent2: rgb(0xFFE08A)),
+        WorldPalette(name: "Eventide",      bg: rgb(0x040108), grid: rgb(0x9B3DFF), accent: rgb(0xFF6FD8), accent2: rgb(0xFFC04D)),
+        WorldPalette(name: "Tempest",       bg: rgb(0x06061A), grid: rgb(0x6A5BFF), accent: rgb(0xBFA8FF), accent2: rgb(0xFFFFFF)),
+        WorldPalette(name: "Singularity",   bg: rgb(0x140A2E), grid: rgb(0xFF4DA6), accent: rgb(0x4DC8FF), accent2: rgb(0xFFD24D)),
     ]
 
     static func rgb(_ hex: UInt32) -> SIMD3<Float> {
@@ -26,10 +42,10 @@ enum Theme {
 
     // MARK: - Distance-driven world evolution (v1.4.3, CODE_REVIEW.md §20.1)
     //
-    // The 12-rung ladder reuses three palette FAMILIES (`worlds[ordinal % 3]`), so without this
-    // every third world was the same art reshuffled — the owner's "Neon Metropolis, again"
-    // concern. `evolvedPalette` keeps each family's base identity but makes every CYCLE
-    // (`ordinal / 3`) a visible transformation of it: the hue rotates a fixed step per cycle
+    // v1.5: there are 12 DISTINCT worlds (`worlds[ordinal % worlds.count]`), so cycle 0 is already
+    // twelve different themes — no more "same art reshuffled". Beyond the authored set (ordinal ≥
+    // 12) the infinite run keeps diverging: `evolvedPalette` keeps each world's base identity but
+    // makes every CYCLE (`ordinal / worlds.count`) a visible transformation — the hue rotates a step
     // (wraps, so it's safe for unbounded infinite runs), saturation/contrast intensify up to a
     // cap (deep runs stay vivid, never muddy), and the background deepens for atmosphere. It is a
     // PURE function of the ABSOLUTE ordinal — no RNG, no sim state — so the deterministic core is
@@ -44,8 +60,12 @@ enum Theme {
     /// layered onto the base family. Cycle 0 returns the base family unchanged.
     static func evolvedPalette(ordinal: Int) -> WorldPalette {
         let o = max(0, ordinal)
-        let base = worlds[o % 3]
-        let cycle = o / 3
+        // BOTH divisors are worlds.count (v1.5): the family index AND the cycle move together, so
+        // ordinals 0–11 are cycle 0 (strict identity to the authored palettes) and evolution only
+        // begins at ordinal 12 ("Pulse City II"…). Using /3 here would give world 3 cycle 1 and a
+        // spurious roman suffix + hue rotation on first sight.
+        let base = worlds[o % worlds.count]
+        let cycle = o / worlds.count
         guard cycle > 0 else { return base }
 
         let hueShift = Float(cycle) * 0.137                      // ≈ 49° per cycle, wraps
