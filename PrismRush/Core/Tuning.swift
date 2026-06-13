@@ -39,7 +39,12 @@ enum Tuning {
     // ballistic gem-arc/ring PLACEMENT stays on the base constants (it never reads this), so the
     // buff only ever over-clears, never under-places. The bot never collects pickups, so the buff
     // is never active in the solvability soak (its air-slam arc model stays on the base jump).
-    static let superSneakersDuration: Double = 8, superSneakersJumpMult: Double = 1.25
+    static let superSneakersDuration: Double = 8, superSneakersJumpMult: Double = 1.3
+    // While Super Sneakers is active, a jump whose feet clear this height VAULTS a tall wall instead
+    // of dying (the tall mesh spans y 0…3.2; 2.9 gives a forgiving near-apex window). Height-aware
+    // ONLY when the buff is active — the solvability bot never has the buff, so its runs are
+    // unchanged and stay byte-identical (no layoutVersion bump; collision-only, no spawn RNG).
+    static let tallVaultClearance: Double = 2.9
     // Post-absorb grace: patterns place twin talls at the same `d`, so a mid-lane-change shield hit
     // must not let the second wall kill on the same tick (or the next — it's still in the kill band).
     static let invulnDuration: Double = 0.4

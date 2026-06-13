@@ -17,6 +17,7 @@ final class RealityRenderer: RendererPort {
     private var eyes: [ModelEntity] = []
     private var antenna: ModelEntity!
     private var antennaTip: ModelEntity!
+    private var shoes: [ModelEntity] = []   // amber boots shown on the feet while Super Sneakers is active
     private var backdrop: ModelEntity!
     private var rungs: [ModelEntity] = []
     private var laneLines: [ModelEntity] = []
@@ -314,6 +315,10 @@ final class RealityRenderer: RendererPort {
         let bankQ = simd_quatf(angle: Float(snap.bankZ), axis: SIMD3<Float>(0, 0, 1))
         let leanQ = simd_quatf(angle: pitch, axis: SIMD3<Float>(1, 0, 0))
         playerRig.orientation = bankQ * leanQ
+
+        // Super Sneakers boots: show on the feet while the buff is live (a glance-readable "it's on").
+        let shoesOn = snap.sneakersRemaining > 0 && snap.mode == .play
+        for shoe in shoes where shoe.isEnabled != shoesOn { shoe.isEnabled = shoesOn }
 
         // Dust kicked up during a slide — grounded OR mid air-slam — so it's unmistakable.
         // Time-based (≈ the old 6/frame at 60 Hz) so density matches at 120 Hz. The wider x
@@ -741,6 +746,8 @@ final class RealityRenderer: RendererPort {
         eyes.removeAll()
         antenna?.removeFromParent()
         antennaTip?.removeFromParent()
+        for shoe in shoes { shoe.removeFromParent() }
+        shoes.removeAll()
         buildCharacter()
     }
 
@@ -814,6 +821,18 @@ final class RealityRenderer: RendererPort {
         antennaTip = ModelEntity(mesh: .generateSphere(radius: 0.095 * skinAntennaTip), materials: [antennaMat])
         antennaTip.position = SIMD3<Float>(0, antennaTipY, 0)
         playerRig.addChild(antennaTip)
+
+        // Super Sneakers boots: two amber forward-pointing shoes at the feet, hidden until the buff
+        // is active (toggled in sync). Procedural box mesh — zero binary assets.
+        let shoeMesh = MeshResource.generateBox(width: 0.30, height: 0.18, depth: 0.54, cornerRadius: 0.06)
+        let shoeMat = UnlitMaterial(color: uiHex(0xFF8A2B))
+        for sx in [Float(-0.30), 0.30] {
+            let shoe = ModelEntity(mesh: shoeMesh, materials: [shoeMat])
+            shoe.position = SIMD3<Float>(sx, 0.10, 0.22)   // wider + lower + toward the chase camera so they read
+            shoe.isEnabled = false
+            playerRig.addChild(shoe)
+            shoes.append(shoe)
+        }
         swayApplied = false   // fresh rig is at rest pose by construction
     }
 

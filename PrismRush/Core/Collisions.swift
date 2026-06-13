@@ -23,9 +23,15 @@ enum Collisions {
             && playerBottom < Tuning.lowKillTop
     }
 
-    /// Full-height block (static or moving): any lane overlap is fatal.
-    static func tallHit(playerX: Double, obstacleX: Double, z: Double) -> Bool {
-        abs(z) < Tuning.obstacleZHalf && abs(playerX - obstacleX) < Tuning.laneHitHalfWidth
+    /// Full-height block (static or moving): any lane overlap is fatal — UNLESS Super Sneakers is
+    /// active and the player's feet have cleared the wall's top, in which case it's vaulted (no hit).
+    /// `canVault`/`playerBottom` default to the lethal-everywhere behaviour so existing callers and
+    /// the solvability bot (which never holds the buff) are byte-identical.
+    static func tallHit(playerX: Double, obstacleX: Double, z: Double,
+                        playerBottom: Double = -.greatestFiniteMagnitude, canVault: Bool = false) -> Bool {
+        guard abs(z) < Tuning.obstacleZHalf, abs(playerX - obstacleX) < Tuning.laneHitHalfWidth else { return false }
+        if canVault && playerBottom > Tuning.tallVaultClearance { return false }   // sneakers vault
+        return true
     }
 
     /// Overhead bar spanning all lanes: kills if the body intersects the vertical kill band.

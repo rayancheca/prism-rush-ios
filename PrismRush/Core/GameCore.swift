@@ -330,7 +330,8 @@ final class GameCore {
                 case .bar: hit = Collisions.barHit(playerTop: pb.top, playerBottom: pb.bottom, z: z)
                 case .splitBar: hit = Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: px, openLane: e.lane, z: z)
                 case .low: hit = Collisions.lowHit(playerBottom: pb.bottom, playerX: px, obstacleX: ox, z: z)
-                case .tall, .movingTall: hit = Collisions.tallHit(playerX: px, obstacleX: ox, z: z)
+                case .tall, .movingTall: hit = Collisions.tallHit(playerX: px, obstacleX: ox, z: z,
+                                                                   playerBottom: pb.bottom, canVault: superSneakersT > 0)
                 default: hit = false
                 }
                 if hit {

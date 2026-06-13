@@ -47,13 +47,29 @@ final class CollisionTests: XCTestCase {
 
     func testTallHitAnyHeight() {
         XCTAssertTrue(Collisions.tallHit(playerX: 0, obstacleX: 0, z: 0))
-        // A tall is fatal even at the top of a jump (no vertical escape).
+        // Without Super Sneakers a tall is fatal even at the top of a jump (no vertical escape).
         XCTAssertTrue(Collisions.tallHit(playerX: 2.2, obstacleX: 2.2, z: 0.5))
     }
 
     func testTallLateralEscape() {
         XCTAssertFalse(Collisions.tallHit(playerX: 0, obstacleX: 2.2, z: 0))
         XCTAssertTrue(Collisions.tallHit(playerX: 1.1, obstacleX: 0, z: 0))   // |dx|=1.1 < 1.25
+    }
+
+    func testTallVaultWithSneakers() {
+        // Feet clear the wall top + Super Sneakers active → vault (no hit).
+        let high = Collisions.playerBounds(jumpY: 3.4, scaleY: 1).bottom
+        XCTAssertGreaterThan(high, Tuning.tallVaultClearance)
+        XCTAssertFalse(Collisions.tallHit(playerX: 0, obstacleX: 0, z: 0, playerBottom: high, canVault: true),
+                       "Super Sneakers vaults a tall once the feet clear its top")
+        // Same height WITHOUT the buff → still fatal (bot-identical; the bot never holds the buff).
+        XCTAssertTrue(Collisions.tallHit(playerX: 0, obstacleX: 0, z: 0, playerBottom: high, canVault: false),
+                      "without the buff a tall is fatal at any height")
+        // Buff active but jump too low → still fatal (you must actually clear it).
+        let low = Collisions.playerBounds(jumpY: 1.0, scaleY: 1).bottom
+        XCTAssertLessThan(low, Tuning.tallVaultClearance)
+        XCTAssertTrue(Collisions.tallHit(playerX: 0, obstacleX: 0, z: 0, playerBottom: low, canVault: true),
+                      "a low jump does not vault — feet have not cleared the wall")
     }
 
     // MARK: Bars
