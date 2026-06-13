@@ -43,7 +43,9 @@ struct HUDView: View {
                     powerUpStack(snap)
                     flowPips(snap)
                 }
-                .padding(.top, 38)
+                // Sits clear BELOW the mute/pause cluster (those are 38pt buttons at top padding 14);
+                // the owner found the old 38 crowded them. Starts the chips ~22pt under the buttons.
+                .padding(.top, 64)
             }
             Spacer()
             xpBar(snap)
@@ -199,7 +201,7 @@ struct HUDView: View {
                     Text("\(Int(r.rounded(.up)))s")
                         .font(.system(size: 14, weight: .black, design: .rounded)).monospacedDigit()
                 } else {
-                    Text("READY").font(.system(size: 11, weight: .heavy, design: .rounded)).tracking(0.5)
+                    Text("ACTIVE").font(.system(size: 11, weight: .heavy, design: .rounded)).tracking(0.5)
                 }
             }
             .foregroundStyle(color)
@@ -219,7 +221,7 @@ struct HUDView: View {
         .shadow(color: color.opacity(0.45), radius: 7)
         .transition(.scale.combined(with: .opacity))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(remaining == nil ? "\(name) ready"
+        .accessibilityLabel(remaining == nil ? "\(name) active"
                             : "\(name), \(Int((remaining ?? 0).rounded(.up))) seconds left")
     }
 
@@ -229,18 +231,26 @@ struct HUDView: View {
     @ViewBuilder private func flowPips(_ snap: GameSnapshot) -> some View {
         let filled = snap.flowStreak % Tuning.flowPerSurge
         if snap.flowStreak > 0, filled > 0 {
-            HStack(spacing: 5) {
-                ForEach(0..<Tuning.flowPerSurge, id: \.self) { i in
-                    Circle()
-                        .fill(i < filled ? Theme.Role.interactive : Color.white.opacity(0.18))
-                        .frame(width: 6, height: 6)
-                        .shadow(color: i < filled ? Theme.Role.interactive.opacity(0.8) : .clear, radius: 4)
+            // Labelled so the dots aren't a mystery (owner: "what the fuck is that?"): a FLOW meter
+            // that fills as you chain near-misses (CLOSE/SLICK) — completing it pops a gem fountain.
+            HStack(spacing: 7) {
+                Text("FLOW")
+                    .font(.system(size: 9, weight: .heavy, design: .rounded))
+                    .tracking(1)
+                    .foregroundStyle(Theme.Role.interactive)
+                HStack(spacing: 5) {
+                    ForEach(0..<Tuning.flowPerSurge, id: \.self) { i in
+                        Circle()
+                            .fill(i < filled ? Theme.Role.interactive : Color.white.opacity(0.18))
+                            .frame(width: 6, height: 6)
+                            .shadow(color: i < filled ? Theme.Role.interactive.opacity(0.8) : .clear, radius: 4)
+                    }
                 }
             }
             .pillBackground()
             .transition(.opacity)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Flow streak \(filled) of \(Tuning.flowPerSurge)")
+            .accessibilityLabel("Flow meter, \(filled) of \(Tuning.flowPerSurge) near-misses to a gem fountain")
         }
     }
 }

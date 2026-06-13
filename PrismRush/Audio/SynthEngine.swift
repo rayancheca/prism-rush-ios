@@ -121,7 +121,12 @@ final class SynthEngine {
     func musicStop() { music?.stop() }
     func musicPump(dt: Double, world: Int) {
         rampMaster(dt)
-        music?.world = world
+        // Owner decree (v1.6): NO per-world music. The bed stays one consistent track for the whole
+        // run — the key/scale/arp changing every 800 m read as disruptive ("destroys the game"). The
+        // per-world `beds` table + `Synth.step(world:)` stay intact (reversible), just not fed varying
+        // worlds. `world` is kept in the signature so callers don't change.
+        _ = world
+        music?.world = 0
         music?.pump(dt)
     }
 

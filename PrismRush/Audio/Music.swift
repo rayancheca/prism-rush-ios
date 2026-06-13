@@ -17,8 +17,6 @@ final class Music {
     private var fadeRate: Float = 1
     private var duckLevel: Float = 1
     private let lookaheadFrames: Int64
-    /// The world the queued buffers were rendered for — drives the crisp bed switch (v1.6).
-    private var lastScheduledWorld = 0
 
     var world = 0
     /// Settings slider (0...1), multiplied into every fade/duck. Owned by `SynthEngine`.
@@ -38,7 +36,6 @@ final class Music {
         player.stop()
         beat = 0
         scheduledFrames = 0
-        lastScheduledWorld = world   // a fresh start is already in sync — never a spurious flush
         playing = true
         vol = min(0.08, targetVolume)  // start just audible so the run-start beat lands
         targetVol = targetVolume
@@ -76,23 +73,6 @@ final class Music {
         duckLevel = min(1, duckLevel + Float(dt) * 2)   // recover from a 0.5 duck in ~0.25 s
         mixer.outputVolume = vol * duckLevel * userVolume
         guard playing else { return }
-
-        // Crisp per-world bed switch (v1.6): without this, the lookahead queue (up to 4 steps) keeps
-        // playing the OLD world's bed for ~0.45 s past the boundary. On a world change, schedule the
-        // next step for the NEW world with `.interrupts` — the player discards the queued old-world
-        // buffers and plays this one immediately, so the bed flips within one step of the crossfade
-        // (the worldSweep whoosh covers the seam). Re-anchor `scheduledFrames` to (played + this
-        // buffer): the discarded buffers were counted but won't play, so this keeps the pump's
-        // lookahead math honest and can never wedge (worst case it tops up one extra buffer). `beat`
-        // is preserved, so the synthwave phrase stays in time across the switch.
-        if world != lastScheduledWorld {
-            lastScheduledWorld = world
-            if scheduledFrames > 0, let buf = makeBuffer(Synth.step(beat: beat, world: world)) {
-                player.scheduleBuffer(buf, at: nil, options: .interrupts, completionHandler: nil)
-                scheduledFrames = playedFrames() + Int64(buf.frameLength)
-                beat += 1
-            }
-        }
 
         let played = playedFrames()
         var safety = 0
