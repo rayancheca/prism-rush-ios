@@ -1,5 +1,29 @@
 # v1.6 — "Power-ups, Polish & Progression" (in progress, 2026-06-13)
 
+## ▶ PROGRESS (resume here)
+**DONE + committed (NOT pushed yet — push at the very end after the screenshot gate):**
+- Wall-vault + visible shoes (`7a9d217`); Wave-1 UX bugs — Head Start/coin-popup/revive/worlds-silhouette
+  (`b2c505a`); worlds past 12 (`df1ee5a`); shield-break glass shatter (`3671c46`); power-up cadence
+  (`c080046`, layoutVersion **3→4**, next pre-arm `0x6390_28BA_85C6_9769`); HUD rework + Speed-Up deploy
+  (`699adeb`); stacked deploy layout + Shield deploy (`5a2355e`); world decor obstruction (`573e8d8`).
+- Gates green: SPM 178, Mac 185 unit + 11 XCUITest. Test sims: iPhone 17 Pro (dev) / 17 Pro Max (shots).
+- Mystery Box reveal sequence (`1552ad9`) — odds screen + shake/swivel/burst/reward; PR_MYSTERYBOX hook.
+**REMAINING (next focused pass — all committed work is local, NOT pushed):**
+- **Coin-path routing (G1)** — gems must trace a TAKEABLE route (Subway-Surfers). Do it PATH-AWARE: a
+  naive centre breadcrumb misleads (leads into centre obstacles). Needs each pattern's gems on its
+  solvable lane + gap continuity that routes around the next pattern. Core spawn → layoutVersion **4→5**
+  (next pre-arm `0x6390_28BA_85C6_9769`) + 200-seed bot re-verify + golden re-pin. Higher risk — own session.
+- **Character rarity THEMES (C2)** — cosmetic only (decree): common = basic shape/colour; rare = more
+  features; epic = themed; legendary = themed families (cat/dog/etc.) + signature trails/auras. Big
+  roster art; worth a quick creative-direction confirm with the owner.
+- **Character-select SLIDER (C3)** — swap the single equipped card for a carousel of ALL characters
+  (owned + locked) with unlock requirement + progress. Contained UI rework of CharacterSelectView.
+- **Shop purchase juice (S1)** — packs currently just play a sound; give them a brief reveal/animation.
+- Polish: custom procedural power-up icons; PowerUpsView catalog (document the deploys/speed-up/shield);
+  B4 meters label (by-design, low priority).
+- Pre-push gate: capture live docs/screenshots, update README, then `git push` (the whole v1.6 line).
+
+
 Owner-driven, fed by a live play session. Single source of truth for v1.6 scope. Order = waves below.
 **Iron-rule reminder:** any spawn-stream change batches into ONE `DailyChallenge.layoutVersion` 3→4
 bump (pre-armed `0x2E28_5014_7596_8B7D`) + 200-seed bot re-verify + golden re-pin. Collision/visual/

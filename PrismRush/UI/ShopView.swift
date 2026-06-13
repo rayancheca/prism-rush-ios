@@ -527,6 +527,7 @@ struct ShopView: View {
         if ProfileStore.shared.buyConsumablePack(item) {
             successPulse += 1
             model.synth.play(.purchaseChime)
+            showToast("\(item.title): \(item.blurb) ✓")   // confirm exactly what landed
         } else {
             showToast("Not enough coins — keep running to earn more.")
             model.synth.play(.uiTick)
