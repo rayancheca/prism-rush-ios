@@ -199,6 +199,18 @@ final class GameCore {
         }
     }
 
+    /// Manually deploy a banked slow-mo — the player-triggered power-up. Same effect as the chrono
+    /// track pickup, fired on demand from the HUD button. Returns true only if it actually started
+    /// (in play, and one isn't already running — no stack/refresh abuse). Consumes NO rng (it's
+    /// input-driven like jump/slide), so the seeded sim and the solvability bot are untouched.
+    @discardableResult
+    func activateSlowMo() -> Bool {
+        guard mode == .play, chronoT <= 0 else { return false }
+        chronoT = Tuning.chronoDuration
+        emit(.pickup(kind: .chrono, x: px, y: jumpY))
+        return true
+    }
+
     func slide() {
         guard mode == .play else { return }
         slideT = Tuning.slideDuration

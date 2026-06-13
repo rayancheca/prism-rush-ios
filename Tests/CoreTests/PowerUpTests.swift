@@ -112,4 +112,31 @@ final class PowerUpTests: XCTestCase {
         }
         XCTAssertGreaterThan(chronos, 0, "at least one chrono must be collected across the seeds")
     }
+
+    // MARK: manual slow-mo (player-triggered, v1.5)
+
+    func testManualSlowMoActivatesAndDoesNotStack() async {
+        let core = cleanCore()
+        var pickups: [PickupKind] = []
+        core.onFX = { if case let .pickup(kind, _, _) = $0 { pickups.append(kind) } }
+
+        // Fires in play, sets the chrono timer, and emits the same FX as the track pickup.
+        XCTAssertTrue(core.activateSlowMo())
+        XCTAssertEqual(core.chronoT, Tuning.chronoDuration, accuracy: 1e-9)
+        XCTAssertEqual(pickups, [.chrono])
+
+        // No stacking/refresh while one is already running.
+        XCTAssertFalse(core.activateSlowMo())
+        XCTAssertEqual(pickups.count, 1, "a second deploy mid-effect must be a no-op")
+
+        // Re-armable once it has expired.
+        XCTAssertTrue(tickUntil(core) { core.chronoT <= 0 })
+        XCTAssertTrue(core.activateSlowMo())
+    }
+
+    func testManualSlowMoIgnoredOutsidePlay() async {
+        let core = GameCore(seed: 1)               // never started → .menu
+        XCTAssertFalse(core.activateSlowMo())
+        XCTAssertEqual(core.chronoT, 0)
+    }
 }

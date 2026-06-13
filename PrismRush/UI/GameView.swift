@@ -700,6 +700,8 @@ final class GameModel {
             if result.levelAfter > result.levelBefore {
                 celebrateMilestone("LEVEL UP — \(result.levelAfter)",
                                    color: Theme.color(0x00F5FF), sfx: .levelUp)
+                // Earn manual slow-mo charges by levelling up (honest replenishment — decree 5).
+                store.mutate { $0.slowMoCharges += 2 * (result.levelAfter - result.levelBefore) }
             }
         }
 
@@ -742,6 +744,25 @@ final class GameModel {
             nextMilestoneAt = uiClock + Self.milestoneSpacing
         }
         if rewardToast != nil, uiClock > toastClearAt { rewardToast = nil }
+    }
+
+    /// Whether the slow-mo button is live: in play, a charge banked, none already running.
+    var canDeploySlowMo: Bool {
+        core.mode == .play && !paused
+            && ProfileStore.shared.profile.slowMoCharges > 0 && core.chronoT <= 0
+    }
+
+    /// Deploy one banked slow-mo on demand (the HUD button). Spending persists immediately; the
+    /// chrono FX/SFX fire through the normal pickup event path. A soft tick when it can't fire.
+    func deploySlowMo() {
+        guard core.mode == .play, !paused else { return }
+        guard ProfileStore.shared.profile.slowMoCharges > 0, core.chronoT <= 0 else {
+            synth.play(.uiTick)
+            return
+        }
+        if core.activateSlowMo() {
+            ProfileStore.shared.mutate { $0.slowMoCharges = max(0, $0.slowMoCharges - 1) }
+        }
     }
 
     /// Translate a finished drag/tap into game input. 22pt threshold separates tap from swipe.
@@ -794,6 +815,39 @@ struct GameView: View {
         case .missions:
             MissionsView(model: model)
         }
+    }
+
+    /// Banked slow-mo deploy button: hourglass + a charge-count badge. Lit cyan when ready, dimmed
+    /// when empty or while a slow-mo is already running (tap then just soft-ticks). Reads
+    /// `ProfileStore.shared` live in body (G3) so the badge ticks down the instant one is spent.
+    private var slowMoButton: some View {
+        let charges = ProfileStore.shared.profile.slowMoCharges
+        let live = model.canDeploySlowMo
+        return Button { model.deploySlowMo() } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "hourglass")
+                    .font(.system(size: 21, weight: .bold))
+                    .foregroundStyle(live ? Theme.Role.interactive : .white.opacity(0.45))
+                    .frame(width: 54, height: 54)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().strokeBorder(live ? Theme.Role.interactive.opacity(0.6) : .white.opacity(0.12)))
+                    .shadow(color: live ? Theme.Role.interactive.opacity(0.5) : .clear, radius: 8)
+                Text("\(charges)")
+                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.black)
+                    .frame(minWidth: 19, minHeight: 19)
+                    .background(charges > 0 ? Theme.Role.interactive : Color.white.opacity(0.5), in: Circle())
+                    .offset(x: 5, y: -5)
+            }
+            .opacity(charges == 0 ? 0.55 : 1)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(charges == 0)
+        .accessibilityIdentifier("slowMoButton")
+        .accessibilityLabel("Slow motion, \(charges) charges")
+        .accessibilityHint(live ? "Deploys slow motion." : "No charge ready.")
     }
 
     /// The first-run control prompt — a calm capsule below the meters, never interactive.
@@ -957,6 +1011,22 @@ struct GameView: View {
                 tutorialBanner(hint)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(5)
+            }
+
+            // Manual slow-mo button — the player banks charges and fires them on demand (bottom-
+            // leading, thumb-reachable, above the XP bar). Above the gesture catcher so its taps
+            // don't double as a jump.
+            if model.core.snapshot.mode == .play {
+                VStack {
+                    Spacer()
+                    HStack {
+                        slowMoButton
+                        Spacer()
+                    }
+                }
+                .padding(.leading, 18)
+                .padding(.bottom, 44)
+                .zIndex(4)
             }
 
             if model.paused {

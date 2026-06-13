@@ -4,6 +4,10 @@ import Foundation
 /// progression. Pure `Codable` value type so it can be stored locally and synced to iCloud.
 struct Profile: Codable, Equatable, Sendable {
     var coins: Int = 0
+    /// Banked manual slow-mo charges (the player-triggered power-up). Default 2 so every player —
+    /// new or existing-on-update — starts with a couple to discover the feature; replenished by
+    /// levelling up. Deployed via the in-run HUD button.
+    var slowMoCharges: Int = 2
 
     // Lifetime stats.
     var bestScore: Int = 0
@@ -88,7 +92,7 @@ extension Profile {
 // to decode (and never silently wipes a saved profile). The memberwise + synthesized `encode` remain.
 extension Profile {
     enum CodingKeys: String, CodingKey {
-        case coins, bestScore, totalRuns, totalDistance, totalGems, totalCoinsEarned, bestStreak
+        case coins, slowMoCharges, bestScore, totalRuns, totalDistance, totalGems, totalCoinsEarned, bestStreak
         case maxWorldReached, ownedSkins, selectedSkin
         case lastDailyClaim, loginStreak, lastChestOpen
         case missionProgress, claimedMissions, achievementTier, dailyMissionDate
@@ -105,6 +109,7 @@ extension Profile {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Profile()   // defaults
         coins = try c.decodeIfPresent(Int.self, forKey: .coins) ?? d.coins
+        slowMoCharges = try c.decodeIfPresent(Int.self, forKey: .slowMoCharges) ?? d.slowMoCharges
         bestScore = try c.decodeIfPresent(Int.self, forKey: .bestScore) ?? d.bestScore
         totalRuns = try c.decodeIfPresent(Int.self, forKey: .totalRuns) ?? d.totalRuns
         totalDistance = try c.decodeIfPresent(Double.self, forKey: .totalDistance) ?? d.totalDistance
