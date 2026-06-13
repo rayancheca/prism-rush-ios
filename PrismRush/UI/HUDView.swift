@@ -11,13 +11,27 @@ struct HUDView: View {
         let snap = core.snapshot
         VStack {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("\(snap.score)")
-                        .font(.system(size: 34, weight: .heavy, design: .rounded))
+                // Meters is the primary readout — "how far am I", matching the world labels
+                // ("…3,200 m in" starts the counter at 3,200, not a confusing 0). Score is the
+                // separate earned-points number (the leaderboard value) below it.
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        Text("\(Int(snap.distance))")
+                            .font(.system(size: 34, weight: .heavy, design: .rounded))
+                            .monospacedDigit()
+                        Text("M")
+                            .font(.system(size: 15, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.55))
+                    }
+                    .shadow(color: .white.opacity(0.35), radius: 12)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(Int(snap.distance)) meters")
+                    .accessibilityAddTraits(.updatesFrequently)
+                    Text("SCORE \(snap.score)")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
                         .monospacedDigit()
-                        .shadow(color: .white.opacity(0.35), radius: 12)
+                        .foregroundStyle(.white.opacity(0.68))
                         .accessibilityLabel("Score \(snap.score)")
-                        .accessibilityAddTraits(.updatesFrequently)
                     ghostChaseChip(snap)
                 }
 
@@ -32,6 +46,7 @@ struct HUDView: View {
                 .padding(.top, 38)
             }
             Spacer()
+            xpBar(snap)
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 16)
@@ -39,6 +54,46 @@ struct HUDView: View {
         .animation(.spring(duration: 0.25), value: snap.mult)
         .opacity(snap.mode == .play ? 1 : 0)
         .allowsHitTesting(false)   // the run is the UI — pause is the only in-play button
+    }
+
+    // MARK: live level / XP bar (the owner wants to watch level + XP grow mid-run)
+
+    /// A thin level + XP bar along the bottom edge. XP is only BANKED at game over, so this is a
+    /// live estimate (the dominant run terms — distance + gems — added to the lifetime total); it
+    /// climbs as you play and matches the eventual grant closely. Reads `ProfileStore.shared` live
+    /// in body (G3). At max level the bar reads full.
+    private func xpBar(_ snap: GameSnapshot) -> some View {
+        let liveXP = ProfileStore.shared.profile.totalXP + liveRunXP(snap)
+        let level = XPCurve.level(for: liveXP)
+        let (cur, needed) = XPCurve.xpIntoLevel(for: liveXP)
+        let progress = needed > 0 ? Double(cur) / Double(needed) : 1
+        return HStack(spacing: 9) {
+            Text("LV \(level)")
+                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(.white.opacity(0.85))
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.14))
+                    Capsule().fill(Theme.Role.interactive)
+                        .frame(width: max(2, geo.size.width * progress))
+                        .shadow(color: Theme.Role.interactive.opacity(0.7), radius: 5)
+                }
+            }
+            .frame(height: 5)
+        }
+        .padding(.horizontal, 18)
+        .padding(.bottom, 12)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(level >= XPCurve.maxLevel
+                            ? "Level \(level), max level"
+                            : "Level \(level), \(Int(progress * 100)) percent to level \(level + 1)")
+    }
+
+    /// Live XP estimate from the two dominant `XPCurve.xp` terms available each frame (1 XP / 10 m
+    /// run + 2 XP / gem), capped like the real grant. Style/combo/world bonuses settle at game over.
+    private func liveRunXP(_ snap: GameSnapshot) -> Int {
+        min(2_000, Int(snap.traveledDistance / 10) + snap.gems * 2)
     }
 
     // MARK: ghost chase — BEST appears only when it's actually a chase

@@ -602,7 +602,8 @@ final class GameCore {
         }
 
         snapshot = GameSnapshot(
-            mode: mode, distance: distance, speed: effectiveSpeed, rampSpeed: speed,
+            mode: mode, distance: distance, traveledDistance: distance - scoreOffset,
+            speed: effectiveSpeed, rampSpeed: speed,
             playerX: px, playerY: jumpY, playerScaleY: sy, bankZ: bankZ,
             worldFrom: worldFrom, worldTo: worldTo, worldBlend: worldBlend,
             worldOrdinal: maxWorld,   // flips on the same tick as worldTo (stepWorld) — the sky

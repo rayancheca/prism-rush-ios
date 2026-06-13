@@ -51,7 +51,8 @@ struct EntityState: Sendable, Identifiable, Equatable {
 /// Immutable per-frame view of the world handed to the renderer. Value type, `Sendable`.
 struct GameSnapshot: Sendable {
     var mode: GameMode
-    var distance: Double
+    var distance: Double            // ABSOLUTE position (matches world labels; the HUD meters readout)
+    var traveledDistance: Double    // meters run THIS attempt (distance − checkpoint offset); XP / fair score
     var speed: Double               // EFFECTIVE world speed (chrono-slowed) — drives FOV/scroll/trails
     var rampSpeed: Double           // raw difficulty-ramp speed (un-slowed); HUD/debug only
     var playerX: Double
@@ -83,6 +84,7 @@ struct GameSnapshot: Sendable {
     static let initial = GameSnapshot(
         mode: .menu,
         distance: 0,
+        traveledDistance: 0,
         speed: Tuning.menuSpeed,
         rampSpeed: Tuning.menuSpeed,
         playerX: 0,
