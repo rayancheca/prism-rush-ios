@@ -258,6 +258,44 @@ teal → blue → violet/maroon. The review's doc-honesty fixes (test counts, IA
 
 ---
 
+## v1.5 — Depth & Clarity (the power-up overhaul)
+
+An owner-driven pass that made the game read clearer and play deeper: a splash + calm menu music,
+a settings gear surfaced on the hub, color-coded nav, a **meters-primary HUD**, **12 fully distinct
+themed worlds** (each its own palette, name, bespoke procedural sky, and now its **own music bed**),
+just-in-time tutorial hints, and a **power-up suite** — a manual-deploy slow-mo, the new in-run
+**Super Sneakers** higher-jump pickup, pre-run **Head Start** / **Coin Surge** consumables you arm on
+the hub, and a coin-spend shop section with **power-up packs** and a **Mystery Box** gacha.
+
+Every screenshot below is the **actual app on an iPhone 17 Pro Max simulator**, driven to each state
+through the deterministic launch hooks (`PR_SKIP_SPLASH` / `PR_SCREEN` / `PR_WORLD` / `PR_AUTOPLAY` /
+`PR_SNEAKERS` / `PR_DEMO`).
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/v15_02_hub.png" width="200"><br><sub><b>1 · Hub + loadout</b><br>Gear surfaced, color-coded nav, and the pre-run <b>HEAD START / COIN SURGE</b> loadout chips</sub></td>
+<td align="center"><img src="docs/screenshots/v15_05_worlds.png" width="200"><br><sub><b>2 · 12 distinct worlds</b><br>Each its own palette, name & bespoke sky (note Orbital Drift's astronaut)</sub></td>
+<td align="center"><img src="docs/screenshots/v15_06_sneakers.png" width="200"><br><sub><b>3 · Super Sneakers</b><br>Higher-jump pickup active — amber feet sparks + HUD timer ring (Borealis aurora)</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/v15_07_ashfall.png" width="200"><br><sub><b>4 · Ashfall</b><br>One of nine new bespoke worlds — volcano + lava sky, its own dark music bed</sub></td>
+<td align="center"><img src="docs/screenshots/v15_04_shop.png" width="200"><br><sub><b>5 · Power-up packs</b><br>Coin-spend Mystery Box gacha + slow-mo / loadout packs (work in every store state)</sub></td>
+<td align="center"><img src="docs/screenshots/v15_09_gameover.png" width="200"><br><sub><b>6 · Run summary</b><br>Meters-primary readout, banded coins + live XP, NEW BEST</sub></td>
+</tr>
+</table>
+
+The headline engineering decision was making Super Sneakers a real **on-track pickup** without
+destabilising the seeded simulation. The Autopilot solvability bot (200 seeds × 6,000 m, zero deaths)
+is the contract that gates every spawn change — so the pickup was added by **re-banding pattern 7's
+existing single RNG draw** (zero new RNG calls: the obstacle geometry stays byte-identical, only the
+*kind* of pickup in a pickup slot shifts), and the higher-jump buff is gated on *collection* — which
+the bot never does. Net result: the bot keeps the baseline jump arc it was tuned against, every
+ballistic gem-arc/ring placement stays on the base constants, and the only determinism cost is the
+expected `DailyChallenge.layoutVersion` 2 → 3 bump (its golden was pre-armed a release in advance).
+`reports/shots/v15/` has the raw capture set.
+
+---
+
 ## Architecture
 
 ```
