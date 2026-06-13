@@ -94,6 +94,16 @@ final class GameModel {
     @ObservationIgnored private let autoplay = ProcessInfo.processInfo.environment["PR_AUTOPLAY"] == "1"
     @ObservationIgnored private let demo = ProcessInfo.processInfo.environment["PR_DEMO"] == "1"
 
+    // First-run contextual control hints (the just-in-time tutorial): the first time each obstacle
+    // type approaches on a brand-new player's first run, a "SWIPE UP/DOWN/SIDE" prompt appears so
+    // they learn the control in context (Subway-Surfers/Temple-Run style). Pure presentation off
+    // the snapshot — never touches Core/RNG, so the solvability bot is unaffected.
+    enum TutorialCue: Equatable { case jump, slide, lane }
+    private(set) var tutorialHint: TutorialCue?
+    @ObservationIgnored private var tutorialActive = false
+    @ObservationIgnored private var hintsShown: Set<TutorialCue> = []
+    @ObservationIgnored private var hintTimer: Double = 0
+
     // SwiftUI-facing effect state (observed).
     struct Popup: Identifiable {
         let id: Int
@@ -238,6 +248,7 @@ final class GameModel {
                 }
 
                 self.core.advance(realDt: dt)
+                self.updateTutorialHints(dt: dt)
                 self.renderer.advanceVisuals(dt)
                 self.renderer.sync(self.core.snapshot)
                 self.synth.musicPump(dt: dt, world: self.core.snapshot.worldOrdinal)
@@ -286,6 +297,41 @@ final class GameModel {
         synth.play(.uiTick)
     }
 
+    /// First-run control hints. Each frame: hold the current prompt for a beat, else show the next
+    /// untaught control the moment an obstacle that needs it enters a readable window ahead. Each
+    /// control teaches once; after all three, it goes quiet. Reads only the snapshot.
+    private func updateTutorialHints(dt: Double) {
+        guard tutorialActive, core.mode == .play else {
+            if tutorialHint != nil { tutorialHint = nil }
+            return
+        }
+        if tutorialHint != nil {
+            hintTimer -= dt
+            if hintTimer <= 0 { tutorialHint = nil }
+            return                                  // one prompt at a time
+        }
+        if hintsShown.count >= 3 { tutorialActive = false; return }
+        for cue in [TutorialCue.jump, .slide, .lane] where !hintsShown.contains(cue) {
+            let kinds = Self.cueKinds(cue)
+            // Readable window: far enough ahead to read + react (z is negative ahead of the player).
+            if core.snapshot.entities.contains(where: { kinds.contains($0.kind) && $0.z > -34 && $0.z < -12 }) {
+                tutorialHint = cue
+                hintsShown.insert(cue)
+                hintTimer = 2.2
+                synth.play(.uiTick)
+                return
+            }
+        }
+    }
+
+    private static func cueKinds(_ cue: TutorialCue) -> [EntityKind] {
+        switch cue {
+        case .jump:  return [.low]
+        case .slide: return [.bar, .splitBar]
+        case .lane:  return [.tall, .movingTall]
+        }
+    }
+
     /// The actual run start — everything below the first-run gate.
     private func beginRun(fromWorld: Int, seed: UInt64?) {
         applyCurrentSkin()
@@ -315,6 +361,13 @@ final class GameModel {
         slidesThisRun = 0
         statsRecorded = false
         newBestCelebrated = false
+        // Teach controls in-context only on a genuine brand-new player's first run.
+        // PR_TUTORIAL=1 forces it on (QA/screenshot — lets autoplay keep the run alive to verify).
+        let forceTutorial = ProcessInfo.processInfo.environment["PR_TUTORIAL"] == "1"
+        tutorialActive = forceTutorial || (ProfileStore.shared.profile.totalRuns == 0 && !autoplay && !demo)
+        hintsShown.removeAll()
+        tutorialHint = nil
+        hintTimer = 0
         runStartWorld = fromWorld
         paused = false
         popups.removeAll()
@@ -743,6 +796,31 @@ struct GameView: View {
         }
     }
 
+    /// The first-run control prompt — a calm capsule below the meters, never interactive.
+    private func tutorialBanner(_ cue: GameModel.TutorialCue) -> some View {
+        let icon: String
+        let text: String
+        switch cue {
+        case .jump:  icon = "arrow.up"; text = "SWIPE UP TO JUMP"
+        case .slide: icon = "arrow.down"; text = "SWIPE DOWN TO SLIDE"
+        case .lane:  icon = "arrow.left.and.right"; text = "SWIPE TO CHANGE LANE"
+        }
+        return VStack {
+            Spacer().frame(height: 128)   // clear of the meters readout up top
+            HStack(spacing: 10) {
+                Image(systemName: icon).font(.system(size: 19, weight: .heavy))
+                Text(text).font(.system(size: 16, weight: .heavy, design: .rounded)).tracking(1)
+            }
+            .foregroundStyle(.black)
+            .padding(.horizontal, 20).padding(.vertical, 12)
+            .background(Theme.actionGradient, in: Capsule())
+            .shadow(color: Theme.color(0x00F5FF).opacity(0.5), radius: 16)
+            Spacer()
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
     var body: some View {
         ZStack {
             Color(red: 7.0 / 255, green: 2.0 / 255, blue: 26.0 / 255).ignoresSafeArea()
@@ -873,6 +951,14 @@ struct GameView: View {
 
             EffectsOverlay(model: model)
 
+            // First-run just-in-time control hints — a calm prompt the first time each obstacle
+            // type appears on a new player's first run.
+            if let hint = model.tutorialHint, model.core.snapshot.mode == .play {
+                tutorialBanner(hint)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(5)
+            }
+
             if model.paused {
                 PauseOverlay(onResume: { model.resume() }, onQuit: { model.returnToMenu() })
                     .transition(.opacity)
@@ -904,6 +990,7 @@ struct GameView: View {
         }
         .statusBarHidden(true)
         .animation(.spring(duration: 0.3), value: model.rewardToast)
+        .animation(.easeInOut(duration: 0.3), value: model.tutorialHint)
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.pauseForBackground() }
         }
