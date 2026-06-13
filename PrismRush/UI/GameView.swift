@@ -542,7 +542,7 @@ final class GameModel {
                 synth.play(.frenzyEnd)   // falling whoosh: time dips into slow-mo
             case .superSneakers:
                 addPopup("SUPER SNEAKERS", color: Theme.color(0xFF8A2B), worldX: x)
-                synth.play(.boostStart)  // reuse the energetic up-whoosh (spring-loaded leap)
+                synth.play(.sneakersPickup)  // bespoke spring-loaded leap (v1.6, was reusing boostStart)
             }
             flash(0.28)
         case let .shieldAbsorbed(x):

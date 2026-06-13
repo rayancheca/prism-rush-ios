@@ -236,6 +236,15 @@ enum Synth {
         return b
     }
 
+    static func sneakersChime() -> [Float] {          // spring-loaded leap: a coil release + a lighter rebound
+        var b = blank(0.34)
+        tone(&b, 240, 960, dur: 0.13, .triangle, vol: 0.14)                                  // main spring release (up)
+        tone(&b, 360, 1440, dur: 0.10, .sine, vol: 0.09, offset: Int(0.03 * sampleRate))     // bright overtone
+        tone(&b, 700, 1050, dur: 0.10, .triangle, vol: 0.10, offset: Int(0.17 * sampleRate)) // the rebound bounce
+        noise(&b, dur: 0.05, vol: 0.06, cutoff: 5000, highpass: true)                        // a soft spring twang
+        return b
+    }
+
     static func flowSurgeChime() -> [Float] {         // rising three-note shimmer into the fountain
         var b = blank(0.52)
         let arp: [Float] = [659, 784, 988]
@@ -346,6 +355,8 @@ extension Synth {
         case frenzyStart, frenzyEnd
         // v1.3 (R17): exactly six new cases — NEW-CHARACTER toasts reuse `purchaseChime`.
         case ringPass, ringPerfect, boostStart, boostEnd, flowSurge, levelUp
+        // v1.6: Super Sneakers gets its own spring-loaded leap (was reusing `boostStart`).
+        case sneakersPickup
 
         /// Gem repeats its pitch ladder every 26 streaks — collapse so the cache stays bounded.
         var normalized: SFX {
@@ -358,7 +369,7 @@ extension Synth {
             switch self {
             case .crash, .deathSweep, .worldSweep, .shieldPickup, .shieldBreak, .magnetPickup, .doublerPickup,
                  .frenzyStart, .frenzyEnd, .newBestFanfare,
-                 .boostStart, .boostEnd, .flowSurge, .levelUp:   // rings are too frequent to duck
+                 .boostStart, .boostEnd, .flowSurge, .levelUp, .sneakersPickup:   // rings too frequent to duck
                 return true
             default:
                 return false
@@ -394,6 +405,7 @@ extension Synth {
             case .boostEnd: return Synth.boostEnd()
             case .flowSurge: return Synth.flowSurgeChime()
             case .levelUp: return Synth.levelUpFanfare()
+            case .sneakersPickup: return Synth.sneakersChime()
             }
         }
     }

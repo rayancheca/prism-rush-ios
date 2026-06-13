@@ -43,6 +43,7 @@ final class SynthTests: XCTestCase {
         assertSane(Synth.doublerPickup(), 0.28, 0.32, "doublerPickup")
         assertSane(Synth.frenzyStart(), 0.40, 0.44, "frenzyStart")
         assertSane(Synth.frenzyEnd(), 0.40, 0.44, "frenzyEnd")
+        assertSane(Synth.sneakersChime(), 0.32, 0.36, "sneakersChime")   // v1.6: bespoke spring leap
     }
 
     func testGemPitchRisesWithStreak() {
@@ -58,6 +59,9 @@ final class SynthTests: XCTestCase {
         XCTAssertNotEqual(Synth.shieldChime(), Synth.magnetChime())
         XCTAssertNotEqual(Synth.doublerPickup(), Synth.shieldChime())
         XCTAssertNotEqual(Synth.frenzyStart(), Synth.frenzyEnd())
+        // v1.6: Super Sneakers must be its OWN sound, not the boost it used to reuse.
+        XCTAssertNotEqual(Synth.sneakersChime(), Synth.boostStart())
+        XCTAssertNotEqual(Synth.sneakersChime(), Synth.shieldChime())
     }
 
     func testDeathSweepNoiseSwells() {
@@ -72,7 +76,7 @@ final class SynthTests: XCTestCase {
             .gem(streak: 5), .jump, .slide, .crash, .chime, .shieldPickup, .shieldBreak, .magnetPickup,
             .doublerPickup, .worldSweep, .close, .startChime, .laneTick, .landThud,
             .purchaseChime, .equipClick, .uiTick, .newBestFanfare, .deathSweep,
-            .frenzyStart, .frenzyEnd,
+            .frenzyStart, .frenzyEnd, .sneakersPickup,
         ]
         for sfx in all {
             let s = sfx.samples
@@ -92,6 +96,8 @@ final class SynthTests: XCTestCase {
         XCTAssertTrue(Synth.SFX.shieldBreak.ducksMusic)
         XCTAssertFalse(Synth.SFX.laneTick.ducksMusic)
         XCTAssertFalse(Synth.SFX.gem(streak: 3).ducksMusic)
+        XCTAssertTrue(Synth.SFX.sneakersPickup.ducksMusic, "the spring leap is a big moment")
+        XCTAssertEqual(Synth.SFX.sneakersPickup.normalized, .sneakersPickup)
     }
 
     /// v1.3 (R17): the six mechanic SFX render sane, audible, correctly-sized buffers.
