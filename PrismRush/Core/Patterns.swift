@@ -124,8 +124,14 @@ enum Patterns {
             gemLine(b + 1, free, 6, &out)   // coin trail through the free lane to the pickup (zero RNG)
             return 18
 
-        case 8:  // double bar 9 apart
-            out.append(.bar(d: b + 6)); out.append(.bar(d: b + 15)); gemLine(b + 18, 1, 4, &out); return 24
+        case 8:  // double bar 9 apart — a CONTINUOUS centre coin trail traces the slide path through
+                 // both bars (v1.6: coins mark a takeable route THROUGH the obstacle, not just after).
+                 // Bars are full-width slides, so the centre lane is always safe. Zero RNG.
+            out.append(.bar(d: b + 6)); out.append(.bar(d: b + 15))
+            gemLine(b + 1, 1, 3, &out)      // run-up into the first bar
+            gemLine(b + 10, 1, 2, &out)     // between the bars
+            gemLine(b + 18, 1, 4, &out)     // out the far side
+            return 24
 
         case 9:  // PRISM RING (v1.3): 3-gem run-up telegraph, a low keeping the jump honest, and a
                  // ring hung at the apex of a jump triggered on the last gem. v(d) is pure; the

@@ -6,9 +6,10 @@ struct Spawner {
     /// Absolute distance up to which patterns have been placed.
     var cursor: Double = 60
 
-    /// Index of the most recently placed pattern (anti-repeat reroll); -1 = none yet. Lives in the
-    /// spawner so it resets with it — deterministic for a given seed.
+    /// The last two placed pattern indices (anti-repeat reroll); -1 = none yet. Lives in the
+    /// spawner so they reset with it — deterministic for a given seed.
     var lastIdx: Int = -1
+    var prevIdx: Int = -1
 
     /// Reused scratch buffer so `fill` allocates nothing per tick once warmed.
     private var scratch: [SpawnCmd] = []
@@ -36,10 +37,12 @@ struct Spawner {
         while cursor < horizon {
             let maxIdx = Spawner.maxIndex(forDistance: dist)
             var idx = rng.int(0, maxIdx - 1)
-            // Anti-repeat (v1.3): one bounded reroll when we draw the same pattern again — repeats
-            // stay possible, just half as likely. Conditional extra RNG call → layoutVersion 2.
-            if idx == lastIdx { idx = rng.int(0, maxIdx - 1) }
-            lastIdx = idx
+            // Anti-repeat (v1.6): ONE bounded reroll when we'd repeat EITHER of the last two patterns
+            // — keeps runs varied (owner: "don't get too repetitive") without a loop, so repeats stay
+            // possible, just rarer. Same single-reroll shape as v1.3 (which only checked the last one);
+            // the broader condition reshuffles the seeded stream → layoutVersion 6 → 7.
+            if idx == lastIdx || idx == prevIdx { idx = rng.int(0, maxIdx - 1) }
+            prevIdx = lastIdx; lastIdx = idx
             scratch.removeAll(keepingCapacity: true)
             let len = Patterns.run(idx, base: cursor, rng: &rng, out: &scratch)
             let gap = Spawner.gap(forDistance: dist)

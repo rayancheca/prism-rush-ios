@@ -189,9 +189,9 @@ final class MissionsTests: XCTestCase {
 
     func testTodaysChallengeSeedMatchesUTCGoldens() async {
         let store = ProfileStore(testing: Profile())
-        // Goldens pinned in DailyChallengeTests (layoutVersion 6 as of v1.6 — gauntlet fairness widen).
-        XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 10)), 0xCF1D_7FAA_DFEF_898D)
-        XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 11)), 0x329D_51F4_7CA3_E470)
+        // Goldens pinned in DailyChallengeTests (layoutVersion 7 as of v1.6 — anti-repeat-2 + coins).
+        XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 10)), 0xA7A5_9815_BF47_186A)
+        XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 11)), 0xF0F4_337E_40DF_9E9F)
         // 23:59 and 00:01 straddle UTC midnight → different tracks.
         XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 10, 23, 59)),
                        store.todaysChallengeSeed(now: utc(2026, 6, 10, 0, 1)))

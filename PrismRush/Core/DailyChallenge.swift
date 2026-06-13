@@ -18,7 +18,9 @@ enum DailyChallenge {
     /// more deterministic gems; zero RNG, but the shared track gains entities, so the seed reshuffles).
     /// layoutVersion 6 = v1.6 (gauntlet fairness — pattern 11's bar→triple-low gap widened 9→27u +
     /// a free-lane coin trail; zero RNG, but moved/added entities reshuffle the shared track).
-    static func seed(year: Int, month: Int, day: Int, layoutVersion: UInt64 = 6) -> UInt64 {
+    /// layoutVersion 7 = v1.6 (anti-repeat widened to the last TWO patterns — varies the seeded
+    /// selection stream — plus a continuous coin trail through pattern 8's double bars).
+    static func seed(year: Int, month: Int, day: Int, layoutVersion: UInt64 = 7) -> UInt64 {
         let folded = UInt64(year * 10_000 + month * 100 + day)
         var mix = SplitMix64(seed: folded ^ tag ^ (layoutVersion << 48))
         return mix.next()
