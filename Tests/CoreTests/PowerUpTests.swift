@@ -239,6 +239,22 @@ final class PowerUpTests: XCTestCase {
         XCTAssertEqual(core.boostT, 0)
     }
 
+    // MARK: manual Shield deploy (v1.6)
+
+    func testDeployShieldActivatesOnceAndRefusesWhenHeld() async {
+        let core = cleanCore()
+        XCTAssertFalse(core.shield)
+        XCTAssertTrue(core.deployShield())
+        XCTAssertTrue(core.shield)
+        XCTAssertFalse(core.deployShield(), "no waste — refuses while a shield is already held")
+    }
+
+    func testDeployShieldIgnoredOutsidePlay() async {
+        let core = GameCore(seed: 1)
+        XCTAssertFalse(core.deployShield())
+        XCTAssertFalse(core.shield)
+    }
+
     // MARK: guaranteed power-up cadence (v1.6)
 
     func testPowerUpCadenceDeliversEveryKind() async {

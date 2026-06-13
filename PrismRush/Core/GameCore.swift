@@ -239,6 +239,16 @@ final class GameCore {
         return true
     }
 
+    /// Manually deploy a banked SHIELD on demand (sibling of activateSlowMo). RNG-free; refuses if a
+    /// shield is already held (no waste). Same one-hit shield the road pickup grants.
+    @discardableResult
+    func deployShield() -> Bool {
+        guard mode == .play, !shield else { return false }
+        shield = true
+        emit(.pickup(kind: .shield, x: px, y: jumpY))
+        return true
+    }
+
     /// Manually deploy a banked "Speed Up" — a multi-second Overdrive burst on demand (sibling of
     /// activateSlowMo). RNG-free + input-driven, so the seeded sim and the bot are untouched. Returns
     /// true only if it started (in play, none already running — no stack/refresh abuse).

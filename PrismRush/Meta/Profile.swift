@@ -12,6 +12,10 @@ struct Profile: Codable, Equatable, Sendable {
     /// burst on demand. Default 2 to discover it; replenished by levelling up + the shop. Device-local
     /// like the other consumable counters (see `ProfileStore.merged`).
     var speedUpCharges: Int = 2
+    /// Banked deployable SHIELD charges (v1.6) — pop a one-hit shield on demand from a HUD button.
+    /// Default 1 to discover it; earned via level-up + the shop. (The road shield pickup is separate
+    /// and still activates immediately.) Device-local like the other consumable counters.
+    var shieldCharges: Int = 1
     /// Pre-run loadout consumables (armed on the hub, consumed at run start; one each free to
     /// discover, then bought via the Mystery Box / shop). Head Start launches with an Overdrive
     /// boost; Coin Surge pays ×2 coins for the whole run. Not used on the competitive Daily run.
@@ -103,7 +107,7 @@ extension Profile {
 // to decode (and never silently wipes a saved profile). The memberwise + synthesized `encode` remain.
 extension Profile {
     enum CodingKeys: String, CodingKey {
-        case coins, slowMoCharges, speedUpCharges, headStartCharges, coinSurgeCharges
+        case coins, slowMoCharges, speedUpCharges, shieldCharges, headStartCharges, coinSurgeCharges
         case bestScore, totalRuns, totalDistance, totalGems, totalCoinsEarned, bestStreak
         case maxWorldReached, ownedSkins, selectedSkin
         case lastDailyClaim, loginStreak, lastChestOpen
@@ -123,6 +127,7 @@ extension Profile {
         coins = try c.decodeIfPresent(Int.self, forKey: .coins) ?? d.coins
         slowMoCharges = try c.decodeIfPresent(Int.self, forKey: .slowMoCharges) ?? d.slowMoCharges
         speedUpCharges = try c.decodeIfPresent(Int.self, forKey: .speedUpCharges) ?? d.speedUpCharges
+        shieldCharges = try c.decodeIfPresent(Int.self, forKey: .shieldCharges) ?? d.shieldCharges
         headStartCharges = try c.decodeIfPresent(Int.self, forKey: .headStartCharges) ?? d.headStartCharges
         coinSurgeCharges = try c.decodeIfPresent(Int.self, forKey: .coinSurgeCharges) ?? d.coinSurgeCharges
         bestScore = try c.decodeIfPresent(Int.self, forKey: .bestScore) ?? d.bestScore

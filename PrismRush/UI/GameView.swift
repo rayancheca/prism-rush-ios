@@ -752,9 +752,14 @@ final class GameModel {
             if result.levelAfter > result.levelBefore {
                 celebrateMilestone("LEVEL UP — \(result.levelAfter)",
                                    color: Theme.color(0x00F5FF), sfx: .levelUp)
-                // Earn manual slow-mo + speed-up charges by levelling up (honest replenishment — decree 5).
+                // Earn deploy charges by levelling up (honest replenishment — decree 5): slow-mo +
+                // speed-up ×2/level, shield ×1/level (a free on-demand hit is the most potent).
                 let levels = result.levelAfter - result.levelBefore
-                store.mutate { $0.slowMoCharges += 2 * levels; $0.speedUpCharges += 2 * levels }
+                store.mutate {
+                    $0.slowMoCharges += 2 * levels
+                    $0.speedUpCharges += 2 * levels
+                    $0.shieldCharges += levels
+                }
             }
         }
 
@@ -851,6 +856,25 @@ final class GameModel {
         }
     }
 
+    /// Whether the Shield button is live: in play, a charge banked, no shield already held.
+    var canDeployShield: Bool {
+        core.mode == .play && !paused
+            && ProfileStore.shared.profile.shieldCharges > 0 && !core.shield
+    }
+
+    /// Deploy one banked shield (a one-hit shield on demand). Spends only on a successful core deploy;
+    /// the shield FX/SFX ride the normal pickup path. Soft tick when it can't fire (empty / already held).
+    func deployShield() {
+        guard core.mode == .play, !paused else { return }
+        guard ProfileStore.shared.profile.shieldCharges > 0, !core.shield else {
+            synth.play(.uiTick)
+            return
+        }
+        if core.deployShield() {
+            ProfileStore.shared.mutate { $0.shieldCharges = max(0, $0.shieldCharges - 1) }
+        }
+    }
+
     /// Translate a finished drag/tap into game input. 22pt threshold separates tap from swipe.
     func handleGesture(_ t: CGSize) {
         let adx = abs(t.width), ady = abs(t.height)
@@ -903,18 +927,23 @@ struct GameView: View {
         }
     }
 
-    /// The two banked deploy buttons (v1.6): SLOW-MO (bottom-left) + SPEED UP (bottom-right) — big,
-    /// labelled, colour-coded, thumb-reachable in the bottom corners (the owner's "that tiny button
-    /// in a rush is impossible" fix). Reads `ProfileStore.shared` live in body (G3).
+    /// The three banked deploy buttons (v1.6): SLOW-MO + SPEED UP stacked in the bottom-LEFT, and
+    /// SHIELD in the bottom-RIGHT — big, labelled, colour-coded, thumb-reachable in the bottom
+    /// corners (the owner's "that tiny button in a rush is impossible" fix). Reads the store live (G3).
     private var deployControls: some View {
         HStack(alignment: .bottom) {
-            deployButton(symbol: "hourglass", hex: 0x9BF0FF, label: "SLOW-MO",
-                         charges: ProfileStore.shared.profile.slowMoCharges, live: model.canDeploySlowMo,
-                         id: "slowMoButton") { model.deploySlowMo() }
+            VStack(spacing: 10) {
+                deployButton(symbol: "hourglass", hex: 0x9BF0FF, label: "SLOW-MO",
+                             charges: ProfileStore.shared.profile.slowMoCharges, live: model.canDeploySlowMo,
+                             id: "slowMoButton") { model.deploySlowMo() }
+                deployButton(symbol: "bolt.fill", hex: 0xFFD23D, label: "SPEED UP",
+                             charges: ProfileStore.shared.profile.speedUpCharges, live: model.canDeploySpeedUp,
+                             id: "speedUpButton") { model.deploySpeedUp() }
+            }
             Spacer()
-            deployButton(symbol: "bolt.fill", hex: 0xFFD23D, label: "SPEED UP",
-                         charges: ProfileStore.shared.profile.speedUpCharges, live: model.canDeploySpeedUp,
-                         id: "speedUpButton") { model.deploySpeedUp() }
+            deployButton(symbol: "shield.lefthalf.filled", hex: 0x00F5FF, label: "SHIELD",
+                         charges: ProfileStore.shared.profile.shieldCharges, live: model.canDeployShield,
+                         id: "shieldButton") { model.deployShield() }
         }
     }
 
