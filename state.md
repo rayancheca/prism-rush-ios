@@ -61,6 +61,20 @@ All committed locally and built/tested green at each step (SPM 178/Linux; Mac 18
   tolerance so it feels like "collect everything on your jump", not "miss coins") + any deeper
   curated-sequence design (best felt in real time).
 
+### v1.6 round 4 (2026-06-13, owner play-feedback — camera/track/buttons + responsive)
+- **App Store guide** delivered (`docs/APP_STORE_SETUP.md`); owner will do it last.
+- **Placement safe-half** (`50be115`): anti-repeat-2 + coins through pattern 8 (layoutVersion 6→7).
+- Owner play-feedback (`b06a9f2`): **vertical camera follow** for high/boots jumps (eye+look-at rise
+  above the normal apex ~2.82, smoothed, RM-safe — fixes boots flying off the top); **longer track**
+  (backdrop horizon −65→−95 + enlarged, revealing more of the already-drawn ground/rungs/decor; no
+  gaps); **bigger pause/mute** (38→48 pt, kept top-trailing).
+- **Responsive audit (#19) — VERIFIED, no fix needed:** app is iPhone-only (`TARGETED_DEVICE_FAMILY 1`)
+  + portrait-locked. Captured on iPhone SE 3 (375×667, the smallest iOS-18 device) AND 17 Pro Max:
+  menu, in-run, characters carousel, shop, and game-over all fit/scroll with no clipping/overlap.
+  The SwiftUI layout (Spacers + point spacing + GeometryReader hero + adaptive grids + ScrollViews +
+  safe-area) adapts cleanly across the whole range. iPad = compatibility mode (owner: later).
+- Full suite green (185 unit + 11 XCUITest). Boots coin arcs remain the one held feature.
+
 ---
 
 ## v1.4.2 and earlier — archived below.
