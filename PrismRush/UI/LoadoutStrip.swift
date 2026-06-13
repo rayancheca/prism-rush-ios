@@ -8,23 +8,23 @@ struct LoadoutStrip: View {
     let model: GameModel
 
     var body: some View {
-        let p = ProfileStore.shared.profile
-        let showHeadStart = p.headStartCharges > 0
-        let showCoinSurge = p.coinSurgeCharges > 0
+        // Scalar reads at point of use (G3 — never snapshot the whole `profile` into a let).
+        let headStart = ProfileStore.shared.profile.headStartCharges
+        let coinSurge = ProfileStore.shared.profile.coinSurgeCharges
         return Group {
-            if showHeadStart || showCoinSurge {
+            if headStart > 0 || coinSurge > 0 {
                 HStack(spacing: Theme.Space.s) {
-                    if showHeadStart {
-                        chip(icon: "bolt.horizontal.fill", name: "HEAD START", count: p.headStartCharges,
+                    if headStart > 0 {
+                        chip(icon: "bolt.horizontal.fill", name: "HEAD START", count: headStart,
                              tint: Theme.color(0xFF9F1C), armed: model.armedHeadStart,
                              action: { model.toggleHeadStart() },
-                             a11y: "Head Start, \(p.headStartCharges) in stock. Launch the run with an overdrive boost.")
+                             a11y: "Head Start, \(headStart) in stock. Launch the run with an overdrive boost.")
                     }
-                    if showCoinSurge {
-                        chip(icon: "dollarsign.circle.fill", name: "COIN SURGE", count: p.coinSurgeCharges,
+                    if coinSurge > 0 {
+                        chip(icon: "dollarsign.circle.fill", name: "COIN SURGE", count: coinSurge,
                              tint: Theme.color(0xFFD23D), armed: model.armedCoinSurge,
                              action: { model.toggleCoinSurge() },
-                             a11y: "Coin Surge, \(p.coinSurgeCharges) in stock. Doubles coins for the whole run.")
+                             a11y: "Coin Surge, \(coinSurge) in stock. Doubles coins for the whole run.")
                     }
                 }
             }

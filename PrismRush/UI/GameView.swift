@@ -829,16 +829,19 @@ final class GameModel {
         synth.play(armedCoinSurge ? .equipClick : .uiTick)
     }
 
-    /// Whether the slow-mo button is live: in play, a charge banked, none already running.
+    /// Whether the slow-mo button is live: in play, a charge banked, none already running. NEVER on a
+    /// Daily Rush — banked/bought consumables must not skew the shared competitive board (decree 5 +
+    /// iron rule 10, the same fairness reason challenge runs can't revive/checkpoint; the loadout is
+    /// likewise gated via consumeLoadout:false).
     var canDeploySlowMo: Bool {
-        core.mode == .play && !paused
+        core.mode == .play && !paused && !isChallengeRun
             && ProfileStore.shared.profile.slowMoCharges > 0 && core.chronoT <= 0
     }
 
     /// Deploy one banked slow-mo on demand (the HUD button). Spending persists immediately; the
     /// chrono FX/SFX fire through the normal pickup event path. A soft tick when it can't fire.
     func deploySlowMo() {
-        guard core.mode == .play, !paused else { return }
+        guard core.mode == .play, !paused, !isChallengeRun else { return }
         guard ProfileStore.shared.profile.slowMoCharges > 0, core.chronoT <= 0 else {
             synth.play(.uiTick)
             return
@@ -850,14 +853,14 @@ final class GameModel {
 
     /// Whether the Speed Up button is live: in play, a charge banked, no overdrive already running.
     var canDeploySpeedUp: Bool {
-        core.mode == .play && !paused
+        core.mode == .play && !paused && !isChallengeRun
             && ProfileStore.shared.profile.speedUpCharges > 0 && core.boostT <= 0
     }
 
     /// Deploy one banked Speed Up (manual overdrive burst). Spending persists only on a successful
     /// core deploy; the boost FX/SFX ride the normal boost-start path. Soft tick when it can't fire.
     func deploySpeedUp() {
-        guard core.mode == .play, !paused else { return }
+        guard core.mode == .play, !paused, !isChallengeRun else { return }
         guard ProfileStore.shared.profile.speedUpCharges > 0, core.boostT <= 0 else {
             synth.play(.uiTick)
             return
@@ -869,14 +872,14 @@ final class GameModel {
 
     /// Whether the Shield button is live: in play, a charge banked, no shield already held.
     var canDeployShield: Bool {
-        core.mode == .play && !paused
+        core.mode == .play && !paused && !isChallengeRun
             && ProfileStore.shared.profile.shieldCharges > 0 && !core.shield
     }
 
     /// Deploy one banked shield (a one-hit shield on demand). Spends only on a successful core deploy;
     /// the shield FX/SFX ride the normal pickup path. Soft tick when it can't fire (empty / already held).
     func deployShield() {
-        guard core.mode == .play, !paused else { return }
+        guard core.mode == .play, !paused, !isChallengeRun else { return }
         guard ProfileStore.shared.profile.shieldCharges > 0, !core.shield else {
             synth.play(.uiTick)
             return
@@ -1168,8 +1171,9 @@ struct GameView: View {
             }
 
             // Manual deploy buttons — SLOW-MO (left) + SPEED UP (right) in the bottom corners,
-            // thumb-reachable, above the XP bar. Above the gesture catcher so taps don't jump.
-            if model.core.snapshot.mode == .play {
+            // thumb-reachable, above the XP bar. Above the gesture catcher so taps don't jump. NEVER
+            // on a Daily Rush: the shared competitive board stays consumable-free (decree 5).
+            if model.core.snapshot.mode == .play && !model.isChallengeRun {
                 VStack {
                     Spacer()
                     deployControls

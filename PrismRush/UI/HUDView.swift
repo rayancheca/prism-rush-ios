@@ -6,6 +6,7 @@ import SwiftUI
 /// `core.snapshot`, refreshes per frame, and stays strictly non-interactive.
 struct HUDView: View {
     let core: GameCore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let snap = core.snapshot
@@ -189,7 +190,8 @@ struct HUDView: View {
     private func powerUpChip(_ kind: PowerUpKind, _ name: String,
                              remaining: Double?, duration: Double) -> some View {
         let color = Theme.color(kind.hex)
-        let reduceFlash = ProfileStore.shared.profile.reduceFlash
+        // System Reduce Motion suppresses the last-3s blink too, not just the custom Reduce Flash.
+        let reduceFlash = ProfileStore.shared.profile.reduceFlash || reduceMotion
         let warning = (remaining ?? .infinity) < 3
         let pulse = !warning || reduceFlash || Int((remaining ?? 0) * 4) % 2 == 0
         let progress = remaining != nil && duration > 0 ? max(0.03, min(1, remaining! / duration)) : 1

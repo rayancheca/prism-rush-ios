@@ -18,6 +18,7 @@ struct CharacterSelectView: View {
     @State private var focusedID: String?
     @State private var stageShake: CGFloat = 0
     @State private var stageDenied = false
+    @State private var denyResetTask: Task<Void, Never>?
     @State private var toast: String?
     @State private var toastTask: Task<Void, Never>?
     /// The challengeDays "back to the menu" close, tracked so re-routing inside its 900 ms window
@@ -306,17 +307,20 @@ struct CharacterSelectView: View {
         }
     }
 
-    /// Can't-afford feedback on the STAGE button (uiux §6.2): shake + red border flash.
+    /// Can't-afford feedback on the STAGE button (uiux §6.2): shake + red border flash. The reset is
+    /// DEFERRED (not set-and-cleared in the same turn) so `stageDenied == true` gets a real render —
+    /// otherwise SwiftUI coalesces the two writes and the red border (line ~245) never appears. One
+    /// path for both motion settings; a rapid re-tap cancels the stale clear (toastTask pattern).
     private func deny() {
         stageDenied = true
-        if reduceMotion {
-            Task {
-                try? await Task.sleep(for: .milliseconds(450))
-                stageDenied = false
-            }
-        } else {
+        if !reduceMotion {
             withAnimation(.linear(duration: 0.4)) { stageShake += 1 }
-            withAnimation(.easeOut(duration: 0.45)) { stageDenied = false }
+        }
+        denyResetTask?.cancel()
+        denyResetTask = Task {
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.3)) { stageDenied = false }
         }
     }
 

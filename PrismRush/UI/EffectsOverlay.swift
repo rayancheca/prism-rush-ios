@@ -91,6 +91,7 @@ private struct BannerView: View {
     let name: String
     let ordinal: Int
     @State private var shown = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 4) {
@@ -103,13 +104,17 @@ private struct BannerView: View {
                 .foregroundStyle(.white)
                 .shadow(color: .white.opacity(0.5), radius: 22)
         }
-        .scaleEffect(shown ? 1 : 0.82)
+        .scaleEffect(shown || reduceMotion ? 1 : 0.82)   // no scale-in pop under Reduce Motion
         .opacity(shown ? 1 : 0)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.top, 150)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("World \(ordinal + 1), \(name)")
+        .accessibilityAddTraits(.updatesFrequently)
         .task(id: id) {
             guard id > 0 else { return }
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) { shown = true }
+            if reduceMotion { shown = true }   // plain cross-fade, no spring scale
+            else { withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) { shown = true } }
             try? await Task.sleep(for: .seconds(1.8))
             // A new world change restarts this task mid-sleep; the cancelled instance must not
             // race the fresh one and hide the banner it just showed.

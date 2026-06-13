@@ -8,12 +8,14 @@ struct MysteryBoxView: View {
     let model: GameModel
     let onClose: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var phase: Phase = .idle
     @State private var wobble: Double = 0        // box shake/swivel angle (degrees)
     @State private var boxScale: CGFloat = 1
     @State private var glow: Double = 0.4
     @State private var burstT: CGFloat = 0       // 0→1 reveal burst progress
     @State private var rewardIn = false
+    @State private var revealTask: Task<Void, Never>?
 
     private enum Phase: Equatable { case idle, opening, revealed(ConsumableGrant) }
     private var cost: Int { ShopConsumables.mysteryBoxCost }
@@ -36,6 +38,7 @@ struct MysteryBoxView: View {
         }
         .accessibilityIdentifier("mysteryBoxView")
         .accessibilityAddTraits(.isModal)
+        .onDisappear { revealTask?.cancel() }   // the reveal beat must never outlive the sheet
     }
 
     // MARK: the box
@@ -57,6 +60,7 @@ struct MysteryBoxView: View {
             Text("MYSTERY BOX").font(.system(size: 15, weight: .heavy, design: .rounded)).tracking(3)
                 .foregroundStyle(Theme.Role.textSecondary)
             boxView.onAppear {
+                guard !reduceMotion else { return }   // no perpetual idle wobble under Reduce Motion
                 withAnimation(.easeInOut(duration: 1.3).repeatForever(autoreverses: true)) { wobble = 4 }
             }
             VStack(spacing: 6) {
@@ -153,11 +157,23 @@ struct MysteryBoxView: View {
     private func open() {
         guard ProfileStore.shared.profile.coins >= cost,
               let reward = ProfileStore.shared.openMysteryBox() else { return }
-        model.synth.play(.boostStart)   // tension whoosh on open
+        model.synth.play(.boostStart)   // tension whoosh on open (sound kept in both paths)
+        if reduceMotion {
+            // No shake / scale / confetti burst — a calm beat then the reward, statically.
+            phase = .opening
+            revealTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled else { return }
+                model.synth.play(.newBestFanfare)
+                phase = .revealed(reward); rewardIn = true; glow = 1
+            }
+            return
+        }
         withAnimation(.easeIn(duration: 1.0)) { phase = .opening; glow = 1; boxScale = 1.18 }
         withAnimation(.easeInOut(duration: 0.07).repeatCount(14, autoreverses: true)) { wobble = 14 }
-        Task { @MainActor in
+        revealTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(1050))
+            guard !Task.isCancelled else { return }
             model.synth.play(.newBestFanfare)   // reveal fanfare
             withAnimation(.spring(response: 0.4, dampingFraction: 0.55)) { phase = .revealed(reward); rewardIn = true }
             withAnimation(.easeOut(duration: 0.9)) { burstT = 1 }
@@ -165,6 +181,7 @@ struct MysteryBoxView: View {
     }
 
     private func dismiss() {
+        revealTask?.cancel()
         withAnimation(.spring(duration: 0.3)) { onClose() }
     }
 
