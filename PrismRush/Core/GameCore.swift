@@ -239,6 +239,17 @@ final class GameCore {
         return true
     }
 
+    /// Manually deploy a banked "Speed Up" — a multi-second Overdrive burst on demand (sibling of
+    /// activateSlowMo). RNG-free + input-driven, so the seeded sim and the bot are untouched. Returns
+    /// true only if it started (in play, none already running — no stack/refresh abuse).
+    @discardableResult
+    func deployOverdrive() -> Bool {
+        guard mode == .play, boostT <= 0 else { return false }
+        boostT = Tuning.speedUpDeployDuration
+        emit(.boostStarted(x: px))
+        return true
+    }
+
     func slide() {
         guard mode == .play else { return }
         slideT = Tuning.slideDuration

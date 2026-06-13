@@ -219,6 +219,26 @@ final class PowerUpTests: XCTestCase {
         XCTAssertEqual(core.boostT, 0)
     }
 
+    // MARK: manual Speed Up (player-triggered overdrive, v1.6)
+
+    func testDeployOverdriveActivatesAndDoesNotStack() async {
+        let core = cleanCore()
+        XCTAssertTrue(core.deployOverdrive())
+        XCTAssertEqual(core.boostT, Tuning.speedUpDeployDuration, accuracy: 1e-9)
+        XCTAssertGreaterThan(core.effectiveSpeed, core.speed, "overdrive speeds the world up")
+        XCTAssertFalse(core.deployOverdrive(), "no stack while one is already running")
+
+        // Re-armable once it has expired.
+        XCTAssertTrue(tickUntil(core, max: Int(Tuning.speedUpDeployDuration / Tuning.tickDt) + 30) { core.boostT <= 0 })
+        XCTAssertTrue(core.deployOverdrive())
+    }
+
+    func testDeployOverdriveIgnoredOutsidePlay() async {
+        let core = GameCore(seed: 1)
+        XCTAssertFalse(core.deployOverdrive())
+        XCTAssertEqual(core.boostT, 0)
+    }
+
     // MARK: guaranteed power-up cadence (v1.6)
 
     func testPowerUpCadenceDeliversEveryKind() async {

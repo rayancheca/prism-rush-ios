@@ -58,6 +58,7 @@ enum ShopValue {
 enum ConsumableGrant: Equatable, Sendable {
     case coins(Int)
     case slowMo(Int)
+    case speedUp(Int)
     case headStart(Int)
     case coinSurge(Int)
 }
@@ -86,6 +87,8 @@ enum ShopConsumables {
     static let packs: [CoinSpendItem] = [
         CoinSpendItem(id: "slowMoPack", title: "Slow-Mo Pack", blurb: "+3 slow-mo charges",
                       icon: "hourglass", hex: 0x9BF0FF, cost: 250, grant: .slowMo(3)),
+        CoinSpendItem(id: "speedUpPack", title: "Speed-Up Pack", blurb: "+3 speed-up charges",
+                      icon: "bolt.fill", hex: 0xFFD23D, cost: 250, grant: .speedUp(3)),
         CoinSpendItem(id: "headStartPack", title: "Head Start Pack", blurb: "+3 head starts",
                       icon: "bolt.horizontal.fill", hex: 0xFF9F1C, cost: 300, grant: .headStart(3)),
         CoinSpendItem(id: "coinSurgePack", title: "Coin Surge Pack", blurb: "+3 coin surges",

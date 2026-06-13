@@ -442,6 +442,7 @@ final class EconomyTests: XCTestCase {
         XCTAssertTrue(p.grantedTransactionIDs.isEmpty)
         // v1.5 pre-run consumable counters default on legacy saves (one each — the goodwill intro).
         XCTAssertEqual(p.slowMoCharges, 2)
+        XCTAssertEqual(p.speedUpCharges, 2)
         XCTAssertEqual(p.headStartCharges, 1)
         XCTAssertEqual(p.coinSurgeCharges, 1)
     }
@@ -449,12 +450,13 @@ final class EconomyTests: XCTestCase {
     func testConsumablesStayDeviceLocalOnCloudMerge() async throws {
         // Consumable inventory is deliberately device-local: the LOCAL value wins, so a stale remote
         // can never resurrect spent charges (a max() merge would — see ProfileStore.merged docstring).
-        var local = Profile(); local.headStartCharges = 0; local.coinSurgeCharges = 4; local.slowMoCharges = 1
+        var local = Profile(); local.headStartCharges = 0; local.coinSurgeCharges = 4; local.slowMoCharges = 1; local.speedUpCharges = 2
         var remote = Profile(); remote.headStartCharges = 9; remote.coinSurgeCharges = 9; remote.slowMoCharges = 9
         let m = ProfileStore.merged(local: local, remote: remote)
         XCTAssertEqual(m.headStartCharges, 0, "spent Head Start charges are not resurrected by a merge")
         XCTAssertEqual(m.coinSurgeCharges, 4, "consumables keep the local value (device-local)")
         XCTAssertEqual(m.slowMoCharges, 1)
+        XCTAssertEqual(m.speedUpCharges, 2, "speed-up is device-local too")
     }
 
     func testConsumableCountersRoundTripAndCanBeSpent() async throws {

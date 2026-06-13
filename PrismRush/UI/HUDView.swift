@@ -40,8 +40,7 @@ struct HUDView: View {
                 // Starts below the mute/pause cluster anchored in the top-trailing corner.
                 VStack(alignment: .trailing, spacing: 8) {
                     gemMultPill(snap)
-                    shieldBadge(snap)
-                    timerRings(snap)
+                    powerUpStack(snap)
                     flowPips(snap)
                 }
                 .padding(.top, 38)
@@ -148,85 +147,80 @@ struct HUDView: View {
         .accessibilityAddTraits(.updatesFrequently)
     }
 
-    // MARK: shield indicator — the one power-up with no timer (it's binary: held until a hit)
+    // MARK: power-up status — big, color-coded, readable countdowns (v1.6)
 
-    /// A persistent SHIELD badge whenever one is held, so the player KNOWS they're protected before
-    /// a crash (the owner's "how do I know I have a shield?" gap — previously the only feedback was
-    /// the SHIELDED popup at the moment it absorbed a hit). No countdown: a shield has no timer, it
-    /// waits until the next obstacle consumes it. A gentle breathing glow reads as "armed".
-    @ViewBuilder private func shieldBadge(_ snap: GameSnapshot) -> some View {
-        if snap.shieldActive {
-            HStack(spacing: 5) {
-                Image(systemName: "shield.lefthalf.filled")
-                    .font(.system(size: 12, weight: .bold))
-                Text("SHIELD")
-                    .font(.system(size: 11, weight: .heavy, design: .rounded))
-                    .tracking(1)
-                    .monospacedDigit()
+    /// One colour-coded chip per ACTIVE power-up, each with its own hue + a clear seconds countdown
+    /// and a depletion bar (the owner's "I can't tell how long slow-mo lasts — it's a tiny grey
+    /// circle" fix). Shield is held (no timer); the rest count down in their own colour.
+    @ViewBuilder private func powerUpStack(_ snap: GameSnapshot) -> some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            if snap.shieldActive {
+                powerUpChip("shield.lefthalf.filled", 0x00F5FF, "SHIELD", remaining: nil, duration: 0)
             }
-            .foregroundStyle(Theme.Role.interactive)
-            .pillBackground()
-            .shadow(color: Theme.Role.interactive.opacity(0.55), radius: 8)
-            .transition(.scale.combined(with: .opacity))
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Shield ready — absorbs the next hit")
+            if snap.magnetRemaining > 0 {
+                powerUpChip("dot.radiowaves.left.and.right", 0xFF2BD6, "MAGNET",
+                            remaining: snap.magnetRemaining, duration: Tuning.magnetDuration)
+            }
+            if snap.doublerRemaining > 0 {
+                powerUpChip("2.circle.fill", 0x00FF88, "×2 COINS",
+                            remaining: snap.doublerRemaining, duration: Tuning.doublerDuration)
+            }
+            if snap.chronoRemaining > 0 {
+                powerUpChip("hourglass", 0x9BF0FF, "SLOW-MO",
+                            remaining: snap.chronoRemaining, duration: Tuning.chronoDuration)
+            }
+            if snap.sneakersRemaining > 0 {
+                powerUpChip("arrow.up.circle.fill", 0xFF8A2B, "SNEAKERS",
+                            remaining: snap.sneakersRemaining, duration: Tuning.superSneakersDuration)
+            }
+            if snap.boostRemaining > 0 {
+                powerUpChip("bolt.fill", 0xFFD23D, "OVERDRIVE",
+                            remaining: snap.boostRemaining, duration: Tuning.boostDuration)
+            }
         }
+        .animation(.spring(duration: 0.25), value: snap.shieldActive)
     }
 
-    // MARK: power-up timer rings (uiux §6.8 — icons in circular depletion strokes, no rainbow)
-
-    /// Overdrive deliberately has NO ring (AUDIT D6-7): `boostDuration` is ~1 s, so its ring was
-    /// unreadable churn next to the OVERDRIVE popup + SFX + speed FX that already announce it.
-    @ViewBuilder private func timerRings(_ snap: GameSnapshot) -> some View {
-        let anyActive = snap.magnetRemaining > 0 || snap.doublerRemaining > 0
-            || snap.chronoRemaining > 0 || snap.sneakersRemaining > 0
-        if anyActive {
-            HStack(spacing: 8) {
-                if snap.magnetRemaining > 0 {
-                    timerRing("dot.radiowaves.left.and.right", remaining: snap.magnetRemaining,
-                              duration: Tuning.magnetDuration, name: "Magnet")
-                }
-                if snap.doublerRemaining > 0 {
-                    timerRing("2.circle.fill", remaining: snap.doublerRemaining,
-                              duration: Tuning.doublerDuration, name: "Doubler")
-                }
-                if snap.chronoRemaining > 0 {
-                    timerRing("hourglass", remaining: snap.chronoRemaining,
-                              duration: Tuning.chronoDuration, name: "Slow motion")
-                }
-                if snap.sneakersRemaining > 0 {
-                    timerRing("arrow.up.circle.fill", remaining: snap.sneakersRemaining,
-                              duration: Tuning.superSneakersDuration, name: "Super Sneakers — higher jumps")
-                }
-            }
-            .transition(.scale)
-        }
-    }
-
-    /// 20 pt depletion ring, `Role.interactive` for all power-ups. Last-4-seconds warning blinks
-    /// the ring twice a second; with Reduce Flashing on, the ring thins instead of blinking.
-    private func timerRing(_ symbol: String, remaining: Double, duration: Double, name: String) -> some View {
-        // Read live in body (G3): the Settings toggle applies to the very next warning.
+    /// A power-up chip: coloured icon + name + a big seconds countdown, over a depletion bar in the
+    /// power-up's own colour. Held power-ups (shield) show a breathing "READY" instead of a timer.
+    /// Last 3 s pulses (reduceFlash dims rather than blinks). Reads at a glance, mid-rush.
+    private func powerUpChip(_ symbol: String, _ hex: UInt32, _ name: String,
+                             remaining: Double?, duration: Double) -> some View {
+        let color = Theme.color(hex)
         let reduceFlash = ProfileStore.shared.profile.reduceFlash
-        let warning = remaining < 4 && duration > 4
-        let blinkOn = !warning || reduceFlash || Int(remaining * 4) % 2 == 0
-        return ZStack {
-            Circle()
-                .stroke(Color.white.opacity(0.15), lineWidth: warning && reduceFlash ? 1.2 : 2.5)
-            Circle()
-                .trim(from: 0, to: max(0.02, remaining / duration))
-                .stroke(Theme.Role.interactive,
-                        style: StrokeStyle(lineWidth: warning && reduceFlash ? 1.2 : 2.5, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .opacity(blinkOn ? 1 : 0.25)
-            Image(systemName: symbol)
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(.white.opacity(0.9))
+        let warning = (remaining ?? .infinity) < 3
+        let pulse = !warning || reduceFlash || Int((remaining ?? 0) * 4) % 2 == 0
+        let progress = remaining != nil && duration > 0 ? max(0.03, min(1, remaining! / duration)) : 1
+        return VStack(alignment: .trailing, spacing: 3) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol).font(.system(size: 14, weight: .bold))
+                Text(name).font(.system(size: 11, weight: .heavy, design: .rounded)).tracking(0.5)
+                if let r = remaining {
+                    Text("\(Int(r.rounded(.up)))s")
+                        .font(.system(size: 14, weight: .black, design: .rounded)).monospacedDigit()
+                } else {
+                    Text("READY").font(.system(size: 11, weight: .heavy, design: .rounded)).tracking(0.5)
+                }
+            }
+            .foregroundStyle(color)
+            // Depletion bar in the power-up's own colour (held power-ups show a full bar).
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.14))
+                    Capsule().fill(color).frame(width: max(3, geo.size.width * progress))
+                }
+            }
+            .frame(width: 88, height: 4)
         }
-        .frame(width: 20, height: 20)
-        .pillBackground()
+        .opacity(pulse ? 1 : 0.45)
+        .padding(.horizontal, 11).padding(.vertical, 7)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(color.opacity(0.55), lineWidth: 1))
+        .shadow(color: color.opacity(0.45), radius: 7)
+        .transition(.scale.combined(with: .opacity))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(name), \(Int(remaining.rounded(.up))) seconds left")
+        .accessibilityLabel(remaining == nil ? "\(name) ready"
+                            : "\(name), \(Int((remaining ?? 0).rounded(.up))) seconds left")
     }
 
     // MARK: flow pips — near-miss streak toward the next surge

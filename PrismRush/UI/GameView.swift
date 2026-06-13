@@ -752,8 +752,9 @@ final class GameModel {
             if result.levelAfter > result.levelBefore {
                 celebrateMilestone("LEVEL UP — \(result.levelAfter)",
                                    color: Theme.color(0x00F5FF), sfx: .levelUp)
-                // Earn manual slow-mo charges by levelling up (honest replenishment — decree 5).
-                store.mutate { $0.slowMoCharges += 2 * (result.levelAfter - result.levelBefore) }
+                // Earn manual slow-mo + speed-up charges by levelling up (honest replenishment — decree 5).
+                let levels = result.levelAfter - result.levelBefore
+                store.mutate { $0.slowMoCharges += 2 * levels; $0.speedUpCharges += 2 * levels }
             }
         }
 
@@ -831,6 +832,25 @@ final class GameModel {
         }
     }
 
+    /// Whether the Speed Up button is live: in play, a charge banked, no overdrive already running.
+    var canDeploySpeedUp: Bool {
+        core.mode == .play && !paused
+            && ProfileStore.shared.profile.speedUpCharges > 0 && core.boostT <= 0
+    }
+
+    /// Deploy one banked Speed Up (manual overdrive burst). Spending persists only on a successful
+    /// core deploy; the boost FX/SFX ride the normal boost-start path. Soft tick when it can't fire.
+    func deploySpeedUp() {
+        guard core.mode == .play, !paused else { return }
+        guard ProfileStore.shared.profile.speedUpCharges > 0, core.boostT <= 0 else {
+            synth.play(.uiTick)
+            return
+        }
+        if core.deployOverdrive() {
+            ProfileStore.shared.mutate { $0.speedUpCharges = max(0, $0.speedUpCharges - 1) }
+        }
+    }
+
     /// Translate a finished drag/tap into game input. 22pt threshold separates tap from swipe.
     func handleGesture(_ t: CGSize) {
         let adx = abs(t.width), ady = abs(t.height)
@@ -883,37 +903,55 @@ struct GameView: View {
         }
     }
 
-    /// Banked slow-mo deploy button: hourglass + a charge-count badge. Lit cyan when ready, dimmed
-    /// when empty or while a slow-mo is already running (tap then just soft-ticks). Reads
-    /// `ProfileStore.shared` live in body (G3) so the badge ticks down the instant one is spent.
-    private var slowMoButton: some View {
-        let charges = ProfileStore.shared.profile.slowMoCharges
-        let live = model.canDeploySlowMo
-        return Button { model.deploySlowMo() } label: {
-            ZStack(alignment: .topTrailing) {
-                Image(systemName: "hourglass")
-                    .font(.system(size: 21, weight: .bold))
-                    .foregroundStyle(live ? Theme.Role.interactive : .white.opacity(0.45))
-                    .frame(width: 54, height: 54)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .overlay(Circle().strokeBorder(live ? Theme.Role.interactive.opacity(0.6) : .white.opacity(0.12)))
-                    .shadow(color: live ? Theme.Role.interactive.opacity(0.5) : .clear, radius: 8)
-                Text("\(charges)")
-                    .font(.system(size: 12, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.black)
-                    .frame(minWidth: 19, minHeight: 19)
-                    .background(charges > 0 ? Theme.Role.interactive : Color.white.opacity(0.5), in: Circle())
-                    .offset(x: 5, y: -5)
+    /// The two banked deploy buttons (v1.6): SLOW-MO (bottom-left) + SPEED UP (bottom-right) — big,
+    /// labelled, colour-coded, thumb-reachable in the bottom corners (the owner's "that tiny button
+    /// in a rush is impossible" fix). Reads `ProfileStore.shared` live in body (G3).
+    private var deployControls: some View {
+        HStack(alignment: .bottom) {
+            deployButton(symbol: "hourglass", hex: 0x9BF0FF, label: "SLOW-MO",
+                         charges: ProfileStore.shared.profile.slowMoCharges, live: model.canDeploySlowMo,
+                         id: "slowMoButton") { model.deploySlowMo() }
+            Spacer()
+            deployButton(symbol: "bolt.fill", hex: 0xFFD23D, label: "SPEED UP",
+                         charges: ProfileStore.shared.profile.speedUpCharges, live: model.canDeploySpeedUp,
+                         id: "speedUpButton") { model.deploySpeedUp() }
+        }
+    }
+
+    /// A big circular deploy button + label + charge badge. Lit in the power-up's colour when ready,
+    /// dimmed + disabled when empty (a soft tick if tapped while its effect is already running).
+    private func deployButton(symbol: String, hex: UInt32, label: String, charges: Int, live: Bool,
+                              id: String, action: @escaping () -> Void) -> some View {
+        let color = Theme.color(hex)
+        return Button(action: action) {
+            VStack(spacing: 4) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: symbol)
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(live ? color : .white.opacity(0.4))
+                        .frame(width: 64, height: 64)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(Circle().strokeBorder(live ? color.opacity(0.7) : .white.opacity(0.12), lineWidth: 1.5))
+                        .shadow(color: live ? color.opacity(0.55) : .clear, radius: 10)
+                    Text("\(charges)")
+                        .font(.system(size: 13, weight: .heavy, design: .rounded)).monospacedDigit()
+                        .foregroundStyle(.black)
+                        .frame(minWidth: 21, minHeight: 21)
+                        .background(charges > 0 ? color : Color.white.opacity(0.5), in: Circle())
+                        .offset(x: 6, y: -4)
+                }
+                Text(label)
+                    .font(.system(size: 10, weight: .heavy, design: .rounded)).tracking(0.5)
+                    .foregroundStyle(live ? color : .white.opacity(0.4))
             }
-            .opacity(charges == 0 ? 0.55 : 1)
-            .contentShape(Circle())
+            .opacity(charges == 0 ? 0.5 : 1)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(charges == 0)
-        .accessibilityIdentifier("slowMoButton")
-        .accessibilityLabel("Slow motion, \(charges) charges")
-        .accessibilityHint(live ? "Deploys slow motion." : "No charge ready.")
+        .accessibilityIdentifier(id)
+        .accessibilityLabel("\(label), \(charges) charges")
+        .accessibilityHint(live ? "Deploys \(label)." : "No charge ready.")
     }
 
     /// The first-run control prompt — a calm capsule below the meters, never interactive.
@@ -1080,18 +1118,14 @@ struct GameView: View {
                     .zIndex(5)
             }
 
-            // Manual slow-mo button — the player banks charges and fires them on demand (bottom-
-            // leading, thumb-reachable, above the XP bar). Above the gesture catcher so its taps
-            // don't double as a jump.
+            // Manual deploy buttons — SLOW-MO (left) + SPEED UP (right) in the bottom corners,
+            // thumb-reachable, above the XP bar. Above the gesture catcher so taps don't jump.
             if model.core.snapshot.mode == .play {
                 VStack {
                     Spacer()
-                    HStack {
-                        slowMoButton
-                        Spacer()
-                    }
+                    deployControls
                 }
-                .padding(.leading, 18)
+                .padding(.horizontal, 18)
                 .padding(.bottom, 44)
                 .zIndex(4)
             }

@@ -110,6 +110,7 @@ final class ProfileStore {
         switch g {
         case let .coins(n):     p.coins += n
         case let .slowMo(n):    p.slowMoCharges += n
+        case let .speedUp(n):   p.speedUpCharges += n
         case let .headStart(n): p.headStartCharges += n
         case let .coinSurge(n): p.coinSurgeCharges += n
         }
@@ -638,7 +639,7 @@ final class ProfileStore {
     /// the grant watermark, a merge that raises level without a run can never double-pay.
     /// `weeklyMissionDate`/`challengeRewardTier` are deliberately NOT merged: device-local boards
     /// (missionProgress already merges by max; same accepted risk class as the daily board).
-    /// CONSUMABLE COUNTERS (`slowMoCharges`/`headStartCharges`/`coinSurgeCharges`) are also
+    /// CONSUMABLE COUNTERS (`slowMoCharges`/`speedUpCharges`/`headStartCharges`/`coinSurgeCharges`) are also
     /// deliberately device-local (they ride `var merged = local`, last-writer-wins): a `max()`
     /// merge would RESURRECT spent charges on every sync (a cross-device dupe), and a correct
     /// convergent fix needs a per-device earned/spent G-counter — overkill for inventory bought
@@ -677,8 +678,8 @@ final class ProfileStore {
         merged.xpLevelRewarded = max(merged.xpLevelRewarded, remote.xpLevelRewarded)
         merged.seenSkins.formUnion(remote.seenSkins)
         merged.bestDistanceByWorld.merge(remote.bestDistanceByWorld) { mine, theirs in max(mine, theirs) }
-        // slowMoCharges / headStartCharges / coinSurgeCharges are intentionally NOT merged here —
-        // device-local consumable inventory (see the docstring above). They keep `local`'s value.
+        // slowMoCharges / speedUpCharges / headStartCharges / coinSurgeCharges are intentionally NOT
+        // merged here — device-local consumable inventory (see the docstring above). Keep `local`'s value.
         // Selection self-heal LAST — after the ownership union above — so a selection whose
         // unlock arrives in this very merge survives, while a selection nobody owns can't
         // outlive the merge as an EQUIPPED-on-locked contradiction (AUDIT D3-1).

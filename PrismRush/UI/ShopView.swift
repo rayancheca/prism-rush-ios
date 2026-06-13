@@ -555,6 +555,7 @@ struct ShopView: View {
         switch g {
         case let .coins(n):     return "+\(n.formatted()) COINS"
         case let .slowMo(n):    return "+\(n) SLOW-MO"
+        case let .speedUp(n):   return "+\(n) SPEED-UP"
         case let .headStart(n): return "+\(n) HEAD START"
         case let .coinSurge(n): return "+\(n) COIN SURGE"
         }

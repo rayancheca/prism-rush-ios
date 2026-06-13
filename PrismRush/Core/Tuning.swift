@@ -105,6 +105,7 @@ enum Tuning {
     // Overdrive pads: +30% speed (capped) for one second, contained in an obstacle-free runway —
     // worst-case boost travel (trigger ≤ pad+1.1, then 1.0 s × 36) ends well inside the pattern.
     static let boostDuration: Double = 1.0
+    static let speedUpDeployDuration: Double = 3.0   // manual "Speed Up" deploy — a 3 s overdrive burst
     static let boostFactor: Double = 1.3
     static let boostSpeedMax: Double = 36
     static let boostScoreBonus: Int = 60
