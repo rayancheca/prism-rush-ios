@@ -96,15 +96,14 @@ set category **Games → Arcade**, age **4+**, price **Free**.
 ## F. On your Mac — build, test, verify — ⚡ your time only
 
 ```bash
-# 1. Get the code (if the overhaul branch is already merged, just: git checkout main && git pull)
+# 1. Get the code — everything ships from main
 cd ~/Desktop/ClaudeProjects/projects/prism-rush-ios
-git fetch origin
-git checkout claude/prism-rush-ios-review-b6eiw8   # or main after merge
+git checkout main && git pull
 
 # 2. Build (needs Xcode 26+, xcodegen: brew install xcodegen)
 ./Tools/build.sh
 
-# 3. Full test suite — expect 95 green (89 unit + 6 UI)
+# 3. Full test suite — expect 196 green (185 unit + 11 UI)
 xcodebuild test -project PrismRush.xcodeproj -scheme PrismRush \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' CODE_SIGNING_ALLOWED=NO
 ```
