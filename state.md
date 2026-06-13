@@ -57,11 +57,33 @@ family AND cycle divisor to worlds.count (else worlds 0–11 get spurious roman 
   rain/storm, radiant rainbow core); Mac test 178/178, 200-seed bot green.
 
 **Phase 2 COMPLETE** — 12 distinct themed worlds, each its own palette + name + bespoke sky motif.
-Optional later: per-world music (`Synth.beds` 12-entry table); richer per-world SIDE decor (currently
-bespoke worlds have clean/empty sides — their skies carry identity). **Next: Phase 3** (gameplay
-difficulty fixes + scoring clarity: meters-primary HUD, coin-fly juice, live XP, slide→jump
-solvability rule, fair speed ramp), then **Phase 4** (power-ups + manual-trigger + shield HUD +
-power-ups screen + tutorial).
+Optional later: per-world music (`Synth.beds` 12-entry table); richer per-world SIDE decor.
+
+**Phase 3 — scoring + gameplay:**
+- **3a DONE** (commit 9e003cd): meters-primary HUD — big number = absolute distance (matches world
+  labels, no more "0" at a 3,200 m checkpoint); SCORE a separate secondary line; live LV/XP bar at
+  the bottom. `GameSnapshot.traveledDistance` added (pure output field).
+- **3b/3c — gameplay difficulty: NOT shipped (reverted).** The speed-ramp fix (traveled-based) broke
+  a load-bearing contract — gem-arc placement, boost cap, difficulty curve all assume
+  `speed = f(absolute distance)`; ArcCollectionTests + BoostTests caught it; reverted clean. The
+  real slide→jump fairness fix is a PATTERN-SPACING change (e.g. the gauntlet packs a slide-bar +
+  jump-block too tight at max speed) → needs a `DailyChallenge.layoutVersion` 2→3 bump (pre-armed
+  golden exists at 0xB51F_E337_DB06_ED2F) + bot re-verify + golden re-pin. **Owner chose to SKIP
+  gameplay tuning for now** (subjective + protected sim) and move to Phase 4; revisit once playable
+  on-device. NOTE: jump already cancels an active slide (`jump()` sets slideT=0 when grounded), so
+  the mechanic is forgiving — the issue is the reaction window at max speed.
+
+**Phase 4 — power-ups + tutorial:**
+- **4a DONE** (commit b4ae596): active-SHIELD HUD badge (the "how do I know I have a shield?" gap).
+  PR_SHIELD=1 sim QA hook.
+- **4b DONE** (commit a6d1f00): discoverable `PowerUpsView` (every power-up: icon/effect/duration +
+  revive), reached from a clear "Power-Ups" row in Settings (2 taps from the prominent hub gear).
+- **4c/4d — TO DISCUSS with owner before building** (owner explicitly wanted to co-design power-ups
+  + abilities): the manual-trigger saved power-up (deploy slow-mo on demand via a HUD button — build
+  as a NEW consumable, NOT a change to the auto-chrono, or the solvability bot breaks); new power-ups
+  (super sneakers/higher jump, head start, score booster, mystery box); character rarity passives
+  (cosmetic identity + honest higher-tier passive + equippable loadout — the locked decision); inline
+  first-run tutorial enhancement. These touch Core mechanics + economy + balance → design-gated.
 
 ## v1.4.3 — CODE_REVIEW.md §20 implementation (in progress, 2026-06-12)
 Executing the prioritized plan from `CODE_REVIEW.md` (Opus 4.8 strict pass, 8.7/10). Ordered steps;
