@@ -26,6 +26,25 @@ All committed locally and built/tested green at each step (SPM 178/Linux; Mac 18
 - **Pre-push gate:** full suite green (185 unit + 11 XCUITest, 0 failures); v1.6 README section + fresh
   `docs/screenshots/20–25` + refreshed `11_characters.png`; pushed.
 
+### v1.6 polish + live play-session round (2026-06-13, owner awake)
+- Polish: ship-checklist refresh; **bespoke Super Sneakers SFX** (`9041693`); **speed lines from 22 m/s**,
+  denser/longer (`a41a71e`).
+- Owner play-feedback (`7912f80`): **NO per-world music** (one consistent in-run bed — `musicPump` pins
+  world 0; per-world beds kept dormant/reversible; reverted the crisp bed-switch flush); HUD chips moved
+  down off the mute/pause cluster (top pad 38→64); held power-ups read **ACTIVE** not READY; **FLOW**
+  label on the flow pips (the "three blue dots"). Deploy buttons now **appear only when you hold a
+  charge** (`d89759a`).
+- **Gauntlet fairness** (`de8fd4a`): pattern 11 bar→triple-low gap 9→27u (the catalogue's one
+  human-unfair adjacency, per a 5-agent audit) + free-lane coin trail; RNG-neutral; **layoutVersion 5→6**
+  (v6 goldens recomputed + cross-checked vs the pre-armed pin; v7 pre-armed); 200-seed bot + 12k soak green.
+- The Prism color-shift is the intentional prismatic shimmer (owner loves it — keep).
+- **HELD for owner playtest** (be-careful directive): broader obstacle-placement LOGIC rework (less
+  random/repetitive, fair progression by distance+world), coins tracing a safe lane THROUGH every
+  obstacle (largely already done via G1 + per-pattern gems; minor gaps remain e.g. pattern 8), and
+  **boots-higher-jump coin arcs** (some arcs at the boosted-jump height). Power-up taxonomy decision:
+  boots stay an instant grab-and-go pickup; deployables frozen at 3 (slow-mo/speed-up/shield); any new
+  power-up should be grab-and-go (no new buttons).
+
 ---
 
 ## v1.4.2 and earlier — archived below.
