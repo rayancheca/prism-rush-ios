@@ -13,9 +13,10 @@ enum DailyChallenge {
     /// consecutive dates land in unrelated parts of the seed space.
     /// layoutVersion 2 = v1.3 (ballistic gem arc, ring/overdrive patterns, catalogue reorder,
     /// anti-repeat reroll). layoutVersion 3 = v1.5 (Super Sneakers re-bands pattern 7's pickup roll).
-    /// layoutVersion 4 = v1.6 (a guaranteed power-up cadence adds deterministic pickups to the track —
-    /// zero RNG, but the shared track gains entities, so the seed must reshuffle across builds).
-    static func seed(year: Int, month: Int, day: Int, layoutVersion: UInt64 = 4) -> UInt64 {
+    /// layoutVersion 4 = v1.6 (a guaranteed power-up cadence adds deterministic pickups to the track).
+    /// layoutVersion 5 = v1.6 (path-aware coin trail — gap breadcrumbs + a pattern-7 gem line — add
+    /// more deterministic gems; zero RNG, but the shared track gains entities, so the seed reshuffles).
+    static func seed(year: Int, month: Int, day: Int, layoutVersion: UInt64 = 5) -> UInt64 {
         let folded = UInt64(year * 10_000 + month * 100 + day)
         var mix = SplitMix64(seed: folded ^ tag ^ (layoutVersion << 48))
         return mix.next()

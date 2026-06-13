@@ -121,6 +121,7 @@ enum Patterns {
             else if roll < 0.70 { out.append(.magnet(d: b + 13, lane: free)) }
             else if roll < 0.88 { out.append(.doubler(d: b + 13, lane: free)) }
             else { out.append(.superSneakers(d: b + 13, lane: free)) }
+            gemLine(b + 1, free, 6, &out)   // coin trail through the free lane to the pickup (zero RNG)
             return 18
 
         case 8:  // double bar 9 apart
