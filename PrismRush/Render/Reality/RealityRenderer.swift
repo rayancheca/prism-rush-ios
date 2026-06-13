@@ -437,18 +437,20 @@ final class RealityRenderer: RendererPort {
             }
         }
 
-        // Speed lines above ~26 m/s — and for the whole of an overdrive boost, whose +30% kick is
-        // the one moment that must FEEL faster even when the raw speed is still below the gate.
-        if snap.mode == .play, !reduceMotion, lastSpeed > 26 || snap.boostRemaining > 0 {
-            speedLineDebt += min(70, max((lastSpeed - 26) * 6, snap.boostRemaining > 0 ? 32 : 0)) * lastDt
+        // Speed lines above ~22 m/s (owner spec) — and for the whole of an overdrive boost, whose
+        // +30% kick is the one moment that must FEEL faster even when the raw speed is below the gate.
+        // White streaks at the screen edges (x ±4.5, outside the ±3.3 lanes) so they sell speed
+        // without cluttering the central gameplay read (decree 6). Pure render — RM-gated, no RNG.
+        if snap.mode == .play, !reduceMotion, lastSpeed > 22 || snap.boostRemaining > 0 {
+            speedLineDebt += min(90, max((lastSpeed - 22) * 7, snap.boostRemaining > 0 ? 40 : 0)) * lastDt
             let n = Int(speedLineDebt)
             if n > 0 {
                 speedLineDebt -= Float(n)
                 for _ in 0..<n {
-                    particles.burst(x: (Bool.random() ? 4.5 : -4.5) + Float.random(in: -0.5...0.5),
-                                    y: Float.random(in: 2...5), z: -8, color: cWhite,
-                                    count: 1, power: 0.2, spread: 0.1, life: 0.3,
-                                    velZ: lastSpeed * 1.5, stretchZ: 2.8)
+                    particles.burst(x: (Bool.random() ? 4.5 : -4.5) + Float.random(in: -0.8...0.8),
+                                    y: Float.random(in: 1.2...5.2), z: -8, color: cWhite,
+                                    count: 1, power: 0.2, spread: 0.1, life: 0.34,
+                                    velZ: lastSpeed * 1.6, stretchZ: 3.2)
                 }
             }
         }

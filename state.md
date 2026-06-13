@@ -505,7 +505,8 @@ The old soak/ship plan is folded into `docs/SHIP_CHECKLIST.md`. The 500-seed QA 
 
 ## Resolved polish backlog
 - Gems are now octahedrons, magnet a torus (procedural meshes). ✓
-- Wind/speed lines (above speed 22) — deferred minor polish (not yet implemented).
+- Wind/speed lines (above speed 22) — DONE (v1.6): white edge streaks above 22 m/s and for the whole of
+  any overdrive boost (`RealityRenderer` speedLineDebt; RM-gated, pure render, no sim/RNG impact).
 - Floating popups use an approximate lane→screen mapping (not full 3D projection) — acceptable.
 
 ## Decision log
