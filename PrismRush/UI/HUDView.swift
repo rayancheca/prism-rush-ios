@@ -40,6 +40,7 @@ struct HUDView: View {
                 // Starts below the mute/pause cluster anchored in the top-trailing corner.
                 VStack(alignment: .trailing, spacing: 8) {
                     gemMultPill(snap)
+                    shieldBadge(snap)
                     timerRings(snap)
                     flowPips(snap)
                 }
@@ -52,6 +53,7 @@ struct HUDView: View {
         .padding(.horizontal, 16)
         .padding(.top, 14)
         .animation(.spring(duration: 0.25), value: snap.mult)
+        .animation(.spring(duration: 0.25), value: snap.shieldActive)
         .opacity(snap.mode == .play ? 1 : 0)
         .allowsHitTesting(false)   // the run is the UI — pause is the only in-play button
     }
@@ -144,6 +146,31 @@ struct HUDView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(snap.gems) gems\(snap.mult > 1 ? ", times \(snap.mult) multiplier" : "")")
         .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    // MARK: shield indicator — the one power-up with no timer (it's binary: held until a hit)
+
+    /// A persistent SHIELD badge whenever one is held, so the player KNOWS they're protected before
+    /// a crash (the owner's "how do I know I have a shield?" gap — previously the only feedback was
+    /// the SHIELDED popup at the moment it absorbed a hit). No countdown: a shield has no timer, it
+    /// waits until the next obstacle consumes it. A gentle breathing glow reads as "armed".
+    @ViewBuilder private func shieldBadge(_ snap: GameSnapshot) -> some View {
+        if snap.shieldActive {
+            HStack(spacing: 5) {
+                Image(systemName: "shield.lefthalf.filled")
+                    .font(.system(size: 12, weight: .bold))
+                Text("SHIELD")
+                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                    .tracking(1)
+                    .monospacedDigit()
+            }
+            .foregroundStyle(Theme.Role.interactive)
+            .pillBackground()
+            .shadow(color: Theme.Role.interactive.opacity(0.55), radius: 8)
+            .transition(.scale.combined(with: .opacity))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Shield ready — absorbs the next hit")
+        }
     }
 
     // MARK: power-up timer rings (uiux §6.8 — icons in circular depletion strokes, no rainbow)

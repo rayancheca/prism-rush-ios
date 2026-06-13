@@ -191,6 +191,10 @@ final class GameModel {
         if let w = ProcessInfo.processInfo.environment["PR_WORLD"].flatMap(Int.init), w > 0 {
             beginRun(fromWorld: w, seed: 7)   // debug path — bypasses the first-run tutorial gate
         }
+        // Debug: drop a shield just ahead so the HUD shield indicator is verifiable on the sim.
+        if ProcessInfo.processInfo.environment["PR_SHIELD"] == "1" {
+            core.debugSpawn(.shield(d: core.distance + 5, lane: 1))
+        }
         // Debug/UITest: pin a true zero-run profile (first-run gate + FIRST RUN chip flows),
         // regardless of what earlier autoplay/CI cycles banked on this simulator.
         if ProcessInfo.processInfo.environment["PR_FIRSTRUN"] == "1" {
