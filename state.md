@@ -61,6 +61,22 @@ All committed locally and built/tested green at each step (SPM 178/Linux; Mac 18
   tolerance so it feels like "collect everything on your jump", not "miss coins") + any deeper
   curated-sequence design (best felt in real time).
 
+### v1.6 round 5 (2026-06-13, owner play-feedback — world bug, audio, splash)
+- **World regression FIXED:** reverted the longer-track backdrop (−95→−65); it had shoved the runway
+  behind each WorldSky set-piece (Orbital Drift II's planet floated mid-track). All 12 worlds polished
+  again (spot-checked Orbital II, Ashfall, Solar Sands, Tidal Glow, Singularity). README walkthrough
+  re-captured on the corrected build + "longer track" claims removed.
+- **"No music" FIXED:** the audio session was `.ambient` (the mute switch silenced it). Now `.playback`
+  — synthwave + SFX play even on silent; in-app mute/volume stay in control.
+- **Splash overhaul:** wordmark drop-in + character flip-spin + shard burst in its hue, then settles to
+  the idle bob + TAP TO START. RM = clean fade-in. Music already starts at launch (calm bed).
+- **First-run tutorial CONFIRMED working** (just-in-time "SWIPE UP TO JUMP / DOWN TO SLIDE / TO CHANGE
+  LANE" banners, each control taught once on `totalRuns == 0`). Kept non-pausing (smoother than a hard
+  pause); a slow-mo/pause teach moment is an easy follow-up if the owner wants it stronger.
+- Owner Q (how to see a fresh game): his profile (UserDefaults + iCloud KVS) persists across builds, so
+  he keeps progress + never sees first-run. To get a fresh start: delete the app AND turn off iCloud
+  sync for it (Settings → Apple ID → iCloud) before reinstalling, else KVS restores the save.
+
 ### v1.6 round 4 (2026-06-13, owner play-feedback — camera/track/buttons + responsive)
 - **App Store guide** delivered (`docs/APP_STORE_SETUP.md`); owner will do it last.
 - **Placement safe-half** (`50be115`): anti-repeat-2 + coins through pattern 8 (layoutVersion 6→7).

@@ -79,7 +79,11 @@ final class SynthEngine {
         guard !started, format != nil else { return }
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+            // `.playback` (not `.ambient`): the synthwave + SFX are core to the game, so they play even
+            // when the ringer/mute switch is off — the owner's "there's no music" was the silent switch
+            // killing an `.ambient` session. The in-app mute toggle + volume sliders stay in control,
+            // and interruption/route-change recovery is wired below.
+            try session.setCategory(.playback, mode: .default)
             try session.setActive(true)
             engine.mainMixerNode.outputVolume = masterTarget   // apply initial mute without a ramp
             engine.prepare()
