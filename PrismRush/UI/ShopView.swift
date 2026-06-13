@@ -16,6 +16,7 @@ struct ShopView: View {
     @State private var successPulse = 0    // drives the purchase chime + success haptic
     @State private var toast: String?
     @State private var toastTask: Task<Void, Never>?
+    @State private var mysteryReward: ConsumableGrant?   // drives the Mystery Box reveal overlay
 
     /// Featured rotation pool (hero priority 3): premium + coin skins by id. Double Coins left
     /// the pool — it owns hero priority 1 outright until purchased.
@@ -31,12 +32,16 @@ struct ShopView: View {
                 if showsStarterCard { starterOfferCard }
                 coinsSection
                 if showsPerksSection { perksSection }
+                consumablesSection
                 charactersSection
                 footer
             }
         }
         .overlay(alignment: .bottom) {
             if let toast { toastView(toast) }
+        }
+        .overlay {
+            if let reward = mysteryReward { mysteryRevealCard(reward) }
         }
         .onAppear { iap.refreshIfUnavailable() }   // the one sheet-open re-check (no retry spam)
         .sensoryFeedback(trigger: successPulse) { _, _ in
@@ -443,6 +448,138 @@ struct ShopView: View {
                                 : "Double Coins. Earn two times coins, forever. Buy for \(iap.displayPrice(Self.doublerID)).")
             .accessibilityAddTraits(owned ? [] : .isButton)
             .accessibilityAction { if !owned, busy == nil { buy(Self.doublerID) } }
+        }
+    }
+
+    // MARK: power-up packs + Mystery Box (coin-spend — works in every store state)
+
+    /// Coin-spend power-up packs and the Mystery Box gacha. These never touch StoreKit — they spend
+    /// EARNED coins via `ProfileStore`, so they're shoppable even pre-launch / offline (decree 4).
+    private var consumablesSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            kicker("POWER-UP PACKS")
+            mysteryBoxCard
+            ForEach(ShopConsumables.packs) { item in packRow(item) }
+        }
+    }
+
+    private var mysteryBoxCard: some View {
+        let cost = ShopConsumables.mysteryBoxCost
+        let afford = ProfileStore.shared.profile.coins >= cost
+        return Button { openMystery() } label: {
+            HStack(spacing: Theme.Space.m) {
+                Image(systemName: "gift.fill")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(Theme.Role.reward)
+                    .frame(width: 48)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Mystery Box").typeScale(.heading).foregroundStyle(Theme.Role.textPrimary)
+                    Text("Coins, slow-mo, or a loadout boost — 1,200-coin jackpot!")
+                        .typeScale(.body).foregroundStyle(Theme.Role.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                coinPricePill(cost)
+            }
+            .padding(Theme.Space.m)
+            .neonCard()
+            .opacity(afford ? 1 : 0.55)
+        }
+        .buttonStyle(.neon)
+        .disabled(!afford)   // unaffordable → disabled + dimmed (matches the reviveForCoins affordance)
+        .accessibilityIdentifier("mysteryBoxButton")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Mystery Box. Win coins, slow-mo, or a loadout boost — up to a 1,200 coin jackpot. \(cost) coins.\(afford ? "" : " Not enough coins.")")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private func packRow(_ item: CoinSpendItem) -> some View {
+        let tint = Theme.color(item.hex)
+        let afford = ProfileStore.shared.profile.coins >= item.cost
+        return Button { spendOnPack(item) } label: {
+            HStack(spacing: Theme.Space.m) {
+                Image(systemName: item.icon)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 48)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.title).typeScale(.heading).foregroundStyle(Theme.Role.textPrimary)
+                    Text(item.blurb).typeScale(.body).foregroundStyle(Theme.Role.textSecondary)
+                }
+                Spacer()
+                coinPricePill(item.cost)
+            }
+            .padding(Theme.Space.m)
+            .neonCard()
+            .opacity(afford ? 1 : 0.55)
+        }
+        .buttonStyle(.neon)
+        .disabled(!afford)   // unaffordable → disabled + dimmed (matches the reviveForCoins affordance)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(item.title). \(item.blurb). \(item.cost) coins.\(afford ? "" : " Not enough coins.")")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// Full-screen reveal of the Mystery Box reward (decree 5: the player sees exactly what landed).
+    private func mysteryRevealCard(_ reward: ConsumableGrant) -> some View {
+        ZStack {
+            Color.black.opacity(0.6).ignoresSafeArea()
+            VStack(spacing: Theme.Space.s) {
+                Image(systemName: "gift.fill")
+                    .font(.system(size: 44, weight: .bold))
+                    .foregroundStyle(Theme.Role.reward)
+                Text("MYSTERY BOX").typeScale(.caption).tracking(2)
+                    .foregroundStyle(Theme.Role.textSecondary)
+                Text(grantText(reward))
+                    .font(.system(size: 26, weight: .black, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.Role.textPrimary)
+                    .shadow(color: Theme.Role.reward.opacity(0.6), radius: 12)
+                Text("TAP TO CONTINUE").typeScale(.micro)
+                    .foregroundStyle(Theme.Role.textSecondary).padding(.top, Theme.Space.s)
+            }
+            .padding(Theme.Space.l)
+            .neonCard(radius: Theme.Radius.l, raised: true)
+            .padding(.horizontal, Theme.Space.l)
+            .transition(.scale.combined(with: .opacity))
+        }
+        // Tap ANYWHERE (card or backdrop) dismisses — so "TAP TO CONTINUE" is honest (decree 5).
+        .contentShape(Rectangle())
+        .onTapGesture { withAnimation(.spring(duration: 0.3)) { mysteryReward = nil } }
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel("Mystery Box reward: \(grantText(reward)). Tap to continue.")
+    }
+
+    private func grantText(_ g: ConsumableGrant) -> String {
+        switch g {
+        case let .coins(n):     return "+\(n.formatted()) COINS"
+        case let .slowMo(n):    return "+\(n) SLOW-MO"
+        case let .headStart(n): return "+\(n) HEAD START"
+        case let .coinSurge(n): return "+\(n) COIN SURGE"
+        }
+    }
+
+    private func spendOnPack(_ item: CoinSpendItem) {
+        if ProfileStore.shared.buyConsumablePack(item) {
+            successPulse += 1
+            model.synth.play(.purchaseChime)
+        } else {
+            showToast("Not enough coins — keep running to earn more.")
+            model.synth.play(.uiTick)
+        }
+    }
+
+    private func openMystery() {
+        guard ProfileStore.shared.profile.coins >= ShopConsumables.mysteryBoxCost else {
+            showToast("Not enough coins — keep running to earn more.")
+            model.synth.play(.uiTick)
+            return
+        }
+        if let reward = ProfileStore.shared.openMysteryBox() {
+            withAnimation(.spring(duration: 0.35)) { mysteryReward = reward }
+            successPulse += 1
+            model.synth.play(.newBestFanfare)
         }
     }
 

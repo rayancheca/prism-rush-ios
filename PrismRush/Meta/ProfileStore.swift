@@ -101,6 +101,46 @@ final class ProfileStore {
         return true
     }
 
+    // MARK: coin-spend consumables (v1.5 — power-up packs + Mystery Box gacha)
+
+    /// Apply a consumable grant in-place. Won/bought coins do NOT count as `totalCoinsEarned`
+    /// (bought, not earned — same rule as `grantCoinPack`; keeps the gacha out of coin-earned
+    /// missions/achievements and exploit-free).
+    private static func applyGrant(_ g: ConsumableGrant, to p: inout Profile) {
+        switch g {
+        case let .coins(n):     p.coins += n
+        case let .slowMo(n):    p.slowMoCharges += n
+        case let .headStart(n): p.headStartCharges += n
+        case let .coinSurge(n): p.coinSurgeCharges += n
+        }
+    }
+
+    /// Buy a coin-spend power-up pack: atomically spend the coins, then grant. False if too poor.
+    @discardableResult
+    func buyConsumablePack(_ item: CoinSpendItem) -> Bool {
+        guard profile.coins >= item.cost else { return false }
+        mutate {
+            $0.coins -= item.cost
+            Self.applyGrant(item.grant, to: &$0)
+        }
+        return true
+    }
+
+    /// Open the Mystery Box: spend the fixed cost, roll a reward, grant it, return what was won
+    /// (nil if too poor). `roll` is injectable for tests; production uses a META RNG (`Double.random`,
+    /// NEVER the Core seeded sim — iron rule 2). Spend + grant land in one atomic `mutate`.
+    @discardableResult
+    func openMysteryBox(roll: Double? = nil) -> ConsumableGrant? {
+        guard profile.coins >= ShopConsumables.mysteryBoxCost else { return nil }
+        let r = min(0.999_999, max(0, roll ?? Double.random(in: 0..<1)))
+        let reward = ShopConsumables.mysteryReward(roll: r)
+        mutate {
+            $0.coins -= ShopConsumables.mysteryBoxCost
+            Self.applyGrant(reward, to: &$0)
+        }
+        return reward
+    }
+
     // MARK: IAP coin grants (v1.4.1 — first-purchase funnel)
 
     /// Pure payout rule for a VERIFIED coin-pack purchase: the first coin pack ever bought pays a

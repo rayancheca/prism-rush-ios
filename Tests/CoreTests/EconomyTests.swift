@@ -453,4 +453,54 @@ final class EconomyTests: XCTestCase {
         XCTAssertEqual(back.coinSurgeCharges, 0)
         XCTAssertEqual(back.slowMoCharges, 5)
     }
+
+    // MARK: coin-spend consumables (v1.5 — Mystery Box + packs)
+
+    func testMysteryBoxOddsBoundaries() async {
+        // Pin every band edge of the honest weighted table (decree 5).
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.0), .coins(200))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.39), .coins(200))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.40), .coins(400))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.61), .coins(400))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.62), .slowMo(2))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.78), .headStart(1))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.90), .coinSurge(1))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.98), .coins(1200))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.9999), .coins(1200))
+    }
+
+    func testOpenMysteryBoxSpendsGrantsAndGatesOnCoins() async {
+        var p = Profile(); p.coins = ShopConsumables.mysteryBoxCost   // exactly one box
+        let store = ProfileStore(testing: p)
+
+        // Jackpot roll: spend 300, win 1,200 → coins 1,200; winnings are NOT counted as earned.
+        XCTAssertEqual(store.openMysteryBox(roll: 0.99), .coins(1200))
+        XCTAssertEqual(store.profile.coins, 1200)
+        XCTAssertEqual(store.profile.totalCoinsEarned, 0, "gacha winnings are bought, not earned")
+
+        // Consumable roll: spend + grant the charge.
+        XCTAssertEqual(store.openMysteryBox(roll: 0.80), .headStart(1))
+        XCTAssertEqual(store.profile.headStartCharges, Profile().headStartCharges + 1)
+        XCTAssertEqual(store.profile.coins, 900)
+
+        // Too poor: nil, no spend, no grant.
+        let broke = ProfileStore(testing: Profile())   // 0 coins
+        XCTAssertNil(broke.openMysteryBox(roll: 0.0))
+        XCTAssertEqual(broke.profile.coins, 0)
+        XCTAssertEqual(broke.profile.headStartCharges, Profile().headStartCharges)
+    }
+
+    func testBuyConsumablePackSpendsAndGrants() async {
+        var p = Profile(); p.coins = 1000
+        let store = ProfileStore(testing: p)
+        let slowMoPack = ShopConsumables.packs.first { $0.id == "slowMoPack" }!
+        XCTAssertTrue(store.buyConsumablePack(slowMoPack))
+        XCTAssertEqual(store.profile.coins, 1000 - slowMoPack.cost)
+        XCTAssertEqual(store.profile.slowMoCharges, Profile().slowMoCharges + 3)
+        XCTAssertEqual(store.profile.totalCoinsEarned, 0, "spending coins on a pack is not earning")
+
+        let broke = ProfileStore(testing: Profile())
+        XCTAssertFalse(broke.buyConsumablePack(slowMoPack))
+        XCTAssertEqual(broke.profile.slowMoCharges, Profile().slowMoCharges)
+    }
 }

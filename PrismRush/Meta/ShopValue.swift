@@ -53,6 +53,60 @@ enum ShopValue {
     }
 }
 
+/// What a coin-spend pack grants, or a Mystery Box rolls. Pure value (no StoreKit) so the catalog,
+/// the gacha odds, and the grant math are all unit-testable on Linux.
+enum ConsumableGrant: Equatable, Sendable {
+    case coins(Int)
+    case slowMo(Int)
+    case headStart(Int)
+    case coinSurge(Int)
+}
+
+/// A coin-spend shop item — bought with EARNED coins (`ProfileStore.spendCoins`), never StoreKit.
+/// Kept out of `IAPCatalog` (which assumes real-money kinds): these are a separate coin economy.
+struct CoinSpendItem: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let blurb: String
+    let icon: String      // SF Symbol
+    let hex: UInt32       // tint
+    let cost: Int         // coins
+    let grant: ConsumableGrant
+}
+
+/// The coin-spend catalogue: power-up packs (top up the pre-run loadout + slow-mo) and the Mystery
+/// Box gacha. Pure + Foundation-only; the gacha roll uses a META RNG in `ProfileStore`, never the
+/// Core seeded sim (iron rule 2). Odds are exposed here so the shop can be honest (decree 5) and
+/// tests can pin them.
+enum ShopConsumables {
+    static let mysteryBoxID = "mysteryBox"
+    static let mysteryBoxCost = 300
+
+    /// Coin-spend power-up packs (the slow-mo refill the backlog asked for + loadout top-ups).
+    static let packs: [CoinSpendItem] = [
+        CoinSpendItem(id: "slowMoPack", title: "Slow-Mo Pack", blurb: "+3 slow-mo charges",
+                      icon: "hourglass", hex: 0x9BF0FF, cost: 250, grant: .slowMo(3)),
+        CoinSpendItem(id: "headStartPack", title: "Head Start Pack", blurb: "+3 head starts",
+                      icon: "bolt.horizontal.fill", hex: 0xFF9F1C, cost: 300, grant: .headStart(3)),
+        CoinSpendItem(id: "coinSurgePack", title: "Coin Surge Pack", blurb: "+3 coin surges",
+                      icon: "dollarsign.circle.fill", hex: 0xFFD23D, cost: 450, grant: .coinSurge(3)),
+    ]
+
+    /// Mystery Box reward for a roll in [0, 1). Weighted, honest, with a jackpot — the player can
+    /// lose a little on coins-only common rolls but the consumable/jackpot upside keeps it fair
+    /// (decree 5: no dark patterns). Pure f(roll), so the odds pin in tests.
+    static func mysteryReward(roll: Double) -> ConsumableGrant {
+        switch roll {
+        case ..<0.40: return .coins(200)    // 40% — common (a small loss vs the 300 cost)
+        case ..<0.62: return .coins(400)    // 22% — coin profit
+        case ..<0.78: return .slowMo(2)     // 16%
+        case ..<0.90: return .headStart(1)  // 12%
+        case ..<0.98: return .coinSurge(1)  //  8%
+        default:      return .coins(1200)   //  2% — jackpot
+        }
+    }
+}
+
 /// Honest store states for the pre-launch window (the former `IAPManager.Availability`).
 enum StoreState: Equatable, Sendable {
     case loading        // first load in-flight — shimmer placeholders, no error
