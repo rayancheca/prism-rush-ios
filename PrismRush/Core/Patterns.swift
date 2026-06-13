@@ -149,14 +149,21 @@ enum Patterns {
             gemLine(b + 28, 1, 6, &out)                     // center finisher b+28 … b+36.5
             return 48
 
-        case 11: // gauntlet: twin talls → bar → triple low, arc + line rewards
+        case 11: // gauntlet: twin talls → bar → triple low. v1.6 fairness (owner): the bar(slide)→
+                 // triple-low(jump) gap was 9u — only ~0.16s of blind reaction at the speed cap, the
+                 // catalogue's one human-unfair adjacency. Widened to 27u (≥0.8s at the cap) by pushing
+                 // the triple low + its arc telegraph later; the bar stays put and the arc's gem 0 stays
+                 // 4u ahead of the low (the cued jump telegraph). A free-lane coin trail marks the safe
+                 // lane through the talls (coins are the path). All ZERO-RNG (only the lane draw) — the
+                 // obstacle RNG is byte-identical; the moved/added entities ride DailyChallenge v5→6.
             let free = rng.int(0, 2); let o = otherLanes(free)
             out.append(.tall(d: b + 6, lane: o[0])); out.append(.tall(d: b + 6, lane: o[1]))
             out.append(.bar(d: b + 15))
-            out.append(.low(d: b + 24, lane: 0)); out.append(.low(d: b + 24, lane: 1)); out.append(.low(d: b + 24, lane: 2))
-            let span = gemArc(b + 20, free, &out)           // arc jump clears the triple low
-            gemLine(b + 20 + span + 2, free, 4, &out)
-            return 24 + span + 12
+            out.append(.low(d: b + 42, lane: 0)); out.append(.low(d: b + 42, lane: 1)); out.append(.low(d: b + 42, lane: 2))
+            gemLine(b + 1, free, 7, &out)                   // coin trail: stay in the free lane past the talls
+            let span = gemArc(b + 38, free, &out)           // arc jump clears the triple low (telegraph 4u ahead)
+            gemLine(b + 38 + span + 2, free, 4, &out)
+            return 42 + span + 12
 
         case 12: // split bar over two lanes — steer to the open gap OR slide under. Gem line marks
                  // the gap; a chrono slow-mo sometimes waits just beyond it as the reward.
