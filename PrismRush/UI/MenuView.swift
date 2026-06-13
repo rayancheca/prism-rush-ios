@@ -168,20 +168,26 @@ struct MenuView<Loadout: View>: View {
         .accessibilityHint("Opens characters.")
     }
 
-    /// One world-progress chip replaces the three dead world chips: the numeral is the single
-    /// sanctioned spot of world color on the menu (uiux §1.3). Tap → Worlds.
+    /// A progress + navigation chip → Worlds. Framed as "FURTHEST" (with a leading map glyph and a
+    /// trailing chevron) so it reads as "your deepest world, tap to open Worlds" — NOT as the current
+    /// world, which would contradict the home's Pulse City backdrop (the world PLAY launches into).
+    /// The numeral is the single sanctioned spot of world color on the menu (uiux §1.3).
     private var worldProgressChip: some View {
         let worldIdx = furthestStartableWorld   // deepest startable world (reach OR purchase), 0-based
         let palette = Theme.evolvedPalette(ordinal: worldIdx)
         let checkpointM = Int(Double(worldIdx) * Tuning.worldLength)
         return Button(action: onLevels) {
             HStack(spacing: 5) {
-                Text("WORLD").foregroundStyle(Theme.Role.textSecondary)
+                Image(systemName: "map.fill").font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Theme.Role.textTertiary)
+                Text("FURTHEST").foregroundStyle(Theme.Role.textSecondary)
                 Text(String(format: "%02d", worldIdx + 1))
                     .foregroundStyle(Theme.color(palette.accent2))
                     .fontWeight(.heavy)
                 Text("· \(palette.name.uppercased())\(checkpointM > 0 ? " · \(checkpointM.formatted())M" : "")")
                     .foregroundStyle(Theme.Role.textSecondary)
+                Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(Theme.Role.textTertiary)
             }
             .typeScale(.micro)
             .monospacedDigit()
@@ -195,7 +201,7 @@ struct MenuView<Loadout: View>: View {
         .buttonStyle(.neon)
         .accessibilityIdentifier("worldProgressChip")
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("World \(worldIdx + 1), \(palette.name), checkpoint at \(checkpointM) meters.")
+        .accessibilityLabel("Furthest world \(worldIdx + 1), \(palette.name), checkpoint at \(checkpointM) meters.")
         .accessibilityHint("Opens world select.")
     }
 

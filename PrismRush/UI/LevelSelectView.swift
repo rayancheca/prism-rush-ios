@@ -13,6 +13,9 @@ struct LevelSelectView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Locked card tapped → the unlock panel for this world index (nil = no panel open).
     @State private var unlockTarget: Int?
+    /// Startable card/header tapped → a PLAY confirm card for this world (owner: no straight-to-
+    /// gameplay; expand into a card first). nil = no confirm open.
+    @State private var playTarget: Int?
 
     var body: some View {
         // Deepest startable world (reach OR purchase) — uncapped (v1.6): the ladder extends past the
@@ -41,7 +44,7 @@ struct LevelSelectView: View {
                                       isFurthest: world == furthest,
                                       isPurchase: world > ProfileStore.shared.profile.maxWorldReached,
                                       best: ProfileStore.shared.profile.bestDistanceByWorld[world] ?? 0) {
-                                model.startRun(fromWorld: world)
+                                playTarget = world   // confirm before launching (owner)
                             }
                         } else {
                             LockedWorldCard(world: world) { unlockTarget = world }
@@ -57,7 +60,19 @@ struct LevelSelectView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
         }
+        .overlay {
+            if let world = playTarget {
+                PlayConfirmPanel(model: model, world: world) { playTarget = nil }
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+        }
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: unlockTarget)
+        .animation(reduceMotion ? nil : .spring(duration: 0.3), value: playTarget)
+        .onAppear {
+            if let w = ProcessInfo.processInfo.environment["PR_PLAYCONFIRM"].flatMap(Int.init) {
+                playTarget = w   // screenshot hook: auto-open the play-confirm card
+            }
+        }
     }
 
     /// Full-width 200 pt header: the deepest startable world's hero vignette + PLAY FROM HERE.
@@ -66,7 +81,7 @@ struct LevelSelectView: View {
         let palette = Theme.evolvedPalette(ordinal: furthest)
         let best = ProfileStore.shared.profile.bestDistanceByWorld[furthest] ?? 0
         return Button {
-            model.startRun(fromWorld: furthest)
+            playTarget = furthest   // confirm before launching (owner)
         } label: {
             ZStack(alignment: .bottomLeading) {
                 WorldPreviewCanvas(palette: palette, worldIndex: furthest, size: .hero)
@@ -313,6 +328,86 @@ private struct BeyondCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("beyondCard")
         .accessibilityLabel("And beyond: after world twelve the run never ends — worlds cycle forever.")
+    }
+}
+
+/// Play-confirm card (owner: tapping a world must not launch straight into gameplay). A focused
+/// modal — bigger hero vignette, the world's name + checkpoint + best, then PLAY (commit →
+/// `startRun`) and BACK. Mirrors `UnlockPanel`'s chrome. PLAY uses a solid interactive fill, NOT
+/// the action gradient (that budget belongs to the menu, uiux §3.1).
+private struct PlayConfirmPanel: View {
+    let model: GameModel
+    let world: Int
+    let onClose: () -> Void
+
+    private var palette: WorldPalette { Theme.evolvedPalette(ordinal: world) }
+    private var checkpointM: Int { Int(Double(world) * Tuning.worldLength) }
+    private var best: Double { ProfileStore.shared.profile.bestDistanceByWorld[world] ?? 0 }
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.6)
+                .ignoresSafeArea()
+                .onTapGesture { onClose() }
+                .accessibilityHidden(true)
+
+            VStack(spacing: Theme.Space.m) {
+                WorldPreviewCanvas(palette: palette, worldIndex: world, size: .hero)
+                    .frame(height: 170)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.m))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m).strokeBorder(Theme.Role.hairline))
+                    .accessibilityHidden(true)
+
+                VStack(spacing: Theme.Space.xs) {
+                    Text(world == 0 ? "FROM THE START" : String(format: "WORLD %02d", world + 1))
+                        .typeScale(.micro)
+                        .foregroundStyle(Theme.Role.textTertiary)
+                    Text(palette.name)
+                        .typeScale(.title)
+                        .foregroundStyle(Theme.Role.textPrimary)
+                    Text(world == 0
+                         ? "Run from the very beginning"
+                         : "Start \(checkpointM.formatted())m in" + (best > 0 ? " · best \(Int(best))m" : ""))
+                        .typeScale(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.Role.textSecondary)
+                }
+
+                // PLAY — the commit. Solid interactive fill (no action gradient in the Worlds tab).
+                Button { model.startRun(fromWorld: world) } label: {
+                    Text("PLAY")
+                        .typeScale(.heading)
+                        .fontWeight(.heavy)
+                        .tracking(2)
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Theme.Role.interactive, in: Capsule())
+                        .shadow(color: Theme.Role.interactive.opacity(0.45), radius: 12)
+                }
+                .buttonStyle(.neon)
+                .accessibilityIdentifier("playConfirmButton")
+                .accessibilityLabel("Play \(palette.name)"
+                                    + (world == 0 ? " from the start" : ", from \(checkpointM) meters in"))
+
+                Button { onClose() } label: {
+                    Text("BACK")
+                        .typeScale(.caption)
+                        .foregroundStyle(Theme.Role.textSecondary)
+                        .padding(.horizontal, Theme.Space.l).padding(.vertical, 10)
+                        .overlay(Capsule().strokeBorder(Theme.Role.hairline))
+                }
+                .buttonStyle(.neon)
+                .accessibilityIdentifier("playConfirmBack")
+                .accessibilityLabel("Back")
+            }
+            .padding(Theme.Space.m)
+            .frame(maxWidth: 340)
+            .background(Theme.Role.bg, in: RoundedRectangle(cornerRadius: Theme.Radius.l))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.l).strokeBorder(Theme.Role.hairline))
+            .padding(Theme.Space.m)
+            .accessibilityAddTraits(.isModal)
+        }
     }
 }
 
