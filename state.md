@@ -165,9 +165,11 @@ Remaining backlog (owner said "keep working on what's next, push at the end"):
 5. **STILL DEFERRED:** gameplay difficulty / slide→jump fairness pass (protected sim — needs a
    layoutVersion 3→4 bump (pre-arm `0x2E28_5014_7596_8B7D`) + bot re-verify + golden re-pin; owner:
    best after on-device play).
-**NEXT: the pre-push gate** — the power-up backlog (5a–5d) is COMPLETE. Capture the live
-`docs/screenshots/` golden-path set (incl. the new Super Sneakers / loadout / shop screens), refresh
-the README counts, then `git push` (everything is committed on `main`, NOT yet pushed).
+**✅ v1.5 POWER-UP BACKLOG COMPLETE + PUSHED (2026-06-12).** Phases 5a–5d shipped; pre-push gate done
+(live `docs/screenshots/v15_*.png` golden-path set captured + README v1.5 section added); `./Tools/ci.sh`
+CI GREEN (generate ▸ build ▸ test); **pushed** `4b6d9ab..919fb37 main -> main` — this published ALL of
+v1.4.3 + v1.5 (28 commits; origin had been at v1.4.2). Nothing outstanding from the backlog.
+Remaining work is owner-deferred / human-only:
 - Deferred polish: dedicated Super Sneakers SFX (reuses `.boostStart`); per-world music bed-switch
   flush at world boundaries (currently lags ~0.45 s); Mystery Box exact-odds disclosure UI.
 Invariants to keep: iron rules 2/3/4 (no run-RNG/spawn change without a layoutVersion bump + bot
@@ -180,12 +182,15 @@ PR_TUTORIAL hooks). Never screenshot the dev sim while `xcodebuild test` runs on
   per-world themed music; the gameplay difficulty / slide→jump pattern-fairness pass (needs a
   layoutVersion 2→3 bump + bot re-verify + golden re-pin — subjective, best after on-device play).
 
-## v1.5 session status (2026-06-12)
-All work committed to `main`, **NOT pushed** (owner holding the push). Commits: 62352d4, 66f9f24,
-50d767b (Phase 1 + follow-ups) · 1c76022, 9d699bf, 43d80e0 (Phase 2 — 12 worlds) · 9e003cd (3a HUD)
-· b4ae596, a6d1f00, ba226f4 (4a/4b/4c) · 8958e41 (docs). Mac `xcodebuild test` 178/178, SPM 160/160
-incl. the 200-seed bot. No Core sim-logic / spawn-RNG change shipped; `DailyChallenge.layoutVersion`
-unchanged. Pre-push gate (live screenshots in `docs/screenshots/`) still TODO before any GitHub push.
+## v1.5 session status (2026-06-12) — COMPLETE + PUSHED
+v1.4.3 + v1.5 are now **public** (`git push` `4b6d9ab..919fb37`, 28 commits). v1.5 phases:
+1 (splash/music/hub) · 2 (12 distinct worlds) · 3a (meters HUD) · 4a–4d (shield badge / Power-Ups
+screen / tutorial hints / manual slow-mo) · **5a–5d (power-up backlog: Super Sneakers · Head Start +
+Coin Surge · Shop Mystery Box + packs · per-world music)**. Final gate: `./Tools/ci.sh` CI GREEN —
+Mac `xcodebuild test` **178 unit + 11 XCUITest**, SPM **171** incl. the 200-seed solvability bot.
+**One Core spawn-stream change shipped this session** (Super Sneakers re-banded pattern 7) →
+`DailyChallenge.layoutVersion` **2 → 3** (goldens re-pinned; next pre-arm = `0x2E28_5014_7596_8B7D`).
+v1.5 commits: 5a `41fed86` · 5b `7d5ac66` · 5c `49dbd1b` · 5d `c8e7a4c` · docs `919fb37`.
 
 ## v1.4.3 — CODE_REVIEW.md §20 implementation (in progress, 2026-06-12)
 Executing the prioritized plan from `CODE_REVIEW.md` (Opus 4.8 strict pass, 8.7/10). Ordered steps;
