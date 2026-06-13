@@ -220,6 +220,57 @@ enum ProceduralMesh {
         return build(p, idx, fallback: width / 2)
     }
 
+    /// Free-hanging tapering strip (Tidal Glow jellyfish tentacles): a two-rail ribbon running down
+    /// −Y, the sway baked in and growing toward the tip, the width tapering to a near-point. Rotate
+    /// the entity to fan tentacles radially. Unlike `ridge` it does NOT fill to a baseline.
+    static func tentacleStrip(length: Float, width: Float, amplitude: Float, waves: Float = 1.6,
+                              phase: Float = 0, segments n: Int = 14) -> MeshResource {
+        var p: [SIMD3<Float>] = []
+        var idx: [UInt32] = []
+        p.reserveCapacity((n + 1) * 2)
+        for i in 0...n {
+            let u = Float(i) / Float(n)
+            let y = -length * u
+            let cx = amplitude * sin(u * waves * 2 * .pi + phase) * u   // sway grows toward the tip
+            let hw = width * (1 - u) * 0.5 + 0.004                      // taper to a near-point
+            p.append([cx - hw, y, 0])
+            p.append([cx + hw, y, 0])
+        }
+        for i in 0..<n {
+            let a = UInt32(i * 2)
+            idx.append(contentsOf: [a, a + 2, a + 3, a, a + 3, a + 1])
+        }
+        return build(p, idx, fallback: length)
+    }
+
+    /// Receding grid card (Datastream): `cols`+`rows` thin quads in ONE flat XY mesh. Perspective
+    /// is BAKED — rows pack toward the top edge (u² spacing) and columns fan toward the centre — so
+    /// the static card reads as a grid converging to a vanishing point. One draw call.
+    static func gridCard(width: Float, height: Float, cols: Int, rows: Int,
+                         lineThickness t: Float = 0.06) -> MeshResource {
+        var p: [SIMD3<Float>] = []
+        var idx: [UInt32] = []
+        func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
+            let base = UInt32(p.count)
+            p.append(contentsOf: [a, b, c, d])
+            idx.append(contentsOf: [base, base + 1, base + 2, base, base + 2, base + 3])
+        }
+        let hw = width / 2, hh = height / 2
+        for i in 0...rows {                       // horizontal rungs, dense toward the top
+            let u = Float(i) / Float(rows)
+            let yy = -hh + height * (u * u)
+            let rw = hw * (0.22 + 0.78 * (1 - u))  // narrower near the vanishing top
+            quad([-rw, yy - t / 2, 0], [rw, yy - t / 2, 0], [rw, yy + t / 2, 0], [-rw, yy + t / 2, 0])
+        }
+        for j in 0...cols {                       // verticals fanning toward the top centre
+            let v = Float(j) / Float(cols)
+            let xBot = -hw + width * v
+            let xTop = xBot * 0.22
+            quad([xBot - t / 2, -hh, 0], [xBot + t / 2, -hh, 0], [xTop + t / 2, hh, 0], [xTop - t / 2, hh, 0])
+        }
+        return build(p, idx, fallback: max(hw, hh))
+    }
+
     private static func build(_ positions: [SIMD3<Float>], _ indices: [UInt32], fallback: Float) -> MeshResource {
         var d = MeshDescriptor(name: "procedural")
         d.positions = MeshBuffers.Positions(positions)

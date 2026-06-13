@@ -45,11 +45,23 @@ family AND cycle divisor to worlds.count (else worlds 0–11 get spurious roman 
   clears Orbital's sides (sparse space); `WorldPreviewCanvas.drawOrbital` so the card matches
   (decree 2). Verified on-sim: astronaut + planet visible in-game (PR_WORLD=3) AND on the card.
 
-**Phase 2 next (one bespoke world per increment, blueprint §4 order):** Borealis (recolored-aurora,
-cheapest) → Eventide (torus stack) → Ashfall → Bloomfall → Tidal (lands `tentacleStrip`) →
-Datastream (lands `gridCard`) → Tempest (flash bolts) → Singularity LAST (deep-violet finale).
-Optional later: per-world music (`Synth.beds` 12-entry table). Then Phase 3 (gameplay/scoring),
-Phase 4 (power-ups/tutorial).
+- **2c DONE — all 8 remaining bespoke worlds.** Each is a self-contained `BespokeSky`-conforming
+  object in its own file (Tidal/Ashfall/Borealis/Datastream/Bloomfall/Eventide/Tempest/Singularity
+  Sky.swift), authored in parallel from the OrbitalSky template + a build/QA gate (Swift 6
+  @MainActor-class, pool caps, local-seeded RNG, RM-gated, procedural+UnlitMaterial only).
+  `WorldSky` now drives all 9 bespoke families through one `[any BespokeSky]` array (proto in
+  `BespokeSky.swift`); `skyFamily()` is the folded ordinal; `WorldDecor.style` clears sides for all
+  bespoke worlds. Two new `ProceduralMesh` factories: `tentacleStrip` (jellyfish), `gridCard`
+  (Tron). 8 matching `WorldPreviewCanvas.draw*` cards (decree 2). Verified on-sim: all 8 render
+  distinctly (jellyfish, volcano+lava, aurora, Tron grid, blossoms+moon, black-hole accretion,
+  rain/storm, radiant rainbow core); Mac test 178/178, 200-seed bot green.
+
+**Phase 2 COMPLETE** — 12 distinct themed worlds, each its own palette + name + bespoke sky motif.
+Optional later: per-world music (`Synth.beds` 12-entry table); richer per-world SIDE decor (currently
+bespoke worlds have clean/empty sides — their skies carry identity). **Next: Phase 3** (gameplay
+difficulty fixes + scoring clarity: meters-primary HUD, coin-fly juice, live XP, slide→jump
+solvability rule, fair speed ramp), then **Phase 4** (power-ups + manual-trigger + shield HUD +
+power-ups screen + tutorial).
 
 ## v1.4.3 — CODE_REVIEW.md §20 implementation (in progress, 2026-06-12)
 Executing the prioritized plan from `CODE_REVIEW.md` (Opus 4.8 strict pass, 8.7/10). Ordered steps;
