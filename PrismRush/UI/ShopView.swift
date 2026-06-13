@@ -17,6 +17,7 @@ struct ShopView: View {
     @State private var toast: String?
     @State private var toastTask: Task<Void, Never>?
     @State private var showMysteryBox = false   // presents the full Mystery Box reveal sequence
+    @State private var packReward: CoinSpendItem?   // drives the pack-purchase reveal burst (S1)
 
     /// Featured rotation pool (hero priority 3): premium + coin skins by id. Double Coins left
     /// the pool — it owns hero priority 1 outright until purchased.
@@ -43,9 +44,19 @@ struct ShopView: View {
         .overlay {
             if showMysteryBox { MysteryBoxView(model: model) { showMysteryBox = false } }
         }
+        .overlay {
+            if let packReward {
+                PackRewardBurst(item: packReward) { self.packReward = nil }
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: packReward)
         .onAppear {
             iap.refreshIfUnavailable()   // the one sheet-open re-check (no retry spam)
             if ProcessInfo.processInfo.environment["PR_MYSTERYBOX"] == "1" { showMysteryBox = true }
+            if let id = ProcessInfo.processInfo.environment["PR_BUYPACK"] {   // screenshot hook (S1)
+                packReward = ShopConsumables.packs.first { $0.id == id } ?? ShopConsumables.packs.first
+            }
         }
         .sensoryFeedback(trigger: successPulse) { _, _ in
             ProfileStore.shared.profile.hapticsEnabled ? .success : nil
@@ -527,7 +538,7 @@ struct ShopView: View {
         if ProfileStore.shared.buyConsumablePack(item) {
             successPulse += 1
             model.synth.play(.purchaseChime)
-            showToast("\(item.title): \(item.blurb) ✓")   // confirm exactly what landed
+            packReward = item   // fire the reveal burst (S1) — confirms exactly what landed
         } else {
             showToast("Not enough coins — keep running to earn more.")
             model.synth.play(.uiTick)
