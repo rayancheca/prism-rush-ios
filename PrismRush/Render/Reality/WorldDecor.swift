@@ -116,7 +116,9 @@ final class WorldDecor {
         s.altB.isEnabled = alt && w != 2           // the obelisk is a single piece
         s.floating = false
 
-        let x = s.side * Float.random(in: 6.6...11.5)
+        // Pushed further from the lanes (v1.6): the old 6.6 inner edge let a wide near pyramid creep
+        // toward the right lane and tower over the view. 8.4+ keeps every side piece clearly aside.
+        let x = s.side * Float.random(in: 8.4...12.5)
         s.group.position.x = x
         // Evolved by the ABSOLUTE world (not the 0–2 family `w`) so side decor hue-shifts with the
         // cycle in lockstep with the playfield palette (v1.4.3).
@@ -160,8 +162,9 @@ final class WorldDecor {
             s.altB.position = SIMD3<Float>(0.8, h1 / 2, 0)
             s.altB.orientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
         case (2, false):
-            let h = Float.random(in: 2...6.5)
-            s.pyramid.scale = SIMD3<Float>(Float.random(in: 0.8...1.6), h / 4, Float.random(in: 0.8...1.6))
+            // Tamed (v1.6): lower + narrower so it never towers over or crowds the lanes.
+            let h = Float.random(in: 2...4)
+            s.pyramid.scale = SIMD3<Float>(Float.random(in: 0.7...1.1), h / 4, Float.random(in: 0.7...1.1))
             s.pyramid.orientation = simd_quatf(angle: Float.random(in: 0...1), axis: SIMD3<Float>(0, 1, 0))
             s.pyramid.position.y = 0
             s.pyramid.model?.materials = [mat]

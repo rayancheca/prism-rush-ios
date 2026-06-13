@@ -164,7 +164,7 @@ final class BorealisSky {
             guard i < shardCount else { s.group.isEnabled = false; continue }
             let x = Float(r.range(-20, 20))
             let h = Float(r.range(0.7, 1.5))               // vertical scale of the shard
-            s.group.position = SIMD3<Float>(x, Float(r.range(-1.0, 0.6)), Float(r.range(-50, -42)))
+            s.group.position = SIMD3<Float>(x, Float(r.range(-1.0, 0.6)), Float(r.range(-54, -48)))   // back of the field (v1.6)
             s.group.scale = SIMD3<Float>(h, h, h)
             s.group.orientation = simd_quatf(angle: Float(r.range(-0.18, 0.18)), axis: SIMD3<Float>(0, 0, 1))
             s.body.model?.materials = [Self.mat(shardC)]

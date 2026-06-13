@@ -165,7 +165,7 @@ final class AshfallSky {
             let s = seams[i]
             s.baseX = Float(r.range(-4, 4))
             s.baseY = Float(r.range(2.5, 6.5)) + Float(i)
-            s.z = Float(-46 - 3 * i) - Float(r.range(0, 3))
+            s.z = Float(-52 - 3 * i) - Float(r.range(0, 3))   // pushed back (v1.6) so seams stay clearly behind the lanes
             s.speed = Float(r.range(0.10, 0.22)) * (i % 2 == 0 ? 1 : -1)
             s.phase = r.range(0, 40)
             s.entity.position = SIMD3<Float>(s.baseX, s.baseY, s.z)
