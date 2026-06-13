@@ -65,9 +65,11 @@ All committed locally and built/tested green at each step (SPM 178/Linux; Mac 18
 - **App Store guide** delivered (`docs/APP_STORE_SETUP.md`); owner will do it last.
 - **Placement safe-half** (`50be115`): anti-repeat-2 + coins through pattern 8 (layoutVersion 6→7).
 - Owner play-feedback (`b06a9f2`): **vertical camera follow** for high/boots jumps (eye+look-at rise
-  above the normal apex ~2.82, smoothed, RM-safe — fixes boots flying off the top); **longer track**
-  (backdrop horizon −65→−95 + enlarged, revealing more of the already-drawn ground/rungs/decor; no
-  gaps); **bigger pause/mute** (38→48 pt, kept top-trailing).
+  above the normal apex ~2.82, smoothed, RM-safe — fixes boots flying off the top); **bigger pause/mute**
+  (38→48 pt, kept top-trailing). The "longer track" (backdrop −65→−95) shipped here was **REVERTED next
+  round**: it shoved the track behind the per-world WorldSky set-pieces (Orbital's planet limb floated
+  mid-track), breaking the worlds the owner called "perfect". Backdrop restored to the tuned −65; a
+  longer track would require repositioning each WorldSky's depth in lockstep (deferred).
 - **Responsive audit (#19) — VERIFIED, no fix needed:** app is iPhone-only (`TARGETED_DEVICE_FAMILY 1`)
   + portrait-locked. Captured on iPhone SE 3 (375×667, the smallest iOS-18 device) AND 17 Pro Max:
   menu, in-run, characters carousel, shop, and game-over all fit/scroll with no clipping/overlap.

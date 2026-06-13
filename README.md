@@ -52,7 +52,7 @@ with the world (decree 1).
 <table>
 <tr>
 <td align="center"><img src="docs/screenshots/01_menu.png" width="210"><br><sub><b>1 · Hub</b><br>Equipped character, pre-run loadout, FURTHEST → Worlds chip</sub></td>
-<td align="center"><img src="docs/screenshots/02_pulse.png" width="210"><br><sub><b>2 · Pulse City</b><br>Neon skyline, deep track, deploy buttons + coin trail</sub></td>
+<td align="center"><img src="docs/screenshots/02_pulse.png" width="210"><br><sub><b>2 · Pulse City</b><br>Neon skyline, deploy buttons + coin trail</sub></td>
 <td align="center"><img src="docs/screenshots/03_sands.png" width="210"><br><sub><b>3 · Solar Sands</b><br>Coins thread the safe gap between the walls</sub></td>
 </tr>
 <tr>
@@ -326,7 +326,7 @@ A large, multi-round, owner-driven pass — fed by live play sessions — that m
 - **Feel + fairness.** A 5-agent audit found the catalogue's one human-unfair adjacency (a slide→jump
   in the gauntlet) and widened it; anti-repeat now avoids the last *two* patterns (less repetitive);
   one consistent in-run music bed (no jarring per-world switches); the **camera follows high/boots
-  jumps**; the track draws **further into the distance**; bigger, easier pause/mute buttons.
+  jumps** so a tall leap stays framed; bigger, easier pause/mute buttons.
 - **World select asks first** — tapping a world expands into a PLAY-confirm card instead of launching
   instantly; the hub's "FURTHEST → Worlds" chip no longer masquerades as the current world.
 - **Verified responsive** iPhone SE (375×667) → 17 Pro Max, iPhone-only + portrait-locked. A 20-agent
@@ -490,7 +490,7 @@ Built phase-by-phase, each gate verified by a real build + on-device screenshot 
 | E6 | Sign in with Apple + Game Center friends leaderboard | ✅ |
 | — | **v1.2 multi-agent overhaul** — Linux CI, bug sweep, new content, perf, a11y (see above) | ✅ |
 | — | **v1.3 → v1.5** — characters, progression, 12 evolving worlds, the power-up suite (see above) | ✅ |
-| — | **v1.6 Power-ups, Polish & Progression** — rarity crests/auras, character carousel, bespoke glyphs + Power-Ups catalog, coin-path routing, gauntlet fairness, camera follow, longer track, one music bed, world-confirm card, 20-agent QA pass, responsive SE → 17 Pro Max | ✅ |
+| — | **v1.6 Power-ups, Polish & Progression** — rarity crests/auras, character carousel, bespoke glyphs + Power-Ups catalog, coin-path routing, gauntlet fairness, camera follow, one music bed, world-confirm card, 20-agent QA pass, responsive SE → 17 Pro Max | ✅ |
 | — | Mac build + full suite (**196 green**) + visual/on-device pass | ✅ |
 | — | App Store archive · live IAP / accounts | ⏳ needs your Apple Developer account — full guide in [`docs/APP_STORE_SETUP.md`](docs/APP_STORE_SETUP.md) |
 

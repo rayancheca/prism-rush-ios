@@ -748,12 +748,13 @@ final class RealityRenderer: RendererPort {
         camera.look(at: SIMD3<Float>(0, 1.3, -5), from: camera.position, relativeTo: nil)
         root.addChild(camera)
 
-        // Pushed back -65 → -95 (v1.6, owner): the backdrop wall is the visible horizon, and at -65
-        // it cut the track off mid-screen. Further back, more of the (already-drawn) ground/rungs/
-        // decor recede into the distance before the wall — a longer track. Enlarged ~1.45× so it
-        // still fills the wider/taller frustum at the greater distance (no edges in frame).
-        backdrop = ModelEntity(mesh: .generatePlane(width: 200, height: 130), materials: [UnlitMaterial(color: .black)])
-        backdrop.position = SIMD3<Float>(0, 12, -95)
+        // The backdrop wall IS the per-world horizon: the bespoke WorldSky set-pieces (Orbital's
+        // planet limb, Solar's sun, Ashfall's volcano…) are tuned to sit right at it. Pushing it back
+        // (the v1.6 "longer track" experiment at -95) shoved the track BEHIND those set-pieces, so
+        // they floated mid-track and read as broken. Restored to the tuned -65 so every world stays
+        // polished — a longer track would need each WorldSky's depth repositioned in lockstep.
+        backdrop = ModelEntity(mesh: .generatePlane(width: 140, height: 90), materials: [UnlitMaterial(color: .black)])
+        backdrop.position = SIMD3<Float>(0, 12, -65)
         root.addChild(backdrop)
 
         let ground = ModelEntity(mesh: .generatePlane(width: 16, depth: 260), materials: [UnlitMaterial(color: UIColor(white: 0.02, alpha: 1))])
