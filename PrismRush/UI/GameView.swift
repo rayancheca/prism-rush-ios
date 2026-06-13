@@ -210,9 +210,10 @@ final class GameModel {
         if let w = ProcessInfo.processInfo.environment["PR_WORLD"].flatMap(Int.init), w > 0 {
             beginRun(fromWorld: w, seed: 7)   // debug path — bypasses the first-run tutorial gate
         }
-        // Debug: drop a shield just ahead so the HUD shield indicator is verifiable on the sim.
+        // Debug: drop a shield just ahead AND deploy one now (so the HUD chip + in-world dome show).
         if ProcessInfo.processInfo.environment["PR_SHIELD"] == "1" {
             core.debugSpawn(.shield(d: core.distance + 5, lane: 1))
+            core.deployShield()
         }
         // Debug: arm Super Sneakers (active HUD ring + amber rig sparks + higher jump) and drop one
         // on the track. Combine with PR_WORLD / PR_AUTOPLAY (which start the run) so it's in play.

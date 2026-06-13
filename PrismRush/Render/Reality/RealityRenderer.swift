@@ -127,6 +127,10 @@ final class RealityRenderer: RendererPort {
     // core consumes it, so the pulse needs its own entity.
     private var ringPulse: ModelEntity!
     private var ringPulseLife: Float = 0
+
+    // A soft translucent dome around the player while a shield is HELD (no timer — it lasts until a
+    // hit, then the glass-shatter FX plays). Snapshot-driven so it can never get stuck on/off.
+    private var shieldBubble: ModelEntity!
     private let ringPulseMaxLife: Float = 0.35
 
     // Latest blended obstacle tints, captured for the pools' place closure and particle bursts.
@@ -319,6 +323,14 @@ final class RealityRenderer: RendererPort {
         // Super Sneakers boots: show on the feet while the buff is live (a glance-readable "it's on").
         let shoesOn = snap.sneakersRemaining > 0 && snap.mode == .play
         for shoe in shoes where shoe.isEnabled != shoesOn { shoe.isEnabled = shoesOn }
+
+        // Shield dome: held-shield readout in-world (gentle breathe, RM-static). It does NOT time out.
+        let shieldOn = snap.shieldActive && snap.mode == .play
+        shieldBubble.isEnabled = shieldOn
+        if shieldOn {
+            shieldBubble.position = SIMD3<Float>(px, Float(snap.playerY) + 0.66, 0)
+            shieldBubble.scale = SIMD3<Float>(repeating: 1 + (reduceMotion ? 0 : 0.05 * Float(sin(elapsed * 3))))
+        }
 
         // Dust kicked up during a slide — grounded OR mid air-slam — so it's unmistakable.
         // Time-based (≈ the old 6/frame at 60 Hz) so density matches at 120 Hz. The wider x
@@ -646,6 +658,7 @@ final class RealityRenderer: RendererPort {
         trailDebt = 0; dustDebt = 0; speedLineDebt = 0; sneakerDebt = 0
         ringPulseLife = 0
         ringPulse.isEnabled = false
+        shieldBubble.isEnabled = false
         for i in skids.indices { skidLife[i] = 0; skids[i].isEnabled = false }
         // Re-seed decor around 0. Checkpoint starts (distance > 0) self-heal on the first
         // update: the recycle-while loop walks every slot forward and restyles it once.
@@ -734,6 +747,15 @@ final class RealityRenderer: RendererPort {
         ringPulse = ModelEntity(mesh: ringMesh, materials: [UnlitMaterial(color: .cyan)])
         ringPulse.isEnabled = false
         root.addChild(ringPulse)
+
+        // Shield dome: a translucent cyan sphere around the player while a shield is held. Explicit
+        // transparent blending (tint alpha alone renders opaque on UnlitMaterial) so the character
+        // reads THROUGH the low-opacity dome.
+        var domeMat = UnlitMaterial(color: UIColor(red: 0.25, green: 0.95, blue: 1, alpha: 1))
+        domeMat.blending = .transparent(opacity: .init(floatLiteral: 0.16))
+        shieldBubble = ModelEntity(mesh: .generateSphere(radius: 0.98), materials: [domeMat])
+        shieldBubble.isEnabled = false
+        root.addChild(shieldBubble)
 
         // The rig itself must live under root — buildCharacter() only parents the body parts to
         // the rig. Without this line the whole character is orphaned and never rendered (this is
