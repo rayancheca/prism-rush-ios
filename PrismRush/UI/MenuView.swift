@@ -5,7 +5,7 @@ import SwiftUI
 /// PLAY as the only gradient on screen, the 3-cell rewards rail, and a demoted nav row.
 /// Everything on screen is tappable and leads somewhere; all profile-derived state is read from
 /// `ProfileStore.shared` directly in `body` (G3).
-struct MenuView: View {
+struct MenuView<Loadout: View>: View {
     let best: Int
     let coins: Int
     let onPlay: () -> Void
@@ -17,8 +17,10 @@ struct MenuView: View {
     /// the owner's ask — no longer three taps deep behind Profile.
     var onSettings: () -> Void = {}
     var rewards: AnyView = AnyView(EmptyView())
-    /// Pre-run loadout chips (LoadoutStrip) — shown only when the player owns a consumable.
-    var loadout: AnyView = AnyView(EmptyView())
+    /// Pre-run loadout chips (LoadoutStrip) — a CONCRETE typed child (not AnyView) so its @Observable
+    /// arm-state reads update reactively when tapped (AnyView severed that, the "Head Start does
+    /// nothing" bug).
+    let loadout: Loadout
     /// FIRST RUN › destination when best == 0 (HowToPlay). Falls back to `onPlay`, whose
     /// first-run gate already routes through the tutorial; wave 5 wires it directly.
     var onHowToPlay: (() -> Void)? = nil

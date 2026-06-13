@@ -35,8 +35,9 @@ struct LoadoutStrip: View {
                       action: @escaping () -> Void, a11y: String) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 13, weight: .bold))
-                Text(name).typeScale(.micro)
+                Image(systemName: armed ? "checkmark.circle.fill" : icon)
+                    .font(.system(size: 13, weight: .bold))
+                Text(armed ? "ARMED" : name).typeScale(.micro)
                 Text("×\(count)").typeScale(.micro).monospacedDigit().opacity(0.8)
             }
             .foregroundStyle(armed ? AnyShapeStyle(.black) : AnyShapeStyle(tint))

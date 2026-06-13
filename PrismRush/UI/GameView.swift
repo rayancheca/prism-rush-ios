@@ -449,6 +449,10 @@ final class GameModel {
         canRestart = false
         restartCountdown = 0
         synth.musicStart()
+        // A deliberate CONTINUE beat so it reads as resuming the SAME run (you keep your score), not a
+        // fresh start: a flash, a "CONTINUE" call-out, and the shield-grant chime.
+        flash(0.4)
+        addPopup("CONTINUE", color: Theme.color(0x00F5FF), worldX: core.snapshot.playerX)
         synth.play(.shieldPickup)
         return true
     }
@@ -491,7 +495,9 @@ final class GameModel {
         switch fx {
         case let .gemCollected(x, _, streak):
             let mult = min(Tuning.multCap, 1 + streak / Tuning.streakPerMult)
-            addPopup("+\(Tuning.gemBaseScore * mult)", color: Theme.color(0xFFD23D), worldX: x)
+            // SCORE points, not coins — cyan (the score/interactive hue) so it never reads as a coin
+            // payout (gold is reserved for actual currency). A gem pays 1 coin; this is the point pop.
+            addPopup("+\(Tuning.gemBaseScore * mult)", color: Theme.color(0x00F5FF), worldX: x)
             synth.play(.gem(streak: streak))
         case let .nearMiss(kind, x):
             nearMissesThisRun += 1
@@ -789,13 +795,13 @@ final class GameModel {
     func toggleHeadStart() {
         guard ProfileStore.shared.profile.headStartCharges > 0 else { return }
         armedHeadStart.toggle()
-        synth.play(.uiTick)
+        synth.play(armedHeadStart ? .equipClick : .uiTick)   // affirmative "armed" vs neutral "disarm"
     }
 
     func toggleCoinSurge() {
         guard ProfileStore.shared.profile.coinSurgeCharges > 0 else { return }
         armedCoinSurge.toggle()
-        synth.play(.uiTick)
+        synth.play(armedCoinSurge ? .equipClick : .uiTick)
     }
 
     /// Whether the slow-mo button is live: in play, a charge banked, none already running.
@@ -997,7 +1003,7 @@ struct GameView: View {
                              onProfile: { model.open(.stats) },
                              onSettings: { model.open(.settings) },
                              rewards: AnyView(RewardsBar(model: model, onMissions: { model.open(.missions) })),
-                             loadout: AnyView(LoadoutStrip(model: model)),
+                             loadout: LoadoutStrip(model: model),
                              onHowToPlay: { showHowToPlayInfo = true })
                 }
             case .over:

@@ -545,7 +545,8 @@ final class GameCore {
         // Distance kept integrating during the death decel; fold that drift into the offset so the
         // score (and coin payout) resumes exactly where it froze — no free post-death points.
         scoreOffset += distance - deathDistance
-        laneIndex = 1; px = Tuning.laneX[1]
+        // Keep the player's LANE (don't snap to centre) so a continue reads as resuming where you
+        // were, not a restart — the board is cleared below, so the held lane is safe (v1.6).
         jumpY = 0; vy = 0; grounded = true; slideT = 0; sy = 1
         shield = true
         // A continue resets only what could bank *free* momentum: the boost timer and the flow

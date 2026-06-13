@@ -89,9 +89,8 @@ struct WorldPreviewCanvas: View {
 
         // 4. Three-lane perspective grid scrolling toward the viewer.
         drawGrid(&ctx, t: t, w: w, h: h, horizonY: horizonY)
-
-        // 5. Hero size only: the player slime silhouette in the centre lane.
-        if size == .hero { drawSlime(&ctx, w: w, h: h) }
+        // (v1.6) The static centre-lane player silhouette was removed — it read like a control/slider
+        // on the worlds hero card (the whole header is one PLAY-FROM-HERE tap). Decree 4.
     }
 
     /// Metropolis: rounded-rect tower clusters with 2×3 window dots, far + near depth bands.
@@ -774,20 +773,5 @@ struct WorldPreviewCanvas: View {
         center.addLine(to: CGPoint(x: w / 2, y: h))
         ctx.stroke(center, with: .color(accent2.opacity(0.5)),
                    style: StrokeStyle(lineWidth: lineWidth, dash: [4, 5]))
-    }
-
-    /// Static player silhouette (rounded rect + eye dots) sitting in the centre lane (hero only).
-    private func drawSlime(_ ctx: inout GraphicsContext, w: CGFloat, h: CGFloat) {
-        let bodyW = h * 0.14
-        let body = CGRect(x: w / 2 - bodyW / 2, y: h * 0.74 - bodyW, width: bodyW, height: bodyW)
-        ctx.fill(Path(roundedRect: body, cornerRadius: bodyW * 0.3),
-                 with: .color(Theme.color(0x0A0A14).opacity(0.85)))
-        let eyeD = bodyW * 0.18
-        for dx in [-bodyW * 0.2, bodyW * 0.2] {
-            ctx.fill(Path(ellipseIn: CGRect(x: body.midX + dx - eyeD / 2,
-                                            y: body.midY - bodyW * 0.1 - eyeD / 2,
-                                            width: eyeD, height: eyeD)),
-                     with: .color(.white.opacity(0.9)))
-        }
     }
 }
