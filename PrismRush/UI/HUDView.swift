@@ -179,7 +179,7 @@ struct HUDView: View {
     /// unreadable churn next to the OVERDRIVE popup + SFX + speed FX that already announce it.
     @ViewBuilder private func timerRings(_ snap: GameSnapshot) -> some View {
         let anyActive = snap.magnetRemaining > 0 || snap.doublerRemaining > 0
-            || snap.chronoRemaining > 0
+            || snap.chronoRemaining > 0 || snap.sneakersRemaining > 0
         if anyActive {
             HStack(spacing: 8) {
                 if snap.magnetRemaining > 0 {
@@ -193,6 +193,10 @@ struct HUDView: View {
                 if snap.chronoRemaining > 0 {
                     timerRing("hourglass", remaining: snap.chronoRemaining,
                               duration: Tuning.chronoDuration, name: "Slow motion")
+                }
+                if snap.sneakersRemaining > 0 {
+                    timerRing("arrow.up.circle.fill", remaining: snap.sneakersRemaining,
+                              duration: Tuning.superSneakersDuration, name: "Super Sneakers — higher jumps")
                 }
             }
             .transition(.scale)

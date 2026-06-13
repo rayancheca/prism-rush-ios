@@ -12,6 +12,7 @@ enum SpawnCmd: Sendable, Equatable {
     case magnet(d: Double, lane: Int)
     case doubler(d: Double, lane: Int)
     case chrono(d: Double, lane: Int)
+    case superSneakers(d: Double, lane: Int)
     case ring(d: Double, lane: Int, y: Double)
     case boostPad(d: Double, lane: Int)
 }
@@ -108,13 +109,18 @@ enum Patterns {
             let span = gemArc(b + 2, free, &out)
             return max(18, span + 8)
 
-        case 7:  // twin talls, then a pickup in the free lane (shield/magnet common, doubler rarer)
+        case 7:  // twin talls, then a pickup in the free lane (shield/magnet common, doubler rarer,
+                 // Super Sneakers the rare treat). The SAME single `rng.unit()` selects all four —
+                 // re-banding consumes ZERO extra RNG (PatternOrderTests count stays [.. ,7:2, ..]),
+                 // so the obstacle geometry is byte-identical; only the pickup KIND shifts. Still a
+                 // layoutVersion bump (placement changed) — see DailyChallenge (v1.5: 2 → 3).
             let free = rng.int(0, 2); let o = otherLanes(free)
             out.append(.tall(d: b + 6, lane: o[0])); out.append(.tall(d: b + 6, lane: o[1]))
             let roll = rng.unit()
-            if roll < 0.4 { out.append(.shield(d: b + 13, lane: free)) }
-            else if roll < 0.8 { out.append(.magnet(d: b + 13, lane: free)) }
-            else { out.append(.doubler(d: b + 13, lane: free)) }
+            if roll < 0.35 { out.append(.shield(d: b + 13, lane: free)) }
+            else if roll < 0.70 { out.append(.magnet(d: b + 13, lane: free)) }
+            else if roll < 0.88 { out.append(.doubler(d: b + 13, lane: free)) }
+            else { out.append(.superSneakers(d: b + 13, lane: free)) }
             return 18
 
         case 8:  // double bar 9 apart

@@ -73,6 +73,7 @@ final class ArcCollectionTests: XCTestCase {
                         case let .low(d, _), let .tall(d, _), let .movingTall(d, _), let .bar(d),
                              let .splitBar(d, _), let .gem(d, _, _), let .shield(d, _),
                              let .magnet(d, _), let .doubler(d, _), let .chrono(d, _),
+                             let .superSneakers(d, _),
                              let .ring(d, _, _), let .boostPad(d, _):
                             return d
                         }

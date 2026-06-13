@@ -139,4 +139,55 @@ final class PowerUpTests: XCTestCase {
         XCTAssertFalse(core.activateSlowMo())
         XCTAssertEqual(core.chronoT, 0)
     }
+
+    // MARK: Super Sneakers (v1.5 — higher-jump track pickup)
+
+    /// Jump once from the ground and return the peak `jumpY` reached before landing.
+    private func jumpApex(_ core: GameCore) -> Double {
+        core.jump()
+        var peak = core.jumpY
+        var n = 0
+        while !core.grounded && n < 600 { core.tick(Tuning.tickDt); peak = max(peak, core.jumpY); n += 1 }
+        return peak
+    }
+
+    func testSuperSneakersRaisesJumpApexAndIsNeverLethal() async {
+        let core = cleanCore()
+        var picked: [PickupKind] = []
+        core.onFX = { if case let .pickup(kind, _, _) = $0 { picked.append(kind) } }
+
+        // Baseline apex matches the analytic height jumpV0² / 2g.
+        let baseApex = jumpApex(core)
+        XCTAssertEqual(baseApex, Tuning.jumpV0 * Tuning.jumpV0 / (2 * Tuning.gravity), accuracy: 0.05)
+
+        // Collect the pickup: it sets the timer, emits the new FX kind, and never kills.
+        core.debugSpawn(.superSneakers(d: core.distance + 3, lane: 1))
+        XCTAssertTrue(tickUntil(core) { core.superSneakersT > 0 }, "must collect the Super Sneakers")
+        XCTAssertEqual(picked, [.superSneakers], "reuses FXEvent.pickup with the new kind")
+        XCTAssertEqual(core.mode, .play, "a pickup is never lethal")
+        core.advance(realDt: Tuning.tickDt)   // snapshot rebuilds on `advance`
+        XCTAssertEqual(core.snapshot.sneakersRemaining, core.superSneakersT, accuracy: 1e-9)
+        XCTAssertGreaterThan(core.snapshot.sneakersRemaining, 0)
+
+        // While active, the jump launches meaningfully higher (height ∝ v² → ×1.56 at ×1.25 v0).
+        let boostedApex = jumpApex(core)
+        XCTAssertGreaterThan(boostedApex, baseApex * 1.4, "Super Sneakers must clearly raise the jump")
+    }
+
+    func testSuperSneakersEndedFiresOnceAndRestoresJump() async {
+        let core = cleanCore()
+        var ended = 0
+        core.onFX = { if case .sneakersEnded = $0 { ended += 1 } }
+        core.debugSpawn(.superSneakers(d: core.distance + 3, lane: 1))
+        XCTAssertTrue(tickUntil(core) { core.superSneakersT > 0 })
+
+        for _ in 0..<(Int(Tuning.superSneakersDuration / Tuning.tickDt) + 60) { core.tick(Tuning.tickDt) }
+        XCTAssertEqual(core.superSneakersT, 0)
+        XCTAssertEqual(ended, 1, "sneakersEnded is an edge — fired exactly once")
+
+        // Jump height returns to the baseline once the buff expires.
+        let apex = jumpApex(core)
+        XCTAssertEqual(apex, Tuning.jumpV0 * Tuning.jumpV0 / (2 * Tuning.gravity), accuracy: 0.05,
+                       "jump height restores after the buff ends")
+    }
 }

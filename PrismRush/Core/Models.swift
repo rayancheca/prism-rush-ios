@@ -7,7 +7,7 @@ enum GameMode: Sendable, Equatable {
 
 /// Collectible power-up kinds.
 enum PickupKind: Sendable, Equatable {
-    case shield, magnet, doubler, chrono
+    case shield, magnet, doubler, chrono, superSneakers
 }
 
 /// Every renderable spawned thing. Pure data — the renderer maps these onto pooled entities.
@@ -22,6 +22,7 @@ enum EntityKind: Sendable, Equatable {
     case magnet     // torus pickup
     case doubler    // ×2 coin pickup (gems pay double currency while active)
     case chrono     // slow-mo pickup (world scroll slows; player reflexes run at full rate)
+    case superSneakers // winged-boot pickup: jumps launch higher for a few seconds — never lethal
     case ring       // prism ring at jump-apex height: thread it for score/coins — never lethal
     case boostPad   // floor chevron strip: grounded contact triggers the overdrive boost
 }
@@ -70,6 +71,7 @@ struct GameSnapshot: Sendable {
     var doublerRemaining: Double    // > 0 → gems pay double coins (HUD shows the timer)
     var chronoRemaining: Double     // > 0 → slow-mo active (HUD timer; renderer may tint)
     var boostRemaining: Double      // > 0 → overdrive boost active (mirrors boostT; HUD ring, FOV punch)
+    var sneakersRemaining: Double   // > 0 → Super Sneakers active (jumps launch higher; HUD ring + rig glow)
     var flowStreak: Int             // near-miss count toward flow surges (HUD pips show % flowPerSurge)
     var sliding: Bool
     var grounded: Bool
@@ -100,6 +102,7 @@ struct GameSnapshot: Sendable {
         doublerRemaining: 0,
         chronoRemaining: 0,
         boostRemaining: 0,
+        sneakersRemaining: 0,
         flowStreak: 0,
         sliding: false,
         grounded: true,
@@ -130,6 +133,7 @@ enum FXEvent: Sendable, Equatable {
     case worldChanged(index: Int, ordinal: Int)
     case shieldAbsorbed(x: Double)
     case chronoEnded                 // slow-mo timer crossed 0 (audio needs the edge)
+    case sneakersEnded               // Super Sneakers timer crossed 0 (renderer/audio restore the rig)
     case ringPassed(x: Double, y: Double, perfect: Bool)   // threaded a prism ring (once per ring)
     case boostStarted(x: Double)     // overdrive pad triggered (edge)
     case boostEnded                  // boost timer crossed 0 (edge, like chronoEnded)

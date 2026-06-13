@@ -53,6 +53,7 @@ final class GameCore {
     @ObservationIgnored private(set) var doublerT: Double = 0  // gems pay double currency while > 0
     @ObservationIgnored private(set) var chronoT: Double = 0   // slow-mo: distance integrates at × chronoFactor
     @ObservationIgnored private(set) var boostT: Double = 0    // overdrive: world speed × boostFactor (capped)
+    @ObservationIgnored private(set) var superSneakersT: Double = 0  // > 0 → jumps launch at × superSneakersJumpMult
     @ObservationIgnored private(set) var flowStreak: Int = 0   // near-misses since last surge/reset (§C.1) — always < flowPerSurge
     @ObservationIgnored private(set) var flowSurges: Int = 0   // surges this run (FX escalation level, 1-based)
     @ObservationIgnored private(set) var bonus: Int = 0
@@ -123,6 +124,13 @@ final class GameCore {
         return v
     }
 
+    /// Vertical launch velocity for a fresh/buffered jump — boosted while Super Sneakers is active.
+    /// Read at the takeoff sites only; ballistic gem-arc/ring PLACEMENT (Patterns) deliberately
+    /// never reads this, so the buff over-clears rather than perturbing the seeded track.
+    private var launchVelocity: Double {
+        superSneakersT > 0 ? Tuning.jumpV0 * Tuning.superSneakersJumpMult : Tuning.jumpV0
+    }
+
     /// Reset to the fresh menu state. Reseeds if `seed` is given (else a new random stream).
     func reset(seed: UInt64?) {
         rng = SplitMix64(seed: seed ?? .random(in: .min ... .max))
@@ -133,7 +141,7 @@ final class GameCore {
         bankZ = 0; jumpBuf = 0
         world = 0; maxWorld = 0; worldFrom = 0; worldTo = 0; worldBlend = 1
         shield = false; invulnT = 0; magnetT = 0; doublerT = 0; chronoT = 0
-        boostT = 0; flowStreak = 0; flowSurges = 0
+        boostT = 0; superSneakersT = 0; flowStreak = 0; flowSurges = 0
         bonus = 0; score = 0; gemCount = 0; streak = 0; bestStreak = 0; mult = 1
         activeObstacles.removeAll(keepingCapacity: true)
         activeGems.removeAll(keepingCapacity: true)
@@ -175,6 +183,10 @@ final class GameCore {
             boostT = max(0, boostT - dt)
             if boostT == 0 { emit(.boostEnded) }     // edge — renderer/audio restore on it
         }
+        if superSneakersT > 0 {
+            superSneakersT = max(0, superSneakersT - dt)
+            if superSneakersT == 0 { emit(.sneakersEnded) }   // edge — rig glow / jump height restore
+        }
         if invulnT > 0 { invulnT = max(0, invulnT - dt) }
         // Score freezes at death: the post-death decel keeps distance climbing, but the run's
         // score must not. `die()` captures the final value; here we only advance it while playing.
@@ -192,7 +204,7 @@ final class GameCore {
     func jump() {
         guard mode == .play else { return }
         if grounded {
-            grounded = false; vy = Tuning.jumpV0; slideT = 0; sy = Tuning.airStretchY
+            grounded = false; vy = launchVelocity; slideT = 0; sy = Tuning.airStretchY
             emit(.jumped(x: px))
         } else {
             jumpBuf = Tuning.jumpBuffer   // buffered: fires on landing
@@ -268,7 +280,7 @@ final class GameCore {
                 jumpY = 0; grounded = true; vy = 0; sy = Tuning.landSquashY
                 emit(.landed(x: px))
                 if jumpBuf > 0 {
-                    jumpBuf = 0; grounded = false; vy = Tuning.jumpV0; sy = Tuning.airStretchY
+                    jumpBuf = 0; grounded = false; vy = launchVelocity; sy = Tuning.airStretchY
                     emit(.jumped(x: px))
                 }
             }
@@ -471,6 +483,9 @@ final class GameCore {
                 case .chrono:
                     chronoT = Tuning.chronoDuration
                     emit(.pickup(kind: .chrono, x: pxw, y: p.baseY))
+                case .superSneakers:
+                    superSneakersT = Tuning.superSneakersDuration   // refresh, no stack — like the others
+                    emit(.pickup(kind: .superSneakers, x: pxw, y: p.baseY))
                 default:
                     break
                 }
@@ -491,6 +506,10 @@ final class GameCore {
 
     /// Debug-only: force an immediate death (used by the `PR_DEMO` screenshot flow).
     func debugForceDie() { if mode == .play { die() } }
+
+    /// Debug/QA hook (`PR_SNEAKERS`): arm Super Sneakers without a track pickup so the active rig
+    /// glow + HUD ring can be screenshotted. Consumes no RNG; play-gated like the real activation.
+    func debugActivateSuperSneakers() { if mode == .play { superSneakersT = Tuning.superSneakersDuration } }
 
     /// Test/diagnostic hook: wipe every live entity and park the spawner so hand-built scenarios
     /// (`debugSpawn`) run with zero procedural interference.
@@ -579,6 +598,9 @@ final class GameCore {
         case let .chrono(d, lane):
             guard pickupCount(.chrono) < Tuning.capChrono else { return }
             activePickups.append(CoreEntity(id: takeId(), kind: .chrono, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 1.0, phase: 0, passed: false, fading: false))
+        case let .superSneakers(d, lane):
+            guard pickupCount(.superSneakers) < Tuning.capSuperSneakers else { return }
+            activePickups.append(CoreEntity(id: takeId(), kind: .superSneakers, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 1.0, phase: 0, passed: false, fading: false))
         case let .ring(d, lane, y):
             guard pickupCount(.ring) < Tuning.capRing else { return }
             activePickups.append(CoreEntity(id: takeId(), kind: .ring, lane: lane, d: d, x: Tuning.laneX[lane], baseY: y, phase: 0, passed: false, fading: false))
@@ -622,7 +644,7 @@ final class GameCore {
                                       // swap beat still lands on the arrival flourish frame
             shieldActive: shield, magnetRemaining: magnetT, doublerRemaining: doublerT,
             chronoRemaining: chronoT,
-            boostRemaining: boostT, flowStreak: flowStreak,
+            boostRemaining: boostT, sneakersRemaining: superSneakersT, flowStreak: flowStreak,
             sliding: slideT > 0, grounded: grounded,
             usedCheckpoint: usedCheckpoint,
             entities: entityScratch,

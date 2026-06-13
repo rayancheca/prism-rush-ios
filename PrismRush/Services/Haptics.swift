@@ -64,6 +64,8 @@ final class Haptics {
             }
         case .chronoEnded:
             light.impactOccurred(intensity: 0.5)   // soft "time resumes" tap
+        case .sneakersEnded:
+            light.impactOccurred(intensity: 0.45)  // soft "spring fades" tap
         // v1.3 mechanic map (R17): ring = light, perfect/boost = medium, flow surge = success.
         case let .ringPassed(_, _, perfect):
             if perfect { medium.impactOccurred() } else { light.impactOccurred(intensity: 0.8) }

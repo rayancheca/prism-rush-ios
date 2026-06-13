@@ -34,6 +34,12 @@ enum Tuning {
     // Chrono slow-mo: distance integrates at speed × factor while the player ticks at real dt,
     // stretching every dodge window ~1.5× — strictly easier. The raw `speed` ramp is untouched.
     static let chronoDuration: Double = 5, chronoFactor: Double = 0.65
+    // Super Sneakers: a collected winged-boot pickup launches jumps at × this velocity for the
+    // duration (height ∝ v², so ×1.25 ≈ ×1.56 apex). Only the player's launch velocity changes —
+    // ballistic gem-arc/ring PLACEMENT stays on the base constants (it never reads this), so the
+    // buff only ever over-clears, never under-places. The bot never collects pickups, so the buff
+    // is never active in the solvability soak (its air-slam arc model stays on the base jump).
+    static let superSneakersDuration: Double = 8, superSneakersJumpMult: Double = 1.25
     // Post-absorb grace: patterns place twin talls at the same `d`, so a mid-lane-change shield hit
     // must not let the second wall kill on the same tick (or the next — it's still in the kill band).
     static let invulnDuration: Double = 0.4
@@ -65,7 +71,7 @@ enum Tuning {
 
     // Pool caps — bound the live entity count (renderer pools mirror these).
     static let capLow = 18, capTall = 14, capBar = 6, capGem = 72, capShield = 4, capMagnet = 4
-    static let capDoubler = 2, capChrono = 2, capSplitBar = 6
+    static let capDoubler = 2, capChrono = 2, capSplitBar = 6, capSuperSneakers = 2
 
     // MARK: v1.3 mechanics
 

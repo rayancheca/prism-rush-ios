@@ -36,6 +36,7 @@ final class RealityRenderer: RendererPort {
     private let splitBarSegmentMesh: MeshResource   // one-lane bar segment (two per splitBar)
     private let ringMesh: MeshResource      // prism-ring gate torus (hole faces the camera, +Z)
     private let padMesh: MeshResource       // overdrive-pad floor chevron strip (flat, XZ plane)
+    private let sneakerArmMesh: MeshResource // one chevron arm (four per Super Sneakers boost glyph)
 
     // Selected character skin — authored hexes only, NEVER world-driven (owner decree 1).
     // Defaults reproduce Prism's fixed prismatic identity for the pre-`applySkin` frame.
@@ -112,6 +113,7 @@ final class RealityRenderer: RendererPort {
     private var trailDebt: Float = 0
     private var dustDebt: Float = 0
     private var speedLineDebt: Float = 0
+    private var sneakerDebt: Float = 0      // amber up-spark cadence while Super Sneakers is active
 
     // Slide skid marks: a tiny pool of flattened dark boxes dropped under the player on `.slid`.
     private var skids: [ModelEntity] = []
@@ -149,6 +151,7 @@ final class RealityRenderer: RendererPort {
         // pass window without looking trivially wide. Same generator as the magnet torus.
         ringMesh = ProceduralMesh.torus(major: 0.88, minor: 0.09, majorSeg: 28, minorSeg: 10)
         padMesh = ProceduralMesh.chevronStrip()
+        sneakerArmMesh = .generateBox(width: 0.36, height: 0.11, depth: 0.11, cornerRadius: 0.035)
         matGemGold = UnlitMaterial(color: UIColor(red: 1, green: 210/255.0, blue: 61/255.0, alpha: 1))
         matGemHot = UnlitMaterial(color: UIColor(red: 1, green: 0.95, blue: 0.75, alpha: 1))
         buildScene()
@@ -159,6 +162,7 @@ final class RealityRenderer: RendererPort {
         // never allocates (the other kinds warm up within seconds; these appear minutes in).
         pools.prewarm(.ring, count: Tuning.capRing)
         pools.prewarm(.boostPad, count: Tuning.capBoostPad)
+        pools.prewarm(.superSneakers, count: Tuning.capSuperSneakers)
         decor = WorldDecor(root: root)
         particles = ParticleSystem(parent: root)
 
@@ -365,7 +369,7 @@ final class RealityRenderer: RendererPort {
                     entity.scale = .one                      // recycled pooled gem: restore
                     (entity as? ModelEntity).map { $0.model?.materials = [mGold] }
                 }
-            case .shield, .magnet, .doubler, .chrono:
+            case .shield, .magnet, .doubler, .chrono, .superSneakers:
                 entity.orientation = simd_quatf(angle: Float(s.spin) * 0.9, axis: SIMD3<Float>(0, 1, 0))
             case .ring:
                 // Gate torus stays face-on (the hole IS the target); a slow scale-pulse keyed off
@@ -394,6 +398,19 @@ final class RealityRenderer: RendererPort {
                 particles.burst(x: px + Float.random(in: -0.2...0.2), y: 0.25 + Float(snap.playerY), z: 0.5,
                                 color: skinTrailColor, count: n, power: 0.9, spread: 0.08,
                                 life: 0.45, velZ: boosting ? 7 : 0, stretchZ: boosting ? 2.4 : 1)
+            }
+        }
+
+        // Super Sneakers: amber up-sparks at the feet while active — a distinct in-world cue that
+        // jumps launch higher (decree 6). Kept OFF the player's identity trail (always
+        // skinTrailColor, decree 1) by emitting a separate amber layer near the ground.
+        if snap.mode == .play, snap.sneakersRemaining > 0, !reduceMotion {
+            sneakerDebt += 26 * lastDt
+            let n = Int(sneakerDebt)
+            if n > 0 {
+                sneakerDebt -= Float(n)
+                particles.burst(x: px + Float.random(in: -0.3...0.3), y: 0.08 + Float(snap.playerY) * 0.5, z: 0.3,
+                                color: uiHex(0xFF8A2B), count: n, power: 1.7, spread: 0.22, life: 0.5)
             }
         }
 
@@ -461,6 +478,10 @@ final class RealityRenderer: RendererPort {
                 // Icy cyan-white shower, slower and longer-lived — time is thickening.
                 particles.burst(x: Float(x), y: Float(y), z: 0, color: uiHex(0x9BF0FF), count: 30, power: 3.2, spread: 0.4, life: 1.1)
                 particles.burst(x: Float(x), y: Float(y), z: 0, color: cWhite, count: 12, power: 2.2, spread: 0.3, life: 1.1)
+            case .superSneakers:
+                // Amber up-burst — energetic "leap" pop, distinct from the cool-toned pickups.
+                particles.burst(x: Float(x), y: Float(y), z: 0, color: uiHex(0xFF8A2B), count: 30, power: 5.0, spread: 0.34, life: 0.8)
+                particles.burst(x: Float(x), y: Float(y), z: 0, color: cGold, count: 12, power: 3.6, spread: 0.3, life: 0.7)
             }
             kickFOV()
         case let .shieldAbsorbed(x):
@@ -508,9 +529,9 @@ final class RealityRenderer: RendererPort {
             particles.burst(x: Float(x), y: 0.9, z: -Float(Tuning.fountainLead), color: cGold,
                             count: 16, power: 2.6, spread: 0.5, life: 0.8)
             kickFOV()
-        case .nearMiss, .chronoEnded, .boostEnded:
-            break   // popups / banner / haptics / audio handled by the UI layer; boost restore
-                    // is snapshot-driven (see sync), so `.boostEnded` is audio's edge, not ours
+        case .nearMiss, .chronoEnded, .boostEnded, .sneakersEnded:
+            break   // popups / banner / haptics / audio handled by the UI layer; boost & sneakers
+                    // restore is snapshot-driven (see sync), so these are audio's edges, not ours
         }
     }
 
@@ -613,7 +634,7 @@ final class RealityRenderer: RendererPort {
         whip = 0; whipVel = 0
         runPhase = 0
         lastSliding = false; runBobOn = false; speedNorm = 0   // sync-cached flags: advanceVisuals runs before the next sync
-        trailDebt = 0; dustDebt = 0; speedLineDebt = 0
+        trailDebt = 0; dustDebt = 0; speedLineDebt = 0; sneakerDebt = 0
         ringPulseLife = 0
         ringPulse.isEnabled = false
         for i in skids.indices { skidLife[i] = 0; skids[i].isEnabled = false }
@@ -808,6 +829,7 @@ final class RealityRenderer: RendererPort {
         case .magnet:     return ModelEntity(mesh: magnetMesh, materials: [UnlitMaterial(color: .cyan)])
         case .doubler:    return ModelEntity(mesh: doublerMesh, materials: [UnlitMaterial(color: uiHex(0x00FF88))])
         case .chrono:     return ModelEntity(mesh: chronoMesh, materials: [UnlitMaterial(color: uiHex(0x9BF0FF))])
+        case .superSneakers: return sneakersEntity()
         // Ring/pad get the live accent material reassigned every frame in the place closure
         // (same pattern as obstacles), so the creation-time material is just a safe seed.
         case .ring:       return ModelEntity(mesh: ringMesh, materials: [matAccent])
@@ -824,6 +846,24 @@ final class RealityRenderer: RendererPort {
         let parent = Entity()
         for _ in 0..<2 {
             parent.addChild(ModelEntity(mesh: splitBarSegmentMesh, materials: [UnlitMaterial(color: .magenta)]))
+        }
+        return parent
+    }
+
+    /// Super Sneakers pickup: an amber upward double-chevron (a "boost up" glyph) built from four
+    /// angled box arms under a parent — recognisable as "jump higher", and distinct in shape AND
+    /// hue from every cool-toned pickup. Spun around Y each frame by the place closure.
+    private func sneakersEntity() -> Entity {
+        let parent = Entity()
+        let mat = UnlitMaterial(color: uiHex(0xFF8A2B))
+        let lean = Float.pi / 5   // 36° — the chevron's half-angle
+        for yBase in [Float(-0.13), Float(0.11)] {           // two stacked chevrons → "⌃⌃"
+            for side in [Float(-1), Float(1)] {
+                let arm = ModelEntity(mesh: sneakerArmMesh, materials: [mat])
+                arm.position = SIMD3<Float>(side * 0.13, yBase, 0)
+                arm.orientation = simd_quatf(angle: -side * lean, axis: SIMD3<Float>(0, 0, 1))
+                parent.addChild(arm)
+            }
         }
         return parent
     }

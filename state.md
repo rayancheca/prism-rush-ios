@@ -87,19 +87,48 @@ Optional later: per-world music (`Synth.beds` 12-entry table); richer per-world 
   canDeploySlowMo`. NOT a change to the auto-chrono pickup → bot untouched. PowerUpTests added.
 - **Owner decision:** characters stay **pure cosmetic** — NO passives.
 
+**Phase 5 — deferred power-up backlog (v1.5 continuation, 2026-06-12):**
+- **5a DONE — Super Sneakers** (in-run higher-jump track pickup). Collect the amber winged-
+  chevron → jumps launch at `Tuning.superSneakersJumpMult` ×1.25 velocity (≈1.56× apex) for
+  `superSneakersDuration` 8 s. **Determinism:** added by RE-BANDING pattern 7's existing single
+  `rng.unit()` (shield<0.35 / magnet<0.70 / doubler<0.88 / sneakers else) — **zero new RNG
+  calls**, so `PatternOrderTests` count array `[…,7:2,…]` is unchanged and the obstacle geometry
+  is byte-identical (only the pickup KIND in pattern-7 slots shifts). `DailyChallenge.layoutVersion`
+  **2→3** (consumed the pre-armed `0xB51F…ED2F`); goldens re-pinned in DailyChallengeTests +
+  MissionsTests; explicit v1/v2 pins kept; fresh **layoutVersion 4 pre-arm = `0x2E28_5014_7596_8B7D`**.
+  **Bot-safe by construction:** the Autopilot ignores all pickups and never collects one, so the
+  buff is never active in the 200-seed soak — its air-slam arc model + `ArcCollectionTests` stay on
+  the base jump. Ballistic gem-arc/ring placement deliberately never reads the buff (over-clears,
+  never under-places). Core: `superSneakersT` timer (refresh, no-stack; preserved on revive like
+  the other earned timers; cleared in reset), `launchVelocity` helper gates `jump()` + the buffered
+  branch, `.sneakersEnded` edge, `snapshot.sneakersRemaining`, `debugActivateSuperSneakers`. Render:
+  amber double-chevron pickup mesh + pickup burst + snapshot-driven amber FEET sparks (the identity
+  trail stays `skinTrailColor` — decree 1), prewarm. HUD: depletion ring (`arrow.up.circle.fill`).
+  Catalog: `PowerUpsView` row (timing from Tuning). `GameView`: pickup popup + sound (**reuses
+  `.boostStart`** — adversarial-review LOW, deferred: a dedicated SFX would remove the shared-sound
+  ambiguity with Overdrive), `PR_SNEAKERS` screenshot hook. Verified: **SPM 164/164** (200-seed bot
+  green), **Mac 171 unit + 11 XCUITest**, on-sim (`reports/shots/v15/sneakers_active_*.png` — active
+  ring + amber sparks across Orbital Drift). Adversarial 4-lens review: 0 CRITICAL/HIGH/MEDIUM.
+
 ### ▶ RESUME HERE (next session)
-Owner paused to continue on a faster model. All committed to `main`, NOT pushed. Last verified:
-SPM 162/162 (incl. 200-seed bot), Mac `xcodebuild test` 178/178. **Continue with the deferred
-backlog** (owner said "keep working on what's next, push at the end"):
-1. New power-ups: **Super Sneakers** (higher-jump in-run pickup — NOTE: a new TRACK pickup touches
-   the spawner/patterns → `DailyChallenge.layoutVersion` 2→3 bump + bot re-verify + golden re-pin,
-   pre-armed golden at 0xB51F_E337_DB06_ED2F), plus pre-run consumables **Head Start** / **Score
-   Booster** and a **Mystery Box** coin gacha (shop work).
-2. Replenish slow-mo via the **Shop** too (currently only level-up + starting 2) — a coin-priced pack.
-3. Per-world themed music (`Synth.beds` 12-entry table — Synth.swift is pure/Linux-tested).
-4. Gameplay difficulty / slide→jump fairness pass (protected sim — layoutVersion bump; best after
-   on-device play).
+Continuing the deferred power-up backlog on Fable 5 (ultracode). All committed to `main`, NOT
+pushed. Last verified: **SPM 164/164** (incl. 200-seed bot), **Mac 171 unit + 11 XCUITest**.
+Remaining backlog (owner said "keep working on what's next, push at the end"):
+1. ~~**Super Sneakers** (higher-jump in-run pickup)~~ **DONE (Phase 5a above)** — layoutVersion is now
+   3; next pre-arm is 4 (`0x2E28_5014_7596_8B7D`).
+2. **NEXT: pre-run consumables** — **Head Start** (launch with a few seconds of Overdrive boost;
+   leaderboard-safe, does NOT route through `fromWorld`/`usedCheckpoint`) + **Score Booster** (run-
+   scoped payout multiplier — implement as a fair, honest variant; see decision note). No spawner/RNG
+   touch → no layoutVersion bump. Needs a lightweight pre-run loadout arm UI + consume in `beginRun`.
+3. **Shop coin-spend items**: **Mystery Box** coin gacha (meta-side RNG, NOT the Core sim RNG — use
+   the `openFreeChest(reward:)` `Int.random`+override precedent), **slow-mo refill pack**, consumable
+   packs. Coin-spend (NOT IAP) — a new `ShopConsumables`/section using `coinPricePill` + `spendCoins`.
+4. Per-world themed music (`Synth.beds` 12-entry table — Synth.swift pure/Linux-tested; MUST keep
+   cycle-0 worlds 0/1/2 byte-identical per SynthTests goldens).
+5. Gameplay difficulty / slide→jump fairness pass (protected sim — layoutVersion bump; best after
+   on-device play). Still deferred.
 Then the **pre-push gate**: capture live `docs/screenshots/` golden-path set, then `git push`.
+- Deferred polish: dedicated Super Sneakers SFX (currently reuses `.boostStart`).
 Invariants to keep: iron rules 2/3/4 (no run-RNG/spawn change without a layoutVersion bump + bot
 green), decrees 1/2/6, Swift 6 @MainActor, zero binary assets. Verify every increment: SPM bot +
 Mac `xcodebuild test` + an on-sim screenshot (PR_SKIP_SPLASH / PR_WORLD / PR_SCREEN / PR_SHIELD /

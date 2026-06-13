@@ -205,6 +205,12 @@ final class GameModel {
         if ProcessInfo.processInfo.environment["PR_SHIELD"] == "1" {
             core.debugSpawn(.shield(d: core.distance + 5, lane: 1))
         }
+        // Debug: arm Super Sneakers (active HUD ring + amber rig sparks + higher jump) and drop one
+        // on the track. Combine with PR_WORLD / PR_AUTOPLAY (which start the run) so it's in play.
+        if ProcessInfo.processInfo.environment["PR_SNEAKERS"] == "1" {
+            core.debugSpawn(.superSneakers(d: core.distance + 6, lane: 1))
+            core.debugActivateSuperSneakers()
+        }
         // Debug/UITest: pin a true zero-run profile (first-run gate + FIRST RUN chip flows),
         // regardless of what earlier autoplay/CI cycles banked on this simulator.
         if ProcessInfo.processInfo.environment["PR_FIRSTRUN"] == "1" {
@@ -487,6 +493,9 @@ final class GameModel {
             case .chrono:
                 addPopup("SLOW-MO", color: Theme.color(0x9BF0FF), worldX: x)
                 synth.play(.frenzyEnd)   // falling whoosh: time dips into slow-mo
+            case .superSneakers:
+                addPopup("SUPER SNEAKERS", color: Theme.color(0xFF8A2B), worldX: x)
+                synth.play(.boostStart)  // reuse the energetic up-whoosh (spring-loaded leap)
             }
             flash(0.28)
         case let .shieldAbsorbed(x):
@@ -495,6 +504,8 @@ final class GameModel {
             synth.play(.chime)
         case .chronoEnded:
             synth.play(.frenzyStart)     // rising whoosh: time resumes
+        case .sneakersEnded:
+            break   // jump height + HUD ring restore are snapshot-driven; the depleting ring is the cue
         case .died:
             flash(0.5)
             synth.play(.crash)
