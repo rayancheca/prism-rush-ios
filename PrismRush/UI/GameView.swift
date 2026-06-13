@@ -942,19 +942,30 @@ struct GameView: View {
     /// SHIELD in the bottom-RIGHT — big, labelled, colour-coded, thumb-reachable in the bottom
     /// corners (the owner's "that tiny button in a rush is impossible" fix). Reads the store live (G3).
     private var deployControls: some View {
-        HStack(alignment: .bottom) {
+        // A deploy button shows ONLY when you actually hold a charge (owner: no dimmed dead buttons —
+        // zero clutter when there's nothing to deploy). Reads live at point of use (G3).
+        let slowMo = ProfileStore.shared.profile.slowMoCharges
+        let speedUp = ProfileStore.shared.profile.speedUpCharges
+        let shield = ProfileStore.shared.profile.shieldCharges
+        return HStack(alignment: .bottom) {
             VStack(spacing: 10) {
-                deployButton(kind: .slowMo, label: "SLOW-MO",
-                             charges: ProfileStore.shared.profile.slowMoCharges, live: model.canDeploySlowMo,
-                             id: "slowMoButton") { model.deploySlowMo() }
-                deployButton(kind: .speedUp, label: "SPEED UP",
-                             charges: ProfileStore.shared.profile.speedUpCharges, live: model.canDeploySpeedUp,
-                             id: "speedUpButton") { model.deploySpeedUp() }
+                if slowMo > 0 {
+                    deployButton(kind: .slowMo, label: "SLOW-MO",
+                                 charges: slowMo, live: model.canDeploySlowMo,
+                                 id: "slowMoButton") { model.deploySlowMo() }
+                }
+                if speedUp > 0 {
+                    deployButton(kind: .speedUp, label: "SPEED UP",
+                                 charges: speedUp, live: model.canDeploySpeedUp,
+                                 id: "speedUpButton") { model.deploySpeedUp() }
+                }
             }
             Spacer()
-            deployButton(kind: .shield, label: "SHIELD",
-                         charges: ProfileStore.shared.profile.shieldCharges, live: model.canDeployShield,
-                         id: "shieldButton") { model.deployShield() }
+            if shield > 0 {
+                deployButton(kind: .shield, label: "SHIELD",
+                             charges: shield, live: model.canDeployShield,
+                             id: "shieldButton") { model.deployShield() }
+            }
         }
     }
 
