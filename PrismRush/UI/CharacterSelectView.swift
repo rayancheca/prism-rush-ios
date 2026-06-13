@@ -40,7 +40,8 @@ struct CharacterSelectView: View {
                            onClose: { model.closeSheet() },
                            onCoins: { model.open(.shop) }) {
             VStack(spacing: Theme.Space.l) {
-                heroSection
+                carousel
+                pageDots
                 nextUnlockRow
                 ForEach([Skin.Rarity.common, .rare, .epic, .legendary], id: \.rawValue) { rarity in
                     raritySection(rarity)
@@ -66,7 +67,8 @@ struct CharacterSelectView: View {
         }
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: toast)
         .onAppear {
-            if let initialFocus { focusedID = initialFocus }   // shop-routed: stage THAT skin
+            // The carousel needs a concrete page — default to the shop-routed skin, else equipped.
+            if focusedID == nil { focusedID = initialFocus ?? ProfileStore.shared.equippedSkinID }
             newThisVisit = ProfileStore.shared.profile.ownedSkins
                 .subtracting(ProfileStore.shared.profile.seenSkins)
             ProfileStore.shared.markSkinsSeen()   // clears the nav badge-dot + future NEW badges
@@ -74,16 +76,35 @@ struct CharacterSelectView: View {
         .onDisappear { closeTask?.cancel() }      // a dismissed sheet must never close its successor
     }
 
-    // MARK: the stage
+    // MARK: the stage — a swipeable carousel through ALL characters (C3)
 
-    private var heroSection: some View {
-        let skin = focusedSkin
-        // Locked focus stages the 0.6-opacity tease (v1.4) — read live at point of use (G3).
-        let locked = !ProfileStore.shared.profile.ownedSkins.contains(skin.id)
+    /// The big hero card is now a paged slider (owner C3): swipe through every character — owned and
+    /// locked, all rarities — each showing its unlock requirement + a progress bar toward it. Modern
+    /// paging ScrollView (`scrollPosition(id:)`) so a swipe updates `focusedID` and a grid/shelf tap
+    /// scrolls the carousel to that skin. `containerRelativeFrame` makes each page exactly one width.
+    private var carousel: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: 0) {
+                ForEach(SkinCatalog.all) { skin in
+                    carouselPage(skin)
+                        .containerRelativeFrame(.horizontal)
+                        .id(skin.id)
+                }
+            }
+            .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.paging)
+        .scrollPosition(id: $focusedID, anchor: .center)
+        .scrollClipDisabled()                  // let the focused card's glow/aura breathe past edges
+        .frame(height: 372)
+    }
+
+    private func carouselPage(_ skin: Skin) -> some View {
+        // Per-page state reads live off the store at point of use (G3 — no snapshot let).
+        let owned = ProfileStore.shared.profile.ownedSkins.contains(skin.id)
         return VStack(spacing: Theme.Space.s) {
-            CharacterHeroStage(skin: skin, height: 192, showsNamePill: false, locked: locked)
+            CharacterHeroStage(skin: skin, height: 176, showsNamePill: false, locked: !owned)
                 .frame(maxWidth: .infinity)
-                .id(skin.id)   // crossfade between characters, not in-place morph
             HStack(spacing: Theme.Space.s) {
                 Text(skin.name)
                     .typeScale(.title)
@@ -91,21 +112,93 @@ struct CharacterSelectView: View {
                 rarityChip(skin.rarity)
             }
             Text(skin.flavor)
-                .typeScale(.body)
+                .typeScale(.caption)
                 .italic()
                 .foregroundStyle(Theme.Role.textSecondary)
                 .multilineTextAlignment(.center)
-            stateButton
-                .padding(.top, Theme.Space.xs)
+                .lineLimit(2)
+                .frame(height: 30)
+            stateButton(skin)
+            unlockProgress(skin)
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Space.m)
+        .padding(.horizontal, Theme.Space.s)
         .neonCard(radius: Theme.Radius.l)
+        .padding(.horizontal, Theme.Space.l)   // breathing room between adjacent pages
     }
 
-    /// The single commitment control. Label + action both derive from the focused skin's state.
-    private var stateButton: some View {
-        let skin = focusedSkin
+    /// A slim position indicator under the carousel: one dot per character, coloured by rarity, the
+    /// current page enlarged + bright. Communicates "all characters, across every rarity" + where
+    /// you are in the slider at a glance.
+    private var pageDots: some View {
+        HStack(spacing: 3) {
+            ForEach(SkinCatalog.all) { skin in
+                Circle()
+                    .fill(rarityColor(skin.rarity))
+                    .frame(width: 5, height: 5)
+                    .scaleEffect(focusedSkin.id == skin.id ? 1.7 : 1)
+                    .opacity(focusedSkin.id == skin.id ? 1 : 0.35)
+            }
+        }
+        .animation(reduceMotion ? nil : .spring(duration: 0.3), value: focusedID)
+        .accessibilityHidden(true)
+    }
+
+    /// Progress toward a locked skin's gate (owner C3 "a progression of the next unlock"): a labelled
+    /// bar showing how close the player is. Owned/free/iap skins show nothing (premium routes via the
+    /// state button). All reads are live off the store at point of use (G3).
+    @ViewBuilder private func unlockProgress(_ skin: Skin) -> some View {
+        if !ProfileStore.shared.profile.ownedSkins.contains(skin.id),
+           let p = unlockFraction(skin) {
+            VStack(spacing: 4) {
+                ProgressView(value: p.fraction)
+                    .progressViewStyle(.linear)
+                    .tint(p.fraction >= 1 ? Theme.Role.reward : rarityColor(skin.rarity))
+                    .frame(maxWidth: 200)
+                Text(p.label)
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(p.fraction >= 1 ? Theme.Role.reward : Theme.Role.textTertiary)
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    /// Numeric unlock progress (fraction 0…1 + a human label) for the gates that have a measurable
+    /// path: coins, level (XP), achievement tiers, daily-challenge days. iap returns nil (no bar).
+    private func unlockFraction(_ skin: Skin) -> (fraction: Double, label: String)? {
+        let profile = ProfileStore.shared.profile
+        switch skin.unlock {
+        case .free, .iap:
+            return nil
+        case .coins(let c):
+            let have = profile.coins
+            return (min(1, Double(have) / Double(max(1, c))),
+                    "\(have.formatted()) / \(c.formatted()) coins")
+        case .level(let n):
+            let need = XPCurve.cumulativeXP[min(n, XPCurve.maxLevel) - 1]
+            let have = profile.totalXP
+            return (min(1, Double(have) / Double(max(1, need))),
+                    have >= need ? "Level \(n) reached" : "\((need - have).formatted()) XP to level \(n)")
+        case .achievement(let id, let tier):
+            guard let m = MissionCatalog.mission(id),
+                  case .lifetimeTiered(let targets, _) = m.scope,
+                  tier >= 1, tier <= targets.count else { return nil }
+            let target = targets[tier - 1]                                  // Double metric target
+            let have = min(profile.missionProgress[id] ?? 0, target)
+            return (target <= 0 ? 1 : min(1, have / target),
+                    "\(Int(have).formatted()) / \(Int(target).formatted())")
+        case .challengeDays(let n):
+            let have = profile.challengeDaysPlayed.count
+            return (min(1, Double(have) / Double(max(1, n))),
+                    "\(min(have, n)) / \(n) daily challenges")
+        }
+    }
+
+    /// The single commitment control. Label + action both derive from the skin's state.
+    private func stateButton(_ skin: Skin) -> some View {
         let owned = ProfileStore.shared.profile.ownedSkins.contains(skin.id)
         // Equipped = the RESOLVED truth, not raw `selectedSkin` (AUDIT D3-1): an unowned
         // selection must read BUY/requirement (routable), never a disabled EQUIPPED dead-end.
