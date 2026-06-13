@@ -89,6 +89,7 @@ final class RealityRenderer: RendererPort {
     private var lastDt: Float = 1 / 60      // wall-clock dt from advanceVisuals (runs before sync)
     private var camX: Float = 0
     private var camXV: Float = 0            // lateral-follow spring velocity (lag + overshoot on swipes)
+    private var camLift: Float = 0          // smoothed vertical follow for high/boots jumps (v1.6)
     private var slideDip: Float = 0         // smoothed 0→1 camera ground-drop while sliding (the P0 read)
 
     // Pose-extras state. The snapshot carries no velocities, so lateral/vertical speed is estimated
@@ -265,9 +266,16 @@ final class RealityRenderer: RendererPort {
         let shaking = !reduceMotion && shake > 0
         let shakeX = shaking ? Float.random(in: -1...1) * shake * 0.55 : 0
         let shakeY = shaking ? Float.random(in: -1...1) * shake * 0.55 : 0
-        let cp = SIMD3<Float>(camX + shakeX, 5.1 - dropY + shakeY, 9.6 - (reduceMotion ? 0 : slideDip * 0.8))
+        // Vertical follow (v1.6): when a jump carries the player ABOVE a normal apex (~2.82) — i.e. a
+        // Super Sneakers leap — the eye + look-at rise with them so they stay framed instead of flying
+        // off the top of the screen (the owner's "camera should follow you up"). Threshold sits just
+        // past the normal apex, so ordinary jumps are untouched; smoothed, and returns to 0 on landing.
+        let liftTarget = min(2.0, max(0, Float(snap.playerY) - 2.9))
+        camLift += (liftTarget - camLift) * 0.25
+        let cp = SIMD3<Float>(camX + shakeX, 5.1 - dropY + camLift * 0.6 + shakeY,
+                              9.6 - (reduceMotion ? 0 : slideDip * 0.8))
         camera.position = cp
-        let lookY: Float = 1.3 - (reduceMotion ? 0 : slideDip * 0.85)
+        let lookY: Float = 1.3 + camLift - (reduceMotion ? 0 : slideDip * 0.85)
         camera.look(at: SIMD3<Float>(px * 0.3, lookY, -5), from: cp, relativeTo: nil)
         // Slight z-roll folded into the look-at while sliding (smoothed both ways).
         let rollTarget: Float = (!reduceMotion && snap.sliding && snap.mode == .play) ? -0.06 : 0
@@ -668,6 +676,7 @@ final class RealityRenderer: RendererPort {
         slideRoll = 0
         slideDip = 0
         camXV = 0
+        camLift = 0
         vxEst = 0; vyEst = 0
         lastPlayerX = 0; lastPlayerY = 0   // runs start at lane centre, grounded
         jumpStretchT = 0; landSquashT = 0
@@ -739,8 +748,12 @@ final class RealityRenderer: RendererPort {
         camera.look(at: SIMD3<Float>(0, 1.3, -5), from: camera.position, relativeTo: nil)
         root.addChild(camera)
 
-        backdrop = ModelEntity(mesh: .generatePlane(width: 140, height: 90), materials: [UnlitMaterial(color: .black)])
-        backdrop.position = SIMD3<Float>(0, 12, -65)
+        // Pushed back -65 → -95 (v1.6, owner): the backdrop wall is the visible horizon, and at -65
+        // it cut the track off mid-screen. Further back, more of the (already-drawn) ground/rungs/
+        // decor recede into the distance before the wall — a longer track. Enlarged ~1.45× so it
+        // still fills the wider/taller frustum at the greater distance (no edges in frame).
+        backdrop = ModelEntity(mesh: .generatePlane(width: 200, height: 130), materials: [UnlitMaterial(color: .black)])
+        backdrop.position = SIMD3<Float>(0, 12, -95)
         root.addChild(backdrop)
 
         let ground = ModelEntity(mesh: .generatePlane(width: 16, depth: 260), materials: [UnlitMaterial(color: UIColor(white: 0.02, alpha: 1))])

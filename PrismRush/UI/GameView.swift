@@ -941,6 +941,18 @@ struct GameView: View {
         }
     }
 
+    /// Top-corner control glyph (mute / pause). 48 pt (was 38) with a bigger icon — easier to reach
+    /// and hit on a large phone (owner), kept top-trailing where pause is conventionally expected.
+    private func cornerControlIcon(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.9))
+            .frame(width: 48, height: 48)
+            .background(.ultraThinMaterial, in: Circle())
+            .overlay(Circle().strokeBorder(.white.opacity(0.16)))
+            .contentShape(Circle())
+    }
+
     /// The three banked deploy buttons (v1.6): SLOW-MO + SPEED UP stacked in the bottom-LEFT, and
     /// SHIELD in the bottom-RIGHT — big, labelled, colour-coded, thumb-reachable in the bottom
     /// corners (the owner's "that tiny button in a rush is impossible" fix). Reads the store live (G3).
@@ -1055,25 +1067,15 @@ struct GameView: View {
             // gear); this cluster is for play/over only.
             if model.core.snapshot.mode != .menu {
                 VStack {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 12) {
                         Spacer()
                         Button { model.toggleMute() } label: {
-                            Image(systemName: model.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.85))
-                                .frame(width: 38, height: 38)
-                                .background(.ultraThinMaterial, in: Circle())
-                                .overlay(Circle().strokeBorder(.white.opacity(0.14)))
+                            cornerControlIcon(model.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                         }
                         .accessibilityLabel(model.muted ? "Unmute" : "Mute")
                         if model.core.snapshot.mode == .play {
                             Button { model.togglePause() } label: {
-                                Image(systemName: "pause.fill")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.85))
-                                    .frame(width: 38, height: 38)
-                                    .background(.ultraThinMaterial, in: Circle())
-                                    .overlay(Circle().strokeBorder(.white.opacity(0.14)))
+                                cornerControlIcon("pause.fill")
                             }
                             .accessibilityIdentifier("pauseButton")
                             .accessibilityLabel("Pause")
@@ -1082,7 +1084,7 @@ struct GameView: View {
                     Spacer()
                 }
                 .padding(.top, 14)
-                .padding(.trailing, 16)
+                .padding(.trailing, 14)
             }
 
             switch model.core.snapshot.mode {
