@@ -190,6 +190,11 @@ final class GameModel {
                 $0.achievementTier["ach.worlds"] = 0
             }
         }
+        // PR_SKIN=<id>: force-equip a skin (owned) so an autoplay run renders that character's
+        // rig — the in-run verification side of the crest/aura screenshot hooks (decree 2).
+        if let s = ProcessInfo.processInfo.environment["PR_SKIN"], !s.isEmpty {
+            ProfileStore.shared.mutate { $0.ownedSkins.insert(s); $0.selectedSkin = s }
+        }
         // One-shot launch reads (not a body snapshot — G3 applies to SwiftUI body observation).
         let saved = ProfileStore.shared.profile
         synth.muted = saved.muted
@@ -233,7 +238,12 @@ final class GameModel {
         }
         // Debug: jump straight to a meta screen for screenshots.
         switch ProcessInfo.processInfo.environment["PR_SCREEN"] {
-        case "characters": activeSheet = .characters
+        case "characters":
+            // PR_FOCUS=<skinID> opens the character screen pre-focused on that skin (screenshot hook).
+            if let f = ProcessInfo.processInfo.environment["PR_FOCUS"], !f.isEmpty {
+                pendingCharacterFocus = f
+            }
+            activeSheet = .characters
         case "shop": activeSheet = .shop
         case "levels": activeSheet = .levels
         case "stats": activeSheet = .stats

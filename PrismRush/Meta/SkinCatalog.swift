@@ -9,6 +9,21 @@ import Foundation
 struct Skin: Identifiable, Sendable {
     enum BodyShape: Sendable { case sphere, cube, crystal }
     enum PupilStyle: Sendable { case dot, wide, slit, glint }
+    /// Cosmetic head adornment (v1.6) — the visible rarity ladder (owner C2): common runners wear
+    /// `.none` (basic shape + colour), rares gain a light creature feature (ears/fin/floppy), epics
+    /// a bold crest (horns/crown), legendaries a signature crest PLUS an orbiting aura ring. Drawn
+    /// identically by the Canvas swatch and the RealityKit rig (decree 2 — previews never lie) and
+    /// in the skin's authored `antennaHex`, so it reads as part of the character. Purely visual:
+    /// never the hitbox, never an advantage (decree — characters stay cosmetic).
+    enum Crest: Sendable, Equatable {
+        case none          // common — plain head, antenna only
+        case ears          // upright triangular "cat" ears flanking the antenna
+        case floppy        // rounded drooping "dog/bunny" ears at the sides
+        case fin           // a sawtooth dorsal mohawk along the crown
+        case horns         // two angled horns sweeping up-and-out
+        case crown         // a ring of points around the crown (royalty)
+        case halo          // a glowing ring floating above the head
+    }
     enum Rarity: Int, Sendable, Comparable {
         case common = 0, rare, epic, legendary
         // Raw-typed enums do NOT synthesize Comparable — rawValue order IS the rarity ladder.
@@ -40,12 +55,31 @@ struct Skin: Identifiable, Sendable {
     var pupilStyle: PupilStyle = .dot
     var antennaHeightScale: Float = 1
     var antennaTipScale: Float = 1
+    /// Cosmetic crest (v1.6) — default `.none` keeps every legacy skin's silhouette unchanged
+    /// until explicitly themed below; assigned to express the rarity ladder.
+    var crest: Crest = .none
+    /// Legendary signature aura (v1.6): a slow orbiting glow ring in the trail hue. Only the
+    /// four legendaries set it — the unmistakable "this one is special" tell. Cosmetic only.
+    var hasAura: Bool = false
     var idle: Idle = Idle()
     let rarity: Rarity
     let unlock: Unlock
 
     var premium: Bool { unlock == .iap }                                // back-compat
     var cost: Int { if case .coins(let c) = unlock { c } else { 0 } }   // back-compat
+
+    /// Crest colour (v1.6): the authored antenna hue — the character's accent — UNLESS it is too
+    /// dark to read as an adornment against the dark UI (Mono's 0x0A0A14, Fang's 0x14141E near-black
+    /// antennas), in which case the body hue carries it. The crest is the rarity *tell*; it must
+    /// always be visible, but still belong to the character. Pure of state — both render layers read
+    /// it, so swatch and rig agree (decree 2).
+    var crestHex: UInt32 {
+        let r = Double((antennaHex >> 16) & 0xFF)
+        let g = Double((antennaHex >> 8) & 0xFF)
+        let b = Double(antennaHex & 0xFF)
+        let luminance = 0.299 * r + 0.587 * g + 0.114 * b
+        return luminance < 40 ? bodyHex : antennaHex
+    }
 }
 
 enum SkinCatalog {
@@ -55,7 +89,7 @@ enum SkinCatalog {
     /// savings goal (R4). The v1.4 eight take the parking-lot rungs (2,000/3,500/5,000/7,500),
     /// the new level beats (8/18), `ach.gems` tier 2, and the 14-day challenge pull.
     /// Rarity census: Common 4 · Rare 9 · Epic 7 · Legendary 4.
-    static let all: [Skin] = [
+    private static let roster: [Skin] = [
         // COMMON ──────────────────────────────────────────────────────────────────────────────
         Skin(id: "default", name: "Prism", flavor: "The first runner. Every world remembers it.",
              bodyHex: 0x00F5FF, antennaHex: 0xFF2BD6, isPrismatic: true,
@@ -198,6 +232,37 @@ enum SkinCatalog {
              idle: .init(bobSpeed: 0.7, bobAmp: 0.02, blinkMin: 6.0, blinkMax: 9.0, sway: 0.05),
              rarity: .legendary, unlock: .challengeDays(14)),
     ]
+
+    /// The crest/aura theming layer (v1.6, owner C2) applied over the authored roster so the
+    /// rarity ladder is VISIBLE: common runners stay plain, rares gain a light creature feature,
+    /// epics a bold crest, legendaries a signature crest plus an orbiting aura. Kept as an id-keyed
+    /// overlay (not inlined into 20 declarations) so the look stays auditable in one place and the
+    /// legacy colour/cost/shape pins stay provably untouched. Catalog order + count are preserved.
+    static let all: [Skin] = roster.map { skin in
+        var s = skin
+        s.crest = crestByID[skin.id] ?? .none
+        s.hasAura = auraIDs.contains(skin.id)
+        return s
+    }
+
+    /// Crest assignment — the rarity ladder, by id (commons omitted = `.none`, basic shape/colour):
+    /// rare → light creature feature (ears/floppy/fin); epic → bold crest (horns/crown);
+    /// legendary → signature crest (crown/halo/horns), paired with an aura below.
+    private static let crestByID: [String: Skin.Crest] = [
+        // RARE — light creature features
+        "void": .ears, "blossom": .ears, "fang": .ears,
+        "mono": .floppy, "drift": .floppy,
+        "toxic": .fin, "circuit": .fin, "tide": .fin, "facet": .fin,
+        // EPIC — bold crests
+        "midas": .crown, "nebula": .crown, "tempo": .crown,
+        "shard": .horns, "thorn": .horns, "golem": .horns, "wisp": .horns,
+        // LEGENDARY — signature crests (each also wears an aura)
+        "monarch": .crown, "aurora": .halo, "vigil": .halo, "eclipse": .horns,
+    ]
+
+    /// The four legendaries — the only skins with an orbiting aura ring (the "this one is special"
+    /// tell). Purely cosmetic; never an in-run advantage (characters stay cosmetic by decree).
+    private static let auraIDs: Set<String> = ["aurora", "eclipse", "monarch", "vigil"]
 
     static func skin(_ id: String) -> Skin { all.first { $0.id == id } ?? all[0] }
 

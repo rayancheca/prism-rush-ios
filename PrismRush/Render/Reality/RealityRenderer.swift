@@ -18,6 +18,9 @@ final class RealityRenderer: RendererPort {
     private var antenna: ModelEntity!
     private var antennaTip: ModelEntity!
     private var shoes: [ModelEntity] = []   // amber boots shown on the feet while Super Sneakers is active
+    private var crestParts: [ModelEntity] = []  // cosmetic head crest meshes (v1.6 rarity ladder)
+    private var auraRing: ModelEntity?      // legendary orbiting aura torus (v1.6); spun in advanceVisuals
+    private var auraSpin: Float = 0         // aura ring rotation phase
     private var backdrop: ModelEntity!
     private var rungs: [ModelEntity] = []
     private var laneLines: [ModelEntity] = []
@@ -57,6 +60,9 @@ final class RealityRenderer: RendererPort {
     private var skinPupil: Skin.PupilStyle = .dot
     private var skinAntennaHeight: Float = 1
     private var skinAntennaTip: Float = 1
+    private var skinCrest: Skin.Crest = .none       // cosmetic head crest (v1.6 rarity ladder)
+    private var skinCrestHex: UInt32 = 0xFF2BD6     // crest colour (antenna hue, or body if too dark)
+    private var skinHasAura = false                 // legendary orbiting aura ring (v1.6)
     private var skinSway: Float = 0                 // radians; set per skin by applySkin
     /// Idle sway angular speed (rad/s) = `idle.bobSpeed · 2π · 0.8` — the EXACT formula the
     /// preview animates (`CharacterSwatch.drawAntenna`), so Tempo's metronome whip reads at
@@ -622,6 +628,17 @@ final class RealityRenderer: RendererPort {
             whip = 0
             whipVel = 0
         }
+        // Legendary aura: spin the tilted ring about world-Y so its node orbits the body (RM holds
+        // it at rest). Composed spin·tilt; cheap, one transform write, only when a legendary equips.
+        if let auraRing {
+            if !reduceMotion {
+                auraSpin = (auraSpin + Float(dt) * 1.1).truncatingRemainder(dividingBy: 2 * .pi)
+                auraRing.orientation = simd_quatf(angle: auraSpin, axis: SIMD3<Float>(0, 1, 0)) * Self.auraTilt
+            } else if auraSpin != 0 {
+                auraRing.orientation = Self.auraTilt   // one-time rest-pose restore (RM toggled mid-run)
+                auraSpin = 0
+            }
+        }
         particles.step(Float(dt), speed: lastSpeed)
         stepSkids(Float(dt))
         // Ring-pass shockwave: grow ~2× over its life while scrolling past with the world.
@@ -682,6 +699,9 @@ final class RealityRenderer: RendererPort {
         skinPupil = skin.pupilStyle
         skinAntennaHeight = skin.antennaHeightScale
         skinAntennaTip = skin.antennaTipScale
+        skinCrest = skin.crest
+        skinCrestHex = skin.crestHex
+        skinHasAura = skin.hasAura
         skinSway = Float(skin.idle.sway)
         skinSwaySpeed = skin.idle.bobSpeed * 2 * .pi * 0.8   // preview parity — see skinSwaySpeed doc
         skinBlinkMin = skin.idle.blinkMin
@@ -702,6 +722,11 @@ final class RealityRenderer: RendererPort {
         let antennaMat = UnlitMaterial(color: uiHex(skinAntennaHex))
         antenna.model?.materials = [antennaMat]
         antennaTip.model?.materials = [antennaMat]
+        // Crest pins to the crest hue (antenna, or body if the antenna is too dark) — it reads as
+        // part of the character, exactly as the swatch strokes it (decree 2). The aura ring keeps
+        // its own trail-hue seed.
+        let crestMat = UnlitMaterial(color: uiHex(skinCrestHex))
+        for part in crestParts { part.model?.materials = [crestMat] }
     }
 
     // MARK: scene construction
@@ -774,6 +799,10 @@ final class RealityRenderer: RendererPort {
         antennaTip?.removeFromParent()
         for shoe in shoes { shoe.removeFromParent() }
         shoes.removeAll()
+        for part in crestParts { part.removeFromParent() }
+        crestParts.removeAll()
+        auraRing?.removeFromParent()
+        auraRing = nil
         buildCharacter()
     }
 
@@ -859,8 +888,92 @@ final class RealityRenderer: RendererPort {
             playerRig.addChild(shoe)
             shoes.append(shoe)
         }
+        buildCrest()
+        buildAura()
         swayApplied = false   // fresh rig is at rest pose by construction
     }
+
+    /// Cosmetic head crest (v1.6 rarity ladder) — built in the authored antenna hue (recolored by
+    /// `applyCharacterColors`) and the SAME taxonomy the swatch draws (decree 2: previews never lie).
+    /// Every piece parents to the rig so it rides the body; purely visual (never the hitbox).
+    private func buildCrest() {
+        guard skinCrest != .none else { return }
+        let mat = UnlitMaterial(color: uiHex(skinCrestHex))
+        let crestY: Float = skinBodyShape == .crystal ? 1.30 : 1.18
+
+        func spike(_ halfBase: Float, _ height: Float, at p: SIMD3<Float>,
+                   lean: Float = 0, flatZ: Float = 1) -> ModelEntity {
+            let m = ModelEntity(mesh: ProceduralMesh.pyramid(halfBase: halfBase, height: height),
+                                materials: [mat])
+            m.position = p
+            if lean != 0 { m.orientation = simd_quatf(angle: lean, axis: SIMD3<Float>(0, 0, 1)) }
+            if flatZ != 1 { m.scale = SIMD3<Float>(1, 1, flatZ) }
+            return m
+        }
+        func horizontalTorus(_ major: Float, _ minor: Float, at p: SIMD3<Float>) -> ModelEntity {
+            let m = ModelEntity(mesh: ProceduralMesh.torus(major: major, minor: minor),
+                                materials: [mat])
+            m.position = p
+            m.orientation = simd_quatf(angle: .pi / 2, axis: SIMD3<Float>(1, 0, 0))   // → horizontal
+            return m
+        }
+
+        switch skinCrest {
+        case .none:
+            break
+        case .ears:                                            // upright cat ears flanking the antenna
+            for s in [Float(-1), 1] {
+                crestParts.append(spike(0.11, 0.36, at: SIMD3<Float>(s * 0.26, crestY, 0),
+                                        lean: -s * 0.18, flatZ: 0.5))
+            }
+        case .floppy:                                          // drooping dog/bunny ears at the sides
+            for s in [Float(-1), 1] {
+                let ear = ModelEntity(mesh: .generateSphere(radius: 0.17), materials: [mat])
+                ear.position = SIMD3<Float>(s * 0.52, 0.92, 0)
+                ear.scale = SIMD3<Float>(0.7, 1.3, 0.5)
+                crestParts.append(ear)
+            }
+        case .fin:                                             // sawtooth dorsal mohawk, tallest mid
+            for (x, h) in [(Float(-0.20), Float(0.24)), (0, 0.42), (0.20, 0.28)] {
+                crestParts.append(spike(0.11, h, at: SIMD3<Float>(x, crestY, 0), flatZ: 0.4))
+            }
+        case .horns:                                           // two horns sweeping up and out
+            for s in [Float(-1), 1] {
+                crestParts.append(spike(0.10, 0.42, at: SIMD3<Float>(s * 0.22, crestY, 0),
+                                        lean: -s * 0.5, flatZ: 0.6))
+            }
+        case .crown:                                           // a ring of points — royalty
+            crestParts.append(horizontalTorus(0.30, 0.045, at: SIMD3<Float>(0, crestY, 0)))
+            for i in 0..<5 {
+                let ang = Float(i) / 5 * 2 * .pi
+                crestParts.append(spike(0.06, 0.18,
+                                        at: SIMD3<Float>(cos(ang) * 0.30, crestY + 0.02, sin(ang) * 0.30)))
+            }
+        case .halo:                                            // a ring floating above the head
+            crestParts.append(horizontalTorus(0.34, 0.05, at: SIMD3<Float>(0, crestY + 0.55, 0)))
+        }
+        for part in crestParts { playerRig.addChild(part) }
+    }
+
+    /// Legendary aura (v1.6): a tilted orbit ring in the trail hue with a bright node, spun about Y
+    /// in `advanceVisuals`. The unmistakable "this one is special" tell — cosmetic, never an
+    /// advantage (characters stay cosmetic by decree). Mirrors the swatch's orbiting aura.
+    private func buildAura() {
+        guard skinHasAura else { return }
+        let ring = ModelEntity(mesh: ProceduralMesh.torus(major: 0.95, minor: 0.05,
+                                                          majorSeg: 32, minorSeg: 8),
+                               materials: [UnlitMaterial(color: skinTrailColor)])
+        ring.position = SIMD3<Float>(0, 0.7, 0)
+        ring.orientation = Self.auraTilt
+        let node = ModelEntity(mesh: .generateSphere(radius: 0.09), materials: [UnlitMaterial(color: cWhite)])
+        node.position = SIMD3<Float>(0.95, 0, 0)   // on the ring (local plane) → orbits as the ring spins
+        ring.addChild(node)
+        playerRig.addChild(ring)
+        auraRing = ring
+    }
+
+    /// The aura ring's rest tilt: nearly horizontal (orbit), tipped ~22° toward the chase camera.
+    private static let auraTilt = simd_quatf(angle: .pi / 2 - 0.38, axis: SIMD3<Float>(1, 0, 0))
 
     private func makeEntity(_ kind: EntityKind) -> Entity {
         switch kind {

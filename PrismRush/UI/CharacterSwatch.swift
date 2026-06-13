@@ -98,6 +98,12 @@ struct AnimatedCharacterSwatch: View {
                  with: .radialGradient(Gradient(colors: [bodyColor.opacity(0.45), .clear]),
                                        center: center, startRadius: bodyR * 0.4, endRadius: bodyR * 1.6))
 
+        // Legendary aura (v1.6): an orbiting glow ring behind the figure — the unmistakable
+        // "this one is special" tell. Drawn before the body so it reads as a halo around it.
+        if skin.hasAura {
+            drawAura(&ctx, t: t, center: center, bodyR: bodyR)
+        }
+
         // Trail wisp behind everything but the glow: the same color the in-run wake, slide
         // ribbon, jump/land puffs, flow aura, and death shatter burn (Prism's rides the live
         // shimmer hue, exactly like its in-run trail). Drawn before the body so the puffs
@@ -108,6 +114,12 @@ struct AnimatedCharacterSwatch: View {
 
         // Antenna behind the body: stem + tip rotate around the stem base (per-skin sway).
         drawAntenna(&ctx, t: t, center: center, bodyR: bodyR, scale: scale)
+
+        // Crest (v1.6) behind the body so it roots into the head and the tips poke out the top —
+        // the visible rarity ladder (rare creature feature → epic bold crest → legendary signature).
+        if skin.crest != .none {
+            drawCrest(&ctx, center: center, bodyR: bodyR)
+        }
 
         // Body shape: sphere → circle, cube → rounded rect, crystal → vertical diamond.
         ctx.fill(bodyPath(center: center, bodyR: bodyR), with: .color(bodyColor))
@@ -232,6 +244,109 @@ struct AnimatedCharacterSwatch: View {
         ctx.fill(Path(ellipseIn: CGRect(x: tipCenter.x - tipR, y: tipCenter.y - tipR,
                                         width: tipR * 2, height: tipR * 2)),
                  with: .color(antennaColor))
+    }
+
+    /// The rarity-ladder crest (v1.6) — drawn in the authored `antennaHex` so it reads as part of
+    /// the character, with the SAME taxonomy the RealityKit rig builds (decree 2: previews never
+    /// lie). All geometry derives from `bodyR`; `headY` is the crown anchor per body shape.
+    private func drawCrest(_ ctx: inout GraphicsContext, center: CGPoint, bodyR: CGFloat) {
+        let tint = Theme.color(skin.crestHex)   // antenna hue, or body hue if the antenna is too dark
+        let headY = skin.bodyShape == .crystal ? center.y - bodyR * 1.02 : center.y - bodyR * 0.86
+
+        func triangle(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ color: Color) {
+            var p = Path()
+            p.move(to: a); p.addLine(to: b); p.addLine(to: c); p.closeSubpath()
+            ctx.fill(p, with: .color(color))
+        }
+
+        switch skin.crest {
+        case .none:
+            break
+        case .ears:   // upright cat ears flanking the antenna, with a darker inner ear
+            for side in [CGFloat(-1), 1] {
+                let bx = center.x + side * bodyR * 0.5
+                triangle(CGPoint(x: bx - bodyR * 0.22, y: headY + bodyR * 0.12),
+                         CGPoint(x: bx + bodyR * 0.22, y: headY + bodyR * 0.12),
+                         CGPoint(x: bx + side * bodyR * 0.12, y: headY - bodyR * 0.80), tint)
+                triangle(CGPoint(x: bx - bodyR * 0.10, y: headY + bodyR * 0.02),
+                         CGPoint(x: bx + bodyR * 0.10, y: headY + bodyR * 0.02),
+                         CGPoint(x: bx + side * bodyR * 0.08, y: headY - bodyR * 0.50),
+                         .black.opacity(0.28))
+            }
+        case .floppy: // rounded drooping dog/bunny ears hanging beside the head
+            for side in [CGFloat(-1), 1] {
+                let cx = center.x + side * bodyR * 0.84
+                let rect = CGRect(x: cx - bodyR * 0.26, y: center.y - bodyR * 0.52,
+                                  width: bodyR * 0.52, height: bodyR * 1.02)
+                ctx.fill(Path(ellipseIn: rect), with: .color(tint))
+                ctx.fill(Path(ellipseIn: rect.insetBy(dx: bodyR * 0.14, dy: bodyR * 0.22)),
+                         with: .color(.black.opacity(0.22)))
+            }
+        case .fin:    // a sawtooth dorsal mohawk across the crown, tallest in the middle
+            let heights: [CGFloat] = [0.50, 0.95, 0.62]
+            let n = heights.count
+            for i in 0..<n {
+                let fx = center.x + (CGFloat(i) - CGFloat(n - 1) / 2) * bodyR * 0.32
+                triangle(CGPoint(x: fx - bodyR * 0.17, y: headY + bodyR * 0.10),
+                         CGPoint(x: fx + bodyR * 0.17, y: headY + bodyR * 0.10),
+                         CGPoint(x: fx, y: headY - bodyR * heights[i]), tint)
+            }
+        case .horns:  // two horns sweeping up and out
+            for side in [CGFloat(-1), 1] {
+                let bx = center.x + side * bodyR * 0.42
+                triangle(CGPoint(x: bx - side * bodyR * 0.02, y: headY + bodyR * 0.10),
+                         CGPoint(x: bx + side * bodyR * 0.24, y: headY + bodyR * 0.10),
+                         CGPoint(x: bx + side * bodyR * 0.95, y: headY - bodyR * 0.85), tint)
+            }
+        case .crown:  // a ring of points with a connecting band — royalty
+            let span = bodyR * 1.2
+            let n = 5
+            ctx.fill(Path(roundedRect: CGRect(x: center.x - span / 2, y: headY - bodyR * 0.02,
+                                              width: span, height: bodyR * 0.16),
+                          cornerRadius: bodyR * 0.05), with: .color(tint))
+            for i in 0..<n {
+                let fx = center.x - span / 2 + span * CGFloat(i) / CGFloat(n - 1)
+                let h = (i == n / 2) ? bodyR * 0.62 : bodyR * 0.42
+                triangle(CGPoint(x: fx - bodyR * 0.10, y: headY),
+                         CGPoint(x: fx + bodyR * 0.10, y: headY),
+                         CGPoint(x: fx, y: headY - h), tint)
+            }
+        case .halo:   // a glowing ring floating above the head
+            let cy = headY - bodyR * 0.58
+            let rect = CGRect(x: center.x - bodyR * 0.70, y: cy - bodyR * 0.18,
+                              width: bodyR * 1.40, height: bodyR * 0.36)
+            ctx.stroke(Path(ellipseIn: rect.insetBy(dx: -bodyR * 0.06, dy: -bodyR * 0.06)),
+                       with: .color(tint.opacity(0.30)),
+                       style: StrokeStyle(lineWidth: max(2, bodyR * 0.18)))
+            ctx.stroke(Path(ellipseIn: rect), with: .color(tint),
+                       style: StrokeStyle(lineWidth: max(1.5, bodyR * 0.10)))
+        }
+    }
+
+    /// The legendary aura (v1.6): a tilted orbit ring in the trail hue with two nodes circling it,
+    /// brighter on the near (lower) pass. Pure of state — at `t == 0` the nodes freeze in place
+    /// (Reduce Motion / static grids show the ring, never a missing one). Mirrors the rig's torus.
+    private func drawAura(_ ctx: inout GraphicsContext, t: TimeInterval, center: CGPoint, bodyR: CGFloat) {
+        let tint = skin.trailHex.map { Theme.color($0) } ?? prismaticTint(at: t)
+        let a = bodyR * 1.5, b = bodyR * 0.55
+        let cy = center.y + bodyR * 0.22
+        let ringRect = CGRect(x: center.x - a, y: cy - b, width: a * 2, height: b * 2)
+        ctx.stroke(Path(ellipseIn: ringRect), with: .color(tint.opacity(0.18)),
+                   style: StrokeStyle(lineWidth: max(3, bodyR * 0.22)))   // soft underglow
+        ctx.stroke(Path(ellipseIn: ringRect), with: .color(tint.opacity(0.5)),
+                   style: StrokeStyle(lineWidth: max(2, bodyR * 0.10)))
+        for k in 0..<2 {
+            let theta = t * 1.1 + Double(k) * .pi
+            let x = center.x + CGFloat(cos(theta)) * a
+            let y = cy + CGFloat(sin(theta)) * b
+            let depth = (CGFloat(sin(theta)) + 1) / 2        // 0 far (top) … 1 near (bottom)
+            let r = bodyR * (0.11 + 0.07 * depth)
+            // node glow then core — a bright comet circling the body
+            ctx.fill(Path(ellipseIn: CGRect(x: x - r * 2, y: y - r * 2, width: r * 4, height: r * 4)),
+                     with: .color(tint.opacity(0.18 * (0.4 + depth))))
+            ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
+                     with: .color(tint.opacity(0.6 + 0.4 * depth)))
+        }
     }
 }
 
