@@ -38,12 +38,28 @@ All committed locally and built/tested green at each step (SPM 178/Linux; Mac 18
   human-unfair adjacency, per a 5-agent audit) + free-lane coin trail; RNG-neutral; **layoutVersion 5→6**
   (v6 goldens recomputed + cross-checked vs the pre-armed pin; v7 pre-armed); 200-seed bot + 12k soak green.
 - The Prism color-shift is the intentional prismatic shimmer (owner loves it — keep).
-- **HELD for owner playtest** (be-careful directive): broader obstacle-placement LOGIC rework (less
-  random/repetitive, fair progression by distance+world), coins tracing a safe lane THROUGH every
-  obstacle (largely already done via G1 + per-pattern gems; minor gaps remain e.g. pattern 8), and
-  **boots-higher-jump coin arcs** (some arcs at the boosted-jump height). Power-up taxonomy decision:
-  boots stay an instant grab-and-go pickup; deployables frozen at 3 (slow-mo/speed-up/shield); any new
-  power-up should be grab-and-go (no new buttons).
+- Power-up taxonomy decision (owner Q): boots stay an instant grab-and-go pickup; deployables frozen at
+  3 (slow-mo/speed-up/shield); any new power-up should be grab-and-go (no new buttons).
+
+### v1.6 round 3 (2026-06-13, owner awake — QA + world-select + App Store + placement)
+- **Adversarial QA pass** (20-agent workflow) → fixed 8/9 findings (`c56e97d`): Daily Rush deploy
+  fairness (deploys gated off challenge runs — decree 5), MysteryBox Reduce Motion, the can't-afford
+  red-border flash (deferred reset), HUD blink + world-banner Reduce Motion + a11y, MysteryBox Task
+  cancel, LoadoutStrip G3 shape. Deferred 1 LOW micro-opt.
+- **Deploy buttons** appear only when you hold a charge (`d89759a`, owner).
+- **World select** (`fa62267`): tapping a world now expands into a PLAY-confirm card (no straight-to-
+  gameplay); the menu chip reframed "WORLD 16…" → "▦ FURTHEST NN · NAME ›" so it reads as a Worlds
+  link, not the current world (resolves the chip-vs-Pulse-City-background mismatch; home scene is
+  correctly world 0). Hook PR_PLAYCONFIRM.
+- **App Store guide** (`5de3481`): `docs/APP_STORE_SETUP.md` — exhaustive zero-assumed-knowledge human-
+  gate walkthrough (enrollment/paid-agreement, App ID, app record, 7 IAPs, 2 leaderboards, privacy,
+  metadata, build/archive/upload/submit).
+- **Placement** (`50be115`, layoutVersion **6→7**): anti-repeat widened to the last TWO patterns (less
+  repetitive); continuous coin trail THROUGH pattern 8's double bars. Bot + soak green; PatternOrder
+  unchanged; goldens v7 (v8 pre-armed `0x2FC8_A9EA_C0B9_E30F`).
+- **STILL HELD for owner playtest:** boots-higher-jump coin arcs (needs live tuning of arc height/
+  tolerance so it feels like "collect everything on your jump", not "miss coins") + any deeper
+  curated-sequence design (best felt in real time).
 
 ---
 
