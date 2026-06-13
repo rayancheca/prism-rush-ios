@@ -490,8 +490,12 @@ final class RealityRenderer: RendererPort {
             }
             kickFOV()
         case let .shieldAbsorbed(x):
-            particles.burst(x: Float(x), y: 1.2, z: 0, color: cWhite, count: 40, power: 6.2, spread: 0.42, life: 0.7)
-            shake = max(shake, 0.8)
+            // Glass shatter: a big white shard burst + a cyan splinter layer, a hard shake, FOV kick —
+            // unmistakable that the shield just broke (v1.6).
+            particles.burst(x: Float(x), y: 1.2, z: 0, color: cWhite, count: 64, power: 7.6, spread: 0.5, life: 0.8, stretchZ: 1.8)
+            particles.burst(x: Float(x), y: 1.2, z: 0, color: uiHex(0x9BF0FF), count: 30, power: 5.6, spread: 0.62, life: 0.7)
+            shake = max(shake, 1.3)
+            kickFOV()
         case let .died(x):
             // First (colored) burst shatters in the skin's own color; the white flash stays global.
             particles.burst(x: Float(x), y: 1, z: 0, color: skinTrailColor, count: 120, power: 7.5, spread: 0.55, life: 1.2)

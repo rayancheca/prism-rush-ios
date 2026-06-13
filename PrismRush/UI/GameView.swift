@@ -123,6 +123,7 @@ final class GameModel {
     private(set) var popups: [Popup] = []
     private(set) var flashID = 0
     private(set) var flashStrength: Double = 0
+    private(set) var shieldBreakID = 0   // increments on a shield-absorb to fire the glass-crack overlay
     private(set) var bannerID = 0
     private(set) var bannerName = ""
     private(set) var bannerOrdinal = 0
@@ -534,9 +535,12 @@ final class GameModel {
             }
             flash(0.28)
         case let .shieldAbsorbed(x):
-            addPopup("SHIELDED", color: .white, worldX: x)
-            flash(0.25)
-            synth.play(.chime)
+            // A real glass-shatter moment so you KNOW the shield broke: cyan call-out, hard flash,
+            // the screen-crack overlay, and the glass-break SFX (v1.6).
+            addPopup("SHIELD BROKEN", color: Theme.color(0x9BF0FF), worldX: x)
+            flash(0.55)
+            shieldBreakID += 1
+            synth.play(.shieldBreak)
         case .chronoEnded:
             synth.play(.frenzyStart)     // rising whoosh: time resumes
         case .sneakersEnded:

@@ -69,7 +69,7 @@ final class SynthTests: XCTestCase {
     func testSFXCatalogRendersAndClassifies() {
         // Every cacheable case must render non-silent samples (this is what SynthEngine caches).
         let all: [Synth.SFX] = [
-            .gem(streak: 5), .jump, .slide, .crash, .chime, .shieldPickup, .magnetPickup,
+            .gem(streak: 5), .jump, .slide, .crash, .chime, .shieldPickup, .shieldBreak, .magnetPickup,
             .doublerPickup, .worldSweep, .close, .startChime, .laneTick, .landThud,
             .purchaseChime, .equipClick, .uiTick, .newBestFanfare, .deathSweep,
             .frenzyStart, .frenzyEnd,
@@ -89,6 +89,7 @@ final class SynthTests: XCTestCase {
         XCTAssertTrue(Synth.SFX.deathSweep.ducksMusic)
         XCTAssertTrue(Synth.SFX.worldSweep.ducksMusic)
         XCTAssertTrue(Synth.SFX.shieldPickup.ducksMusic)
+        XCTAssertTrue(Synth.SFX.shieldBreak.ducksMusic)
         XCTAssertFalse(Synth.SFX.laneTick.ducksMusic)
         XCTAssertFalse(Synth.SFX.gem(streak: 3).ducksMusic)
     }

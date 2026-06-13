@@ -102,6 +102,15 @@ enum Synth {
         return b
     }
 
+    static func shieldBreak() -> [Float] {            // glass shatter — a sharp white crack + falling shards
+        var b = blank(0.5)
+        noise(&b, dur: 0.13, vol: 0.32, cutoff: 9000, highpass: true)                            // the crack
+        tone(&b, 2300, 1500, dur: 0.08, .triangle, vol: 0.14)                                    // bright shard
+        tone(&b, 1700, 850,  dur: 0.11, .triangle, vol: 0.12, offset: Int(0.07 * sampleRate))
+        tone(&b, 1100, 520,  dur: 0.16, .sine,     vol: 0.10, offset: Int(0.16 * sampleRate))    // falling resonance
+        return b
+    }
+
     static func magnetChime() -> [Float] {            // descending arpeggio — a magnetic pull
         var b = blank(0.42)
         tone(&b, 1180, 1160, dur: 0.10, .triangle, vol: 0.16)
@@ -331,7 +340,7 @@ extension Synth {
     /// Pure (no AVAudio), so the full catalog stays unit-testable on Linux.
     enum SFX: Hashable, Sendable {
         case gem(streak: Int)
-        case jump, slide, crash, chime, shieldPickup, magnetPickup, doublerPickup
+        case jump, slide, crash, chime, shieldPickup, shieldBreak, magnetPickup, doublerPickup
         case worldSweep, close, startChime
         case laneTick, landThud, purchaseChime, equipClick, uiTick, newBestFanfare, deathSweep
         case frenzyStart, frenzyEnd
@@ -347,7 +356,7 @@ extension Synth {
         /// Big moments push the music bed down (see `Music.duck(to:)`); ticks and blips don't.
         var ducksMusic: Bool {
             switch self {
-            case .crash, .deathSweep, .worldSweep, .shieldPickup, .magnetPickup, .doublerPickup,
+            case .crash, .deathSweep, .worldSweep, .shieldPickup, .shieldBreak, .magnetPickup, .doublerPickup,
                  .frenzyStart, .frenzyEnd, .newBestFanfare,
                  .boostStart, .boostEnd, .flowSurge, .levelUp:   // rings are too frequent to duck
                 return true
@@ -364,6 +373,7 @@ extension Synth {
             case .crash: return Synth.crash()
             case .chime: return Synth.chime()
             case .shieldPickup: return Synth.shieldChime()
+            case .shieldBreak: return Synth.shieldBreak()
             case .magnetPickup: return Synth.magnetChime()
             case .doublerPickup: return Synth.doublerPickup()
             case .worldSweep: return Synth.worldSweep()

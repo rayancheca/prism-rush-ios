@@ -50,7 +50,8 @@ final class Haptics {
         case .nearMiss:
             rigid.impactOccurred(intensity: 0.8)
         case .shieldAbsorbed:
-            notify.notificationOccurred(.warning)
+            notify.notificationOccurred(.error)   // a hard knock — the shield just shattered
+            heavy.impactOccurred()
         case .died:
             notify.notificationOccurred(.error)
             heavy.impactOccurred()

@@ -17,6 +17,8 @@ struct EffectsOverlay: View {
                 // Read live in body (G3): the Settings toggle takes effect on the very next flash.
                 FlashView(id: model.flashID, strength: model.flashStrength,
                           reduceFlash: ProfileStore.shared.profile.reduceFlash)
+                CrackView(id: model.shieldBreakID,
+                          reduceFlash: ProfileStore.shared.profile.reduceFlash)
             }
         }
         .allowsHitTesting(false)
@@ -113,6 +115,48 @@ private struct BannerView: View {
             // race the fresh one and hide the banner it just showed.
             guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.5)) { shown = false }
+        }
+    }
+}
+
+/// A radial glass-crack overlay that flashes on a shield break, then fades. The crack geometry is
+/// deterministic per `id` (a seeded SplitMix64), so it stays stable across the fade's redraws
+/// instead of flickering. `reduceFlash` dims it for photosensitivity.
+private struct CrackView: View {
+    let id: Int
+    let reduceFlash: Bool
+    @State private var opacity: Double = 0
+
+    var body: some View {
+        Canvas { ctx, size in
+            guard id > 0 else { return }
+            var rng = SplitMix64(seed: UInt64(bitPattern: Int64(id)) &* 0x9E37_79B9 ^ 0xC2A6_F00D)
+            let center = CGPoint(x: size.width / 2, y: size.height * 0.5)
+            let reach = min(size.width, size.height)
+            let rays = 12
+            for i in 0..<rays {
+                let base = Double(i) / Double(rays) * 2 * .pi
+                var ang = base + (rng.unit() - 0.5) * 0.4
+                let len = reach * (0.45 + rng.unit() * 0.5)
+                var pt = center
+                var path = Path()
+                path.move(to: pt)
+                let segs = 4
+                for _ in 0..<segs {
+                    ang += (rng.unit() - 0.5) * 0.5
+                    let step = len / Double(segs)
+                    pt = CGPoint(x: pt.x + cos(ang) * step, y: pt.y + sin(ang) * step)
+                    path.addLine(to: pt)
+                }
+                ctx.stroke(path, with: .color(.white.opacity(0.85)), lineWidth: 1.6)
+                ctx.stroke(path, with: .color(Color(red: 0.61, green: 0.94, blue: 1).opacity(0.5)), lineWidth: 0.7)
+            }
+        }
+        .opacity(opacity)
+        .ignoresSafeArea()
+        .onChange(of: id) {
+            opacity = reduceFlash ? 0.2 : 0.95
+            withAnimation(.easeOut(duration: 0.5)) { opacity = 0 }
         }
     }
 }
