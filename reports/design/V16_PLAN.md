@@ -20,11 +20,15 @@
   coins/level/challenge gates.
 - **Pack purchase reveal burst (S1)** (`bdd4306`) — coin-spend packs fire a ring/spark/medallion reveal
   (PackRewardBurst) on purchase, not just a toast. Hook PR_BUYPACK. VERIFIED.
-- Gates green each step: SPM 178, Mac BUILD OK. Test sims: iPhone 17 Pro (dev) / 17 Pro Max (shots).
-**REMAINING (next focused pass — all committed work is local, NOT pushed):**
-- Polish: custom procedural power-up icons; PowerUpsView catalog (document the deploys/speed-up/shield);
-  B4 meters label (by-design, low priority).
-- Pre-push gate: capture live docs/screenshots, update README, then `git push` (the whole v1.6 line).
+- **Bespoke power-up glyphs + catalog (P3)** (`bc7edeb`) — `PowerUpGlyph` (10 procedural icons) across
+  HUD chips, deploy buttons, the How-to-Play card + a Power-Ups catalog that now documents deploys +
+  loadout. B4 meters label = by-design (no change). Hook `PR_POWERUPS`.
+- **C3 carousel test fix** (`f263425`) — scoped `skinStageButton` id to the focused page.
+- **Pre-push gate DONE + PUSHED** (`78d30be`): full suite green (185 unit + 11 XCUITest, 0 failures);
+  v1.6 README section + live `docs/screenshots/20–25` + refreshed `11_characters.png`; pushed to origin/main.
+- Gates green each step: SPM 178, Mac BUILD OK + full test suite. Sims: iPhone 17 Pro (dev) / 17 Pro Max (shots).
+
+**v1.6 COMPLETE — entire line pushed to GitHub (origin/main @ 78d30be).** Next owner gate: App Store Connect.
 
 
 Owner-driven, fed by a live play session. Single source of truth for v1.6 scope. Order = waves below.
