@@ -81,8 +81,29 @@ Optional later: per-world music (`Synth.beds` 12-entry table); richer per-world 
 - **4c DONE** (commit ba226f4): just-in-time first-run tutorial — contextual "SWIPE UP/DOWN/SIDE"
   prompts the first time each obstacle type approaches on a genuine first run (totalRuns==0, not
   autoplay). Pure presentation off the snapshot (bot-unaffected). PR_TUTORIAL=1 QA hook.
-- **Owner decision (this round):** characters stay **pure cosmetic** — NO passives (all power, if
-  added, lives in a future loadout). Owner selected ONLY the tutorial for the build-now list.
+- **4d DONE** (commit 899bdb6): **manual-trigger slow-mo** — bank charges, deploy on demand via a
+  thumb-reachable bottom-left HUD button (hourglass + count). `GameCore.activateSlowMo()` (RNG-free,
+  no-stack), `Profile.slowMoCharges` (default 2, +2 per level-up), `GameModel.deploySlowMo()/
+  canDeploySlowMo`. NOT a change to the auto-chrono pickup → bot untouched. PowerUpTests added.
+- **Owner decision:** characters stay **pure cosmetic** — NO passives.
+
+### ▶ RESUME HERE (next session)
+Owner paused to continue on a faster model. All committed to `main`, NOT pushed. Last verified:
+SPM 162/162 (incl. 200-seed bot), Mac `xcodebuild test` 178/178. **Continue with the deferred
+backlog** (owner said "keep working on what's next, push at the end"):
+1. New power-ups: **Super Sneakers** (higher-jump in-run pickup — NOTE: a new TRACK pickup touches
+   the spawner/patterns → `DailyChallenge.layoutVersion` 2→3 bump + bot re-verify + golden re-pin,
+   pre-armed golden at 0xB51F_E337_DB06_ED2F), plus pre-run consumables **Head Start** / **Score
+   Booster** and a **Mystery Box** coin gacha (shop work).
+2. Replenish slow-mo via the **Shop** too (currently only level-up + starting 2) — a coin-priced pack.
+3. Per-world themed music (`Synth.beds` 12-entry table — Synth.swift is pure/Linux-tested).
+4. Gameplay difficulty / slide→jump fairness pass (protected sim — layoutVersion bump; best after
+   on-device play).
+Then the **pre-push gate**: capture live `docs/screenshots/` golden-path set, then `git push`.
+Invariants to keep: iron rules 2/3/4 (no run-RNG/spawn change without a layoutVersion bump + bot
+green), decrees 1/2/6, Swift 6 @MainActor, zero binary assets. Verify every increment: SPM bot +
+Mac `xcodebuild test` + an on-sim screenshot (PR_SKIP_SPLASH / PR_WORLD / PR_SCREEN / PR_SHIELD /
+PR_TUTORIAL hooks). Never screenshot the dev sim while `xcodebuild test` runs on it.
 - **DEFERRED (owner did not select; revisit when asked):** manual-trigger saved power-up (build as a
   NEW consumable + tappable HUD button, NOT a change to the auto-chrono or the bot breaks); new
   power-ups (super sneakers/higher jump, head start, score booster, mystery box); equippable loadout;
