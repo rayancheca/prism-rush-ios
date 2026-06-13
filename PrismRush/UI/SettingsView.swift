@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var menuMusic: Double    // hub/splash music — tuned separately (owner request)
     @State private var sfx: Double
     @State private var showHowTo = false
+    @State private var showPowerUps = false
     @State private var restoring = false
     @State private var restoreNote: String?
     @State private var versionCopied = false
@@ -53,8 +54,14 @@ struct SettingsView: View {
                     .transition(.move(edge: .bottom))
                     .zIndex(1)
             }
+            if showPowerUps {
+                PowerUpsView(onClose: { showPowerUps = false })
+                    .transition(.move(edge: .bottom))
+                    .zIndex(1)
+            }
         }
         .animation(.spring(duration: 0.3), value: showHowTo)
+        .animation(.spring(duration: 0.3), value: showPowerUps)
     }
 
     // MARK: audio
@@ -148,6 +155,12 @@ struct SettingsView: View {
     // MARK: navigation rows
 
     @ViewBuilder private var rows: some View {
+        Button { showPowerUps = true } label: {
+            navRow("bolt.circle.fill", "Power-Ups", Theme.color(0xFFD23D))
+        }
+        .buttonStyle(.neon)
+        .accessibilityIdentifier("powerUpsRow")
+
         Button { showHowTo = true } label: {
             navRow("questionmark.circle.fill", "How to Play", Theme.color(0x00F5FF))
         }
