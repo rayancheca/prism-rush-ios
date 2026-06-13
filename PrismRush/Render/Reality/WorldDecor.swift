@@ -101,6 +101,12 @@ final class WorldDecor {
     /// Re-skin a slot for `world`: pick the silhouette, randomize size/placement, dim the tint so
     /// decor reads as background rather than competing with obstacles.
     private func style(_ s: Slot, world: Int) {
+        let n = Theme.worlds.count
+        if ((world % n) + n) % n == 3 {   // Orbital Drift: clear space at the sides — the sky carries it
+            for e in [s.tower, s.crystal, s.pyramid, s.altA, s.altB] { e.isEnabled = false }
+            s.floating = false
+            return
+        }
         let w = world % 3
         let alt = Float.random(in: 0...1) < 0.35   // alternate silhouette for this world
         s.tower.isEnabled = (w == 0) && !alt
@@ -205,6 +211,10 @@ final class WorldSky {
     private let metroRoot = Entity()
     private let cavernRoot = Entity()
     private let sandsRoot = Entity()
+    /// Bespoke v1.5 families live in their own self-contained objects (own entities + build/restyle/
+    /// animate); `WorldSky` enables their root and forwards two calls. Their root joins `famRoots` so
+    /// the enable/entrance/Reduce-Motion plumbing is shared. New worlds append here, one per file.
+    private let orbitalSky: OrbitalSky
     private let famRoots: [Entity]
 
     // Per-cycle re-tint registry (v1.4.3): every sky element pairs with a recipe that derives its
@@ -270,12 +280,25 @@ final class WorldSky {
     private var sandMotes = Motes()
 
     init(root: Entity) {
-        famRoots = [metroRoot, cavernRoot, sandsRoot]
+        orbitalSky = OrbitalSky(parent: root)   // adds + disables its own root
+        famRoots = [metroRoot, cavernRoot, sandsRoot, orbitalSky.root]
         let disc = ProceduralMesh.disc()
         buildMetropolis(disc: disc)
         buildCaverns(disc: disc)
         buildSands(disc: disc)
-        for r in famRoots { r.isEnabled = false; root.addChild(r) }
+        for r in [metroRoot, cavernRoot, sandsRoot] { r.isEnabled = false; root.addChild(r) }
+    }
+
+    /// Map an absolute world ordinal to its sky-family index in `famRoots`. Bespoke worlds (v1.5)
+    /// get their own index; everything else folds to the legacy 3-family stub (recolored to the
+    /// world's palette) until its motif ships. Worlds 12+ reuse the authored families in step with
+    /// the palette cycle.
+    private func skyFamily(_ world: Int) -> Int {
+        let n = Theme.worlds.count
+        switch ((world % n) + n) % n {
+        case 3:  return 3                       // Orbital Drift — bespoke
+        default: return ((world % 3) + 3) % 3   // legacy stub families
+        }
     }
 
     // MARK: per-frame
@@ -283,7 +306,7 @@ final class WorldSky {
     func update(distance: Double, world: Int, elapsed: Double, reduceMotion: Bool) {
         if world != lastWorld {
             lastWorld = world
-            let fam = world % 3
+            let fam = skyFamily(world)
             for (i, r) in famRoots.enumerated() { r.isEnabled = i == fam }
             restyle(world: world)
             swapAt = elapsed
@@ -292,10 +315,11 @@ final class WorldSky {
         }
         lastRM = reduceMotion
 
-        let fam = lastWorld % 3
+        let fam = skyFamily(lastWorld)
         let active = famRoots[fam]
         if reduceMotion {
             if active.position.y != 0 { active.position.y = 0 }
+            if fam == 3 { orbitalSky.animate(elapsed: elapsed, reduceMotion: true) }
             return                  // statics only — restyle already posed everything
         }
         // Entrance: the incoming sky rises ~1 unit over 0.7 s, folded into the crossfade flare.
@@ -306,7 +330,9 @@ final class WorldSky {
         switch fam {
         case 0:  animateMetropolis(t: t, elapsed: elapsed)
         case 1:  animateCaverns(t: t)
-        default: animateSands(t: t, distance: distance)
+        case 2:  animateSands(t: t, distance: distance)
+        case 3:  orbitalSky.animate(elapsed: elapsed, reduceMotion: false)
+        default: break   // unreachable — every family has an explicit case (no silent mis-map)
         }
     }
 
@@ -362,10 +388,16 @@ final class WorldSky {
     private func restyle(world: Int) {
         // Deterministic per ABSOLUTE world index: every visit to world n looks identical across
         // runs, every cycle varies, and the run RNG is never consumed (rule 2 safe).
-        let fam = ((world % 3) + 3) % 3
-        retint(fam, Theme.evolvedPalette(ordinal: world))   // v1.4.3: hue-shift set pieces per cycle
+        let fam = skyFamily(world)
+        let pal = Theme.evolvedPalette(ordinal: world)
+        if fam == 3 {                                 // bespoke family owns its own placement + tint
+            orbitalSky.restyle(palette: pal, world: world)
+            famRoots[fam].position.y = 0
+            return
+        }
+        retint(fam, pal)                              // v1.4.3: hue-shift set pieces per cycle
         var r = SplitMix64(seed: 0x5B1E_55ED &+ UInt64(bitPattern: Int64(world)) &* 0x9E37_79B9_7F4A_7C15)
-        let cycle = world / 3
+        let cycle = world / Theme.worlds.count        // cycle 0 for worlds 0–11 (stub at base density)
         switch fam {
         case 0:  restyleMetropolis(&r, cycle: cycle)
         case 1:  restyleCaverns(&r, cycle: cycle)

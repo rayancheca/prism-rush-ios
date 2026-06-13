@@ -26,8 +26,30 @@ passive **+** equippable power-up loadout; **12 distinct themed worlds** then ev
   splash run the sequencer as a calm 0.4 bed; `returnToMenu` restarts it instead of going silent;
   a run still starts the full 0.85 bed.
 
-**Phase 1 next:** RewardsBar (Daily/Rewards/Missions rail) still reads grayer than the new nav —
-optional consistency pass. Then Phase 2 (worlds).
+**Phase 1 follow-ups (DONE):** RewardsBar color-coded to match the nav; Daily Rush text overflow
+fixed (shrink-to-fit); split **Menu music vs Game music** volume (Profile.menuMusicVolume +
+SynthEngine calm/run context + two Settings sliders).
+
+**Phase 2 — 12 distinct worlds (IN PROGRESS).** Blueprint: `reports/design/V15_WORLDS.md` (multi-agent
+design pass). Two CRITICAL resolutions baked in: World 12 ships radiant-white-on-deep-violet (a white
+bg would break the dark-bg-only obstacle/ground/gem/FX materials); `evolvedPalette` moves BOTH the
+family AND cycle divisor to worlds.count (else worlds 0–11 get spurious roman suffixes).
+- **2a DONE** (commit 1c76022): `Theme.worlds` 3→12 distinct (Pulse City, Geode Deep, Solar Sands,
+  Orbital Drift, Tidal Glow, Ashfall, Borealis, Datastream, Bloomfall, Eventide, Tempest,
+  Singularity); `Tuning.worldFamilyCount=12`; `stepWorld` modulus (RNG-neutral — bot green, NO
+  layoutVersion bump); `WorldPaletteTests` guards. Loop broken: level-select shows 12 distinct
+  named/colored worlds. Sky/decor for 4–12 borrow the 3 families recolored (stub) until bespoke.
+- **2b DONE**: **Orbital Drift** bespoke sky family — `OrbitalSky.swift` (planet limb + drifting
+  tumbling astronaut + satellites + starfield), the scalable per-world-object pattern; `WorldSky`
+  gains a `skyFamily()` map + `case 3` delegate (+ 12-case switch, no silent default); `WorldDecor`
+  clears Orbital's sides (sparse space); `WorldPreviewCanvas.drawOrbital` so the card matches
+  (decree 2). Verified on-sim: astronaut + planet visible in-game (PR_WORLD=3) AND on the card.
+
+**Phase 2 next (one bespoke world per increment, blueprint §4 order):** Borealis (recolored-aurora,
+cheapest) → Eventide (torus stack) → Ashfall → Bloomfall → Tidal (lands `tentacleStrip`) →
+Datastream (lands `gridCard`) → Tempest (flash bolts) → Singularity LAST (deep-violet finale).
+Optional later: per-world music (`Synth.beds` 12-entry table). Then Phase 3 (gameplay/scoring),
+Phase 4 (power-ups/tutorial).
 
 ## v1.4.3 — CODE_REVIEW.md §20 implementation (in progress, 2026-06-12)
 Executing the prioritized plan from `CODE_REVIEW.md` (Opus 4.8 strict pass, 8.7/10). Ordered steps;

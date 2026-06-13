@@ -67,10 +67,15 @@ struct WorldPreviewCanvas: View {
         // 3. Decor silhouettes (2 parallax depths) — archetype keyed by worldIndex % 3.
         if size != .chip {
             var rng = SplitMix64(seed: UInt64(bitPattern: Int64(worldIndex)))   // UI-local, cosmetic
-            switch worldIndex % 3 {
-            case 0:  drawTowers(&ctx, rng: &rng, t: t, w: w, h: h, horizonY: horizonY)
-            case 1:  drawCrystals(&ctx, rng: &rng, w: w, h: h, horizonY: horizonY)
-            default: drawDunes(&ctx, rng: &rng, w: w, h: h, horizonY: horizonY)
+            switch ((worldIndex % Theme.worlds.count) + Theme.worlds.count) % Theme.worlds.count {
+            case 3:  drawOrbital(&ctx, rng: &rng, t: t, w: w, h: h, horizonY: horizonY)   // bespoke
+            default:
+                // Legacy stub families (recolored) until each world's bespoke vignette ships.
+                switch worldIndex % 3 {
+                case 0:  drawTowers(&ctx, rng: &rng, t: t, w: w, h: h, horizonY: horizonY)
+                case 1:  drawCrystals(&ctx, rng: &rng, w: w, h: h, horizonY: horizonY)
+                default: drawDunes(&ctx, rng: &rng, w: w, h: h, horizonY: horizonY)
+                }
             }
         }
 
@@ -187,6 +192,50 @@ struct WorldPreviewCanvas: View {
             p.closeSubpath()
             ctx.fill(p, with: .color(accent.opacity(far ? 0.16 : 0.24)))
         }
+    }
+
+    /// Orbital Drift: a planet limb curving across one horizon side, a small drifting astronaut
+    /// (helmet + visor + box suit), and a twinkling starfield — the single-frame signature of the
+    /// in-game WorldSky (planet + astronaut + stars), so the card never lies (decree 2).
+    private func drawOrbital(_ ctx: inout GraphicsContext, rng: inout SplitMix64, t: TimeInterval,
+                             w: CGFloat, h: CGFloat, horizonY: CGFloat) {
+        // Stars scattered through the lifted sky band (gentle twinkle via per-star sine).
+        for _ in 0..<16 {
+            let sx = w * rng.range(0.02, 0.98)
+            let sy = horizonY * rng.range(0.06, 0.95)
+            let tw = 0.55 + 0.45 * sin(t * rng.range(0.5, 1.6) + rng.range(0, 6.28))
+            let d = max(1.2, w * rng.range(0.004, 0.011)) * (t > 0 ? tw : 0.8)
+            ctx.fill(Path(ellipseIn: CGRect(x: sx - d / 2, y: sy - d / 2, width: d, height: d)),
+                     with: .color(accent.opacity(0.85)))
+        }
+        // Planet limb: a big disc parked low-left, only its upper curve in frame, with a glow rim.
+        let pr = w * rng.range(0.30, 0.40)
+        let pc = CGPoint(x: w * rng.range(0.08, 0.22), y: horizonY + pr * 0.72)
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: 6))
+            layer.fill(Path(ellipseIn: CGRect(x: pc.x - pr * 1.12, y: pc.y - pr * 1.12,
+                                              width: pr * 2.24, height: pr * 2.24)),
+                       with: .color(accent.opacity(0.22)))
+        }
+        ctx.fill(Path(ellipseIn: CGRect(x: pc.x - pr, y: pc.y - pr, width: pr * 2, height: pr * 2)),
+                 with: .color(Theme.color(palette.grid).opacity(0.45)))
+        // Astronaut, upper-right: helmet circle + dark visor + box torso + stub limbs.
+        let ax = w * rng.range(0.62, 0.82), ay = horizonY * rng.range(0.32, 0.55)
+        let hr = w * 0.05
+        let suit = accent2.opacity(0.92)
+        // torso
+        ctx.fill(Path(roundedRect: CGRect(x: ax - hr * 0.85, y: ay + hr * 0.5, width: hr * 1.7, height: hr * 1.9),
+                      cornerRadius: hr * 0.4), with: .color(suit))
+        // limbs
+        for dx in [-hr * 1.05, hr * 1.05] {
+            ctx.fill(Path(roundedRect: CGRect(x: ax + dx - hr * 0.28, y: ay + hr * 0.6, width: hr * 0.56, height: hr * 1.3),
+                          cornerRadius: hr * 0.25), with: .color(suit))
+        }
+        // helmet + visor
+        ctx.fill(Path(ellipseIn: CGRect(x: ax - hr, y: ay - hr, width: hr * 2, height: hr * 2)), with: .color(suit))
+        let vr = hr * 0.62
+        ctx.fill(Path(ellipseIn: CGRect(x: ax - vr * 0.6, y: ay - vr * 0.5, width: vr * 1.2, height: vr)),
+                 with: .color(Theme.color(palette.bg).opacity(0.85)))
     }
 
     /// 5 converging verticals + forward-scrolling rungs; centre lane dashed in accent2.
