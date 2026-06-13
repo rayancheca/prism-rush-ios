@@ -234,14 +234,22 @@ final class ProfileStore {
         mutate { $0.seenSkins.formUnion($0.ownedSkins) }
     }
 
-    /// Worlds the level-select tab DISPLAYS (v1.4: every card visible, locked ones purchasable).
+    /// The BASE number of world cards always shown (the 12 named worlds — one full evolution cycle).
     static let worldDisplayCount = 12
+    static let maxStartWorlds = worldDisplayCount   // retained for callers that want the base floor
+    /// How many locked worlds to show AHEAD of the furthest startable (so there's always a next
+    /// rung to reach/buy past world 12 — worlds cycle forever in-run via `evolvedPalette`).
+    static let worldsAheadToBuy = 3
 
-    /// The deepest starting world offered in level select (matches the world cards the UI shows).
-    static let maxStartWorlds = worldDisplayCount
+    /// Worlds the level-select tab DISPLAYS now (v1.6): the base 12 PLUS the evolved cycles up to a
+    /// few past your furthest startable, so progression visibly extends past Singularity and buying
+    /// deeper worlds has a point. Worlds 12+ render with `Theme.evolvedPalette` ("Pulse City II"…).
+    var displayedWorldCount: Int {
+        max(Self.worldDisplayCount, highestStartableWorld + 1 + Self.worldsAheadToBuy)
+    }
 
-    /// Highest selectable starting world (0-based), capped to one past what's been reached.
-    var unlockedWorldCount: Int { max(1, min(Self.maxStartWorlds, profile.maxWorldReached + 1)) }
+    /// Highest selectable starting world (0-based), one past what's been reached (no artificial cap).
+    var unlockedWorldCount: Int { max(1, profile.maxWorldReached + 1) }
 
     // MARK: world purchases (v1.4 — every world card is startable: reach it OR buy it)
 
@@ -262,7 +270,7 @@ final class ProfileStore {
     /// so the Game Center skip is preserved for free.
     @discardableResult
     func unlockWorld(_ index: Int) -> Bool {
-        guard (1..<Self.worldDisplayCount).contains(index),
+        guard index >= 1,                       // any world past the free start is buyable (v1.6)
               !isWorldStartable(index),
               spendCoins(XPCurve.worldPrice(index)) else { return false }
         mutate { $0.purchasedWorlds.insert(index) }

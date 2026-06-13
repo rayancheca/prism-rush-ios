@@ -84,10 +84,13 @@ enum XPCurve {
         400, 800, 1_400, 2_200, 3_200, 4_400, 5_800, 7_400, 9_200, 11_200, 13_400,
     ]
 
-    /// Coin price to buy starting world `index` outright (0 = the free starting world; indices
-    /// past the ladder clamp to the deepest rung — the display cap means they never render).
+    /// Coin price to buy starting world `index` outright (0 = the free starting world). The first 11
+    /// rungs use the authored ladder; deeper worlds (the evolved cycles, v1.6) escalate linearly so
+    /// buying ever-deeper checkpoints stays a meaningful savings goal instead of dead-ending.
+    static let worldPriceStepBeyondLadder = 2_000
     static func worldPrice(_ index: Int) -> Int {
         guard index >= 1 else { return 0 }
-        return worldPrices[min(index, worldPrices.count) - 1]
+        if index <= worldPrices.count { return worldPrices[index - 1] }
+        return worldPrices[worldPrices.count - 1] + (index - worldPrices.count) * worldPriceStepBeyondLadder
     }
 }

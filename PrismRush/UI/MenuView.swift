@@ -50,7 +50,7 @@ struct MenuView<Loadout: View>: View {
     /// shows on the hub immediately instead of the hub rendering as if it didn't take (AUDIT
     /// D3-3). Display only: reach-based systems keep reading `maxWorldReached`.
     private var furthestStartableWorld: Int {
-        min(ProfileStore.shared.highestStartableWorld, ProfileStore.maxStartWorlds - 1)
+        ProfileStore.shared.highestStartableWorld   // uncapped (v1.6): shows the evolved world past 12
     }
 
     private var furthestAccent: Color {

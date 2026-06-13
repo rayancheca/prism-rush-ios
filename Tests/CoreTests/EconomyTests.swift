@@ -101,10 +101,11 @@ final class EconomyTests: XCTestCase {
         XCTAssertEqual(store.profile.coins, 800)
         XCTAssertTrue(store.isWorldStartable(2), "reach alone makes a world startable")
 
-        // Range guards: world 0 is free, the display cap bounds the ladder, garbage refuses.
+        // Range guards: world 0 is free, garbage refuses. A deep evolved world (12) is buyable in
+        // principle now (v1.6 — no display cap) but refuses HERE because 800 coins can't afford it.
         XCTAssertFalse(store.unlockWorld(0))
         XCTAssertFalse(store.unlockWorld(-1))
-        XCTAssertFalse(store.unlockWorld(ProfileStore.worldDisplayCount))
+        XCTAssertFalse(store.unlockWorld(ProfileStore.worldDisplayCount), "world 12 unaffordable at 800 coins")
         XCTAssertFalse(store.isWorldStartable(-1))
         XCTAssertEqual(store.profile.purchasedWorlds, [5])
 
@@ -113,6 +114,21 @@ final class EconomyTests: XCTestCase {
         XCTAssertEqual(store.highestStartableWorld, 7)
         XCTAssertEqual(ProfileStore(testing: Profile()).highestStartableWorld, 0,
                        "fresh profile starts at world 0")
+    }
+
+    func testDeepEvolvedWorldsAreBuyableAndPriced() async {
+        // v1.6: worlds past the base 12 (the evolved cycles) are buyable with escalating prices,
+        // so progression past Singularity has a point. They never touch maxWorldReached (reach-based).
+        let store = ProfileStore(testing: Profile())
+        store.addCoins(100_000)
+        XCTAssertEqual(XPCurve.worldPrice(11), 13_400, "the authored ladder still holds at world 11")
+        XCTAssertEqual(XPCurve.worldPrice(12), 13_400 + XPCurve.worldPriceStepBeyondLadder, "world 12 escalates past the ladder")
+        XCTAssertGreaterThan(XPCurve.worldPrice(20), XPCurve.worldPrice(12), "deeper worlds cost more")
+        XCTAssertTrue(store.unlockWorld(15), "a deep evolved world is buyable (no display cap)")
+        XCTAssertTrue(store.isWorldStartable(15))
+        XCTAssertEqual(store.highestStartableWorld, 15)
+        XCTAssertEqual(store.profile.maxWorldReached, 0, "buying a deep world never touches reach")
+        XCTAssertGreaterThanOrEqual(store.displayedWorldCount, 16, "the ladder extends to show past your furthest")
     }
 
     /// v1.4 review BLOCKER pin — the RUN pipeline must not undo `unlockWorld`'s invariant.

@@ -219,6 +219,10 @@ final class GameModel {
             core.debugSpawn(.superSneakers(d: core.distance + 6, lane: 1))
             core.debugActivateSuperSneakers()
         }
+        // Debug/screenshot: deep reach so the Worlds ladder shows the evolved cycles past 12.
+        if ProcessInfo.processInfo.environment["PR_DEEPWORLDS"] == "1" {
+            ProfileStore.shared.mutate { $0.maxWorldReached = max($0.maxWorldReached, 14) }
+        }
         // Debug/UITest: pin a true zero-run profile (first-run gate + FIRST RUN chip flows),
         // regardless of what earlier autoplay/CI cycles banked on this simulator.
         if ProcessInfo.processInfo.environment["PR_FIRSTRUN"] == "1" {

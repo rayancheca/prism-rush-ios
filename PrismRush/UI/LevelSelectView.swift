@@ -15,10 +15,11 @@ struct LevelSelectView: View {
     @State private var unlockTarget: Int?
 
     var body: some View {
-        // Deepest startable world (reach OR purchase), clamped to the display ladder; the ladder
-        // itself always shows every rung — `worldDisplayCount` cards, status derived per render.
-        let furthest = min(ProfileStore.shared.highestStartableWorld, ProfileStore.maxStartWorlds - 1)
-        let nextLocked = (0..<ProfileStore.worldDisplayCount)
+        // Deepest startable world (reach OR purchase) — uncapped (v1.6): the ladder extends past the
+        // base 12 to show the evolved cycles, so progression past Singularity is visible + buyable.
+        let furthest = ProfileStore.shared.highestStartableWorld
+        let count = ProfileStore.shared.displayedWorldCount
+        let nextLocked = (0..<count)
             .first { !ProfileStore.shared.isWorldStartable($0) }
 
         MetaScreenScaffold(title: "Worlds", coins: ProfileStore.shared.profile.coins,
@@ -32,7 +33,7 @@ struct LevelSelectView: View {
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: Theme.Space.m)],
                           spacing: Theme.Space.m) {
-                    ForEach(0..<ProfileStore.worldDisplayCount, id: \.self) { world in
+                    ForEach(0..<count, id: \.self) { world in
                         // Status reads happen here, per render, straight off the live store (G3) —
                         // a successful purchase flips the card to startable on the same beat.
                         if ProfileStore.shared.isWorldStartable(world) {

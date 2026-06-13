@@ -87,7 +87,8 @@ final class ProgressionTests: XCTestCase {
         for (i, price) in ladder.enumerated() {
             XCTAssertEqual(XPCurve.worldPrice(i + 1), price, "world \(i + 1)")
         }
-        XCTAssertEqual(XPCurve.worldPrice(99), 13_400, "past the ladder clamps to the deepest rung")
+        XCTAssertEqual(XPCurve.worldPrice(99), 13_400 + 88 * XPCurve.worldPriceStepBeyondLadder,
+                       "past the ladder, deep evolved worlds escalate (v1.6 — not clamped)")
         XCTAssertEqual(ladder.reduce(0, +), 59_400, "total world sink")
         XCTAssertEqual(ladder.count, ProfileStore.worldDisplayCount - 1,
                        "one rung per displayed world past the free one")
