@@ -62,6 +62,9 @@ struct SettingsView: View {
         }
         .animation(.spring(duration: 0.3), value: showHowTo)
         .animation(.spring(duration: 0.3), value: showPowerUps)
+        .onAppear {
+            if ProcessInfo.processInfo.environment["PR_POWERUPS"] == "1" { showPowerUps = true }
+        }
     }
 
     // MARK: audio

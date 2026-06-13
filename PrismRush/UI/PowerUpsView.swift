@@ -1,97 +1,120 @@
 import SwiftUI
 
-/// A discoverable, standalone reference of every in-run power-up — what it does, how long it lasts,
-/// and how you get it. The owner's gap: power-up info used to be buried as the 5th card of How to
-/// Play, three taps deep ("nobody is ever gonna find that"). This surfaces it as its own screen,
-/// reached from the hub's (now prominent) Settings gear. Presented as a full-screen overlay, mirror
-/// of the How-to-Play sub-sheet. Zero binary assets — SF Symbols + role color.
+/// A discoverable, standalone reference of every power-up — what it does, how long it lasts, and how
+/// you get it. The owner's gap: power-up info used to be buried as the 5th card of How to Play, three
+/// taps deep ("nobody is ever gonna find that"), and the v1.6 deploys/loadout were nowhere. This
+/// surfaces all of it as its own screen, reached from the hub's Settings gear. Full-screen overlay,
+/// mirror of the How-to-Play sub-sheet. Icons are the bespoke `PowerUpGlyph`s (owner P3 — no SF
+/// Symbols), so the catalog, the HUD, and the deploy buttons all show the same identity. Zero assets.
 struct PowerUpsView: View {
     var onClose: () -> Void
 
-    private struct PowerUp: Identifiable {
+    private struct Item: Identifiable {
         let id = UUID()
-        let hex: UInt32
-        let icon: String
+        let kind: PowerUpKind
         let name: String
         let desc: String
         let timing: String
     }
 
-    /// Durations come from `Tuning`, so the screen can never drift from the actual effect lengths.
-    private let powerUps: [PowerUp] = [
-        PowerUp(hex: 0x00F5FF, icon: "shield.lefthalf.filled", name: "SHIELD",
-                desc: "Absorbs one crash and keeps you running. A badge shows when it's armed.",
-                timing: "Held until used"),
-        PowerUp(hex: 0xFF2BD6, icon: "dot.radiowaves.left.and.right", name: "MAGNET",
-                desc: "Pulls nearby gems straight to you — sweep lanes without weaving.",
-                timing: "\(Int(Tuning.magnetDuration))s"),
-        PowerUp(hex: 0x00FF88, icon: "2.circle.fill", name: "DOUBLER",
-                desc: "Every gem you grab pays double coins. Stack it with a gem run.",
-                timing: "\(Int(Tuning.doublerDuration))s"),
-        PowerUp(hex: 0x9BF0FF, icon: "hourglass", name: "CHRONO",
-                desc: "Slows the world down — wider dodge windows when it gets fast.",
-                timing: "\(Int(Tuning.chronoDuration))s"),
-        PowerUp(hex: 0xFF8A2B, icon: "arrow.up.circle.fill", name: "SUPER SNEAKERS",
-                desc: "Spring-loaded jumps — leap noticeably higher to clear lows and bars with ease.",
-                timing: "\(Int(Tuning.superSneakersDuration))s"),
-        PowerUp(hex: 0xFFD23D, icon: "bolt.fill", name: "OVERDRIVE",
-                desc: "A boost pad rockets you forward through a clear gem river.",
-                timing: "Burst"),
+    /// Track pickups — collected mid-run, active the instant you grab them. Durations come from
+    /// `Tuning` so the screen can never drift from the real effect lengths.
+    private let pickups: [Item] = [
+        Item(kind: .shield, name: "SHIELD",
+             desc: "Absorbs one crash and keeps you running. A badge shows when it's armed.",
+             timing: "Held until used"),
+        Item(kind: .magnet, name: "MAGNET",
+             desc: "Pulls nearby gems straight to you — sweep lanes without weaving.",
+             timing: "\(Int(Tuning.magnetDuration))s"),
+        Item(kind: .doubler, name: "DOUBLER",
+             desc: "Every gem you grab pays double coins. Stack it with a gem run.",
+             timing: "\(Int(Tuning.doublerDuration))s"),
+        Item(kind: .slowMo, name: "CHRONO",
+             desc: "Slows the world down — wider dodge windows when it gets fast.",
+             timing: "\(Int(Tuning.chronoDuration))s"),
+        Item(kind: .sneakers, name: "SUPER SNEAKERS",
+             desc: "Spring-loaded jumps — leap higher and vault clean over tall walls.",
+             timing: "\(Int(Tuning.superSneakersDuration))s"),
+        Item(kind: .ring, name: "PRISM RING",
+             desc: "Dive through for bonus coins — dead-centre pays a PERFECT.",
+             timing: "Pickup"),
+        Item(kind: .overdrive, name: "OVERDRIVE PAD",
+             desc: "A boost pad rockets you forward through a clear gem river.",
+             timing: "\(Tuning.boostDuration.formatted())s"),
+    ]
+
+    /// Deployables — banked charges you trigger on demand from the corner buttons (v1.6).
+    private let deployables: [Item] = [
+        Item(kind: .slowMo, name: "SLOW-MO",
+             desc: "Bank charges and trigger slow-mo whenever YOU choose, not just on a pickup.",
+             timing: "\(Int(Tuning.chronoDuration))s"),
+        Item(kind: .speedUp, name: "SPEED UP",
+             desc: "A manual overdrive burst on demand — punch through a tough stretch.",
+             timing: "\(Int(Tuning.speedUpDeployDuration))s"),
+        Item(kind: .shield, name: "SHIELD",
+             desc: "Drop a shield mid-run from your banked charges, before the hit lands.",
+             timing: "Held until used"),
+    ]
+
+    /// Pre-run loadout — armed on the hub before you start, not collected on the track.
+    private let loadout: [Item] = [
+        Item(kind: .headStart, name: "HEAD START",
+             desc: "Launch the run already flying with an overdrive boost. Arm it on the hub.",
+             timing: "\(Tuning.headStartBoostDuration.formatted())s"),
+        Item(kind: .coinSurge, name: "COIN SURGE",
+             desc: "Doubles every coin you earn for the whole run — always fair, never the leaderboard.",
+             timing: "Whole run"),
     ]
 
     var body: some View {
         MetaScreenScaffold(title: "Power-Ups", coins: ProfileStore.shared.profile.coins, onClose: onClose) {
-            VStack(spacing: Theme.Space.m) {
-                Text("Collect these on the track mid-run — they activate the instant you grab them. Here's what each one does.")
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundStyle(Theme.Role.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, 2)
-
-                ForEach(powerUps) { pu in row(pu) }
-
-                // Consumables you BRING into a run (armed on the hub, not collected on the track) —
-                // segregated so the "collect these on the track" intro above never lies (decree 2).
-                Text("BROUGHT INTO THE RUN")
-                    .font(.system(size: 11, weight: .heavy, design: .rounded)).tracking(1.5)
-                    .foregroundStyle(Theme.Role.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, Theme.Space.s)
-                consumableRow("bolt.horizontal.fill", 0xFF9F1C, "HEAD START",
-                              "Launch the run already flying with an overdrive boost. Arm it on the hub.")
-                consumableRow("dollarsign.circle.fill", 0xFFD23D, "COIN SURGE",
-                              "Doubles every coin you earn for the whole run. Arm it on the hub before you play.")
-
-                // The revive is not a track pickup — call it out separately so it's not mistaken for one.
+            VStack(alignment: .leading, spacing: Theme.Space.l) {
+                section("ON THE TRACK", "Grab these mid-run — they activate the instant you touch them.",
+                        pickups)
+                section("DEPLOY ON DEMAND", "Bank charges, then tap the corner buttons when you need them.",
+                        deployables)
+                section("PRE-RUN LOADOUT", "Arm these on the hub before you start a run.",
+                        loadout)
                 reviveRow
             }
         }
         .accessibilityIdentifier("powerUpsView")
     }
 
-    private func row(_ pu: PowerUp) -> some View {
-        let tint = Theme.color(pu.hex)
+    private func section(_ title: String, _ subtitle: String, _ items: [Item]) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 11, weight: .heavy, design: .rounded)).tracking(1.5)
+                    .foregroundStyle(Theme.Role.textPrimary)
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Theme.Role.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(items) { row($0) }
+        }
+    }
+
+    private func row(_ item: Item) -> some View {
+        let tint = Theme.color(item.kind.hex)
         return HStack(spacing: 14) {
-            Image(systemName: pu.icon)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(tint)
+            PowerUpGlyph(kind: item.kind, size: 30)
                 .frame(width: 46, height: 46)
                 .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: Theme.Radius.s))
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
-                    Text(pu.name)
-                        .font(.system(size: 15, weight: .heavy, design: .rounded))
-                        .tracking(1)
+                    Text(item.name)
+                        .font(.system(size: 15, weight: .heavy, design: .rounded)).tracking(1)
                         .foregroundStyle(Theme.Role.textPrimary)
                     Spacer()
-                    Text(pu.timing)
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .monospacedDigit()
+                    Text(item.timing)
+                        .font(.system(size: 11, weight: .bold, design: .rounded)).monospacedDigit()
                         .foregroundStyle(tint)
                         .padding(.horizontal, 8).padding(.vertical, 3)
                         .background(tint.opacity(0.14), in: Capsule())
                 }
-                Text(pu.desc)
+                Text(item.desc)
                     .font(.system(size: 12.5, weight: .medium, design: .rounded))
                     .foregroundStyle(Theme.Role.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -101,34 +124,10 @@ struct PowerUpsView: View {
         .background(Theme.Role.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.m))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m).strokeBorder(tint.opacity(0.35), lineWidth: 1))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(pu.name). \(pu.desc). \(pu.timing).")
+        .accessibilityLabel("\(item.name). \(item.desc). \(item.timing).")
     }
 
-    private func consumableRow(_ icon: String, _ hex: UInt32, _ name: String, _ desc: String) -> some View {
-        let tint = Theme.color(hex)
-        return HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(tint)
-                .frame(width: 46, height: 46)
-                .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: Theme.Radius.s))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(name)
-                    .font(.system(size: 15, weight: .heavy, design: .rounded)).tracking(1)
-                    .foregroundStyle(Theme.Role.textPrimary)
-                Text(desc)
-                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
-                    .foregroundStyle(Theme.Role.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(14)
-        .background(Theme.Role.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.m))
-        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m).strokeBorder(tint.opacity(0.3), lineWidth: 1))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(name). \(desc)")
-    }
-
+    /// The revive is not a power-up — called out separately so it's never mistaken for one.
     private var reviveRow: some View {
         HStack(spacing: 14) {
             Image(systemName: "bolt.heart.fill")

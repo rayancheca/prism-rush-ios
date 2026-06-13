@@ -155,26 +155,26 @@ struct HUDView: View {
     @ViewBuilder private func powerUpStack(_ snap: GameSnapshot) -> some View {
         VStack(alignment: .trailing, spacing: 6) {
             if snap.shieldActive {
-                powerUpChip("shield.lefthalf.filled", 0x00F5FF, "SHIELD", remaining: nil, duration: 0)
+                powerUpChip(.shield, "SHIELD", remaining: nil, duration: 0)
             }
             if snap.magnetRemaining > 0 {
-                powerUpChip("dot.radiowaves.left.and.right", 0xFF2BD6, "MAGNET",
+                powerUpChip(.magnet, "MAGNET",
                             remaining: snap.magnetRemaining, duration: Tuning.magnetDuration)
             }
             if snap.doublerRemaining > 0 {
-                powerUpChip("2.circle.fill", 0x00FF88, "×2 COINS",
+                powerUpChip(.doubler, "×2 COINS",
                             remaining: snap.doublerRemaining, duration: Tuning.doublerDuration)
             }
             if snap.chronoRemaining > 0 {
-                powerUpChip("hourglass", 0x9BF0FF, "SLOW-MO",
+                powerUpChip(.slowMo, "SLOW-MO",
                             remaining: snap.chronoRemaining, duration: Tuning.chronoDuration)
             }
             if snap.sneakersRemaining > 0 {
-                powerUpChip("arrow.up.circle.fill", 0xFF8A2B, "SNEAKERS",
+                powerUpChip(.sneakers, "SNEAKERS",
                             remaining: snap.sneakersRemaining, duration: Tuning.superSneakersDuration)
             }
             if snap.boostRemaining > 0 {
-                powerUpChip("bolt.fill", 0xFFD23D, "OVERDRIVE",
+                powerUpChip(.overdrive, "OVERDRIVE",
                             remaining: snap.boostRemaining, duration: Tuning.boostDuration)
             }
         }
@@ -184,16 +184,16 @@ struct HUDView: View {
     /// A power-up chip: coloured icon + name + a big seconds countdown, over a depletion bar in the
     /// power-up's own colour. Held power-ups (shield) show a breathing "READY" instead of a timer.
     /// Last 3 s pulses (reduceFlash dims rather than blinks). Reads at a glance, mid-rush.
-    private func powerUpChip(_ symbol: String, _ hex: UInt32, _ name: String,
+    private func powerUpChip(_ kind: PowerUpKind, _ name: String,
                              remaining: Double?, duration: Double) -> some View {
-        let color = Theme.color(hex)
+        let color = Theme.color(kind.hex)
         let reduceFlash = ProfileStore.shared.profile.reduceFlash
         let warning = (remaining ?? .infinity) < 3
         let pulse = !warning || reduceFlash || Int((remaining ?? 0) * 4) % 2 == 0
         let progress = remaining != nil && duration > 0 ? max(0.03, min(1, remaining! / duration)) : 1
         return VStack(alignment: .trailing, spacing: 3) {
             HStack(spacing: 6) {
-                Image(systemName: symbol).font(.system(size: 14, weight: .bold))
+                PowerUpGlyph(kind: kind, size: 15, tint: color)
                 Text(name).font(.system(size: 11, weight: .heavy, design: .rounded)).tracking(0.5)
                 if let r = remaining {
                     Text("\(Int(r.rounded(.up)))s")

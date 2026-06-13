@@ -212,14 +212,19 @@ struct HowToPlayView: View {
 
     private var powerUpsCard: some View {
         card(title: "POWER-UPS", accent: 0x00FF88) {
-            powerRow(0x00F5FF, "shield.fill", "SHIELD", "absorbs one hit")
-            powerRow(0xFF2BD6, "dot.radiowaves.left.and.right", "MAGNET", "pulls gems to you")
-            powerRow(0x00FF88, "2.circle.fill", "DOUBLER", "gems pay double coins")
-            powerRow(0x9BF0FF, "hourglass", "CHRONO", "slows time — wider dodge windows")
+            powerRow(.shield, "SHIELD", "absorbs one hit")
+            powerRow(.magnet, "MAGNET", "pulls gems to you")
+            powerRow(.doubler, "DOUBLER", "gems pay double coins")
+            powerRow(.slowMo, "CHRONO", "slows time — wider dodge windows")
 
             Divider().overlay(.white.opacity(0.15)).padding(.vertical, 8)
 
             instructionRow("bolt.heart.fill", "CONTINUE", "shattered? spend coins to revive mid-run")
+            Text("Sneakers, deploys & loadout — full guide in Settings ▸ Power-Ups")
+                .scaledFont(11, weight: .semibold)
+                .foregroundStyle(.white.opacity(0.55))
+                .multilineTextAlignment(.center)
+                .padding(.top, 4)
         }
     }
 
@@ -262,18 +267,17 @@ struct HowToPlayView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func powerRow(_ hex: UInt32, _ symbol: String, _ title: String, _ detail: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .scaledFont(15, weight: .bold, design: .default)
-                .foregroundStyle(Theme.color(hex))
+    private func powerRow(_ kind: PowerUpKind, _ title: String, _ detail: String) -> some View {
+        let tint = Theme.color(kind.hex)
+        return HStack(spacing: 12) {
+            PowerUpGlyph(kind: kind, size: 20, tint: tint)
                 .frame(width: 34, height: 34)
-                .background(Theme.color(hex).opacity(0.14), in: Circle())
-                .overlay(Circle().strokeBorder(Theme.color(hex).opacity(0.5)))
+                .background(tint.opacity(0.14), in: Circle())
+                .overlay(Circle().strokeBorder(tint.opacity(0.5)))
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .scaledFont(13, weight: .heavy).tracking(1)
-                    .foregroundStyle(Theme.color(hex))
+                    .foregroundStyle(tint)
                 Text(detail)
                     .scaledFont(12, weight: .medium)
                     .foregroundStyle(.white.opacity(0.7))

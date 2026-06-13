@@ -944,15 +944,15 @@ struct GameView: View {
     private var deployControls: some View {
         HStack(alignment: .bottom) {
             VStack(spacing: 10) {
-                deployButton(symbol: "hourglass", hex: 0x9BF0FF, label: "SLOW-MO",
+                deployButton(kind: .slowMo, label: "SLOW-MO",
                              charges: ProfileStore.shared.profile.slowMoCharges, live: model.canDeploySlowMo,
                              id: "slowMoButton") { model.deploySlowMo() }
-                deployButton(symbol: "bolt.fill", hex: 0xFFD23D, label: "SPEED UP",
+                deployButton(kind: .speedUp, label: "SPEED UP",
                              charges: ProfileStore.shared.profile.speedUpCharges, live: model.canDeploySpeedUp,
                              id: "speedUpButton") { model.deploySpeedUp() }
             }
             Spacer()
-            deployButton(symbol: "shield.lefthalf.filled", hex: 0x00F5FF, label: "SHIELD",
+            deployButton(kind: .shield, label: "SHIELD",
                          charges: ProfileStore.shared.profile.shieldCharges, live: model.canDeployShield,
                          id: "shieldButton") { model.deployShield() }
         }
@@ -960,15 +960,13 @@ struct GameView: View {
 
     /// A big circular deploy button + label + charge badge. Lit in the power-up's colour when ready,
     /// dimmed + disabled when empty (a soft tick if tapped while its effect is already running).
-    private func deployButton(symbol: String, hex: UInt32, label: String, charges: Int, live: Bool,
+    private func deployButton(kind: PowerUpKind, label: String, charges: Int, live: Bool,
                               id: String, action: @escaping () -> Void) -> some View {
-        let color = Theme.color(hex)
+        let color = Theme.color(kind.hex)
         return Button(action: action) {
             VStack(spacing: 4) {
                 ZStack(alignment: .topTrailing) {
-                    Image(systemName: symbol)
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(live ? color : .white.opacity(0.4))
+                    PowerUpGlyph(kind: kind, size: 28, tint: live ? color : .white.opacity(0.4))
                         .frame(width: 64, height: 64)
                         .background(.ultraThinMaterial, in: Circle())
                         .overlay(Circle().strokeBorder(live ? color.opacity(0.7) : .white.opacity(0.12), lineWidth: 1.5))

@@ -4,21 +4,24 @@
 **DONE + committed (NOT pushed yet — push at the very end after the screenshot gate):**
 - Wall-vault + visible shoes (`7a9d217`); Wave-1 UX bugs — Head Start/coin-popup/revive/worlds-silhouette
   (`b2c505a`); worlds past 12 (`df1ee5a`); shield-break glass shatter (`3671c46`); power-up cadence
-  (`c080046`, layoutVersion **3→4**, next pre-arm `0x6390_28BA_85C6_9769`); HUD rework + Speed-Up deploy
+  (`c080046`, layoutVersion **3→4**); HUD rework + Speed-Up deploy
   (`699adeb`); stacked deploy layout + Shield deploy (`5a2355e`); world decor obstruction (`573e8d8`).
-- Gates green: SPM 178, Mac 185 unit + 11 XCUITest. Test sims: iPhone 17 Pro (dev) / 17 Pro Max (shots).
 - Mystery Box reveal sequence (`1552ad9`) — odds screen + shake/swivel/burst/reward; PR_MYSTERYBOX hook.
+- **Coin-path routing (G1)** (`42eb607`) — gap breadcrumb into each pattern's safe entry lane + pattern-7
+  gem line. Zero RNG → layoutVersion **4→5**; 200-seed bot + 12k soak green; goldens re-pinned (next
+  pre-arm `0xCF1D_7FAA_DFEF_898D` for v6). VERIFIED in-run (coin trail threads ahead of the player).
+- **Rarity-themed crests + auras (C2)** (`93544d3`) — cosmetic Crest enum + hasAura, id-keyed overlay
+  over the authored roster (legacy pins untouched). common plain → rare ears/floppy/fin → epic horns/
+  crown → legendary crown/halo/horns + orbiting aura. crestHex falls back to body hue for dark antennas
+  (Mono/Fang). Drawn by BOTH the swatch + the rig; VERIFIED in select + in-run (decree 2). Hooks
+  PR_FOCUS / PR_SKIN.
+- **Character-select carousel (C3)** (`cf8ed43`) — the hero card is now a paged slider through ALL
+  characters with per-page unlock requirement + progress bar; rarity-coloured page dots. VERIFIED across
+  coins/level/challenge gates.
+- **Pack purchase reveal burst (S1)** (`bdd4306`) — coin-spend packs fire a ring/spark/medallion reveal
+  (PackRewardBurst) on purchase, not just a toast. Hook PR_BUYPACK. VERIFIED.
+- Gates green each step: SPM 178, Mac BUILD OK. Test sims: iPhone 17 Pro (dev) / 17 Pro Max (shots).
 **REMAINING (next focused pass — all committed work is local, NOT pushed):**
-- **Coin-path routing (G1)** — gems must trace a TAKEABLE route (Subway-Surfers). Do it PATH-AWARE: a
-  naive centre breadcrumb misleads (leads into centre obstacles). Needs each pattern's gems on its
-  solvable lane + gap continuity that routes around the next pattern. Core spawn → layoutVersion **4→5**
-  (next pre-arm `0x6390_28BA_85C6_9769`) + 200-seed bot re-verify + golden re-pin. Higher risk — own session.
-- **Character rarity THEMES (C2)** — cosmetic only (decree): common = basic shape/colour; rare = more
-  features; epic = themed; legendary = themed families (cat/dog/etc.) + signature trails/auras. Big
-  roster art; worth a quick creative-direction confirm with the owner.
-- **Character-select SLIDER (C3)** — swap the single equipped card for a carousel of ALL characters
-  (owned + locked) with unlock requirement + progress. Contained UI rework of CharacterSelectView.
-- **Shop purchase juice (S1)** — packs currently just play a sound; give them a brief reveal/animation.
 - Polish: custom procedural power-up icons; PowerUpsView catalog (document the deploys/speed-up/shield);
   B4 meters label (by-design, low priority).
 - Pre-push gate: capture live docs/screenshots, update README, then `git push` (the whole v1.6 line).
