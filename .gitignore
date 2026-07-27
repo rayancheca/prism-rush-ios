@@ -27,3 +27,7 @@ reports/audio/*.caf
 * [0-9].swift
 * [0-9].xcodeproj
 * [0-9].yml
+
+# Agent-program subagent scratch (transient; the real artifacts live in docs/agent/0*.md)
+docs/agent/scratch/
+docs/agent/audits/scratch/

@@ -1,5 +1,13 @@
 # Prism Rush — Claude Code guide
 
+## Agent program
+
+This repo runs a multi-session agent program. Before doing anything else:
+read `docs/agent/01_RULES.md`, then `docs/agent/02_STATE.md`, then `HANDOFF.md`.
+Those rules govern every session. Do not skip them, even for a small request.
+
+---
+
 Neon three-lane endless runner for iPhone (Swift 6, SwiftUI, RealityKit). Every mesh, sound, and the
 app icon are generated in code — **zero binary assets**, no third-party dependencies.
 
