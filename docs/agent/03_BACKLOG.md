@@ -931,3 +931,26 @@ minutes and one of them is a money bug that ten agents reading `IAPCatalog.swift
 - Impact:      A documented "verified" behaviour is no longer true, and the doc is what a future session would trust instead of re-checking. Either the behaviour regressed since v1.2 or the original observation was of a different state.
 - Fix sketch:  Correct `state.md` once PR-0290 lands, and record the real fallback behaviour.
 - Verification: Re-run the bare-launch shop capture and describe what is actually on screen.
+
+## PR-0295 · SEV2 · A gesture in flight when you die carries through into the game-over panel
+- Area:        UI/GameView, UI/GameOverView
+- Found by:    S-001 addendum (reproduced with real touch input on a running build)
+- Status:      OPEN
+- Symptom:     You die mid-swipe and are instantly yanked onto the Profile screen without ever seeing the death panel. It reads as the game randomly navigating away from you.
+- Repro:       1. Start a run. 2. Perform a swipe whose path ends near the vertical middle of the screen. 3. If the swipe kills you, `GameOverView` appears *under the still-moving finger* and the lift-off registers on whatever is beneath it. **Observed: a path ending at tap-space y=504 landed on "FULL STATS ›" at y≈493 and opened Profile.**
+- Why:         `GameOverView` is inserted into the ZStack the moment `mode` becomes `.over`, while a `DragGesture` is still active. The `.onEnded` that fires afterwards is delivered to the newly-present panel.
+- Impact:      The player never sees their score, their coins, or the CONTINUE offer — the entire monetised end-of-run moment is skipped by an input they did not make. Note the panel already gates **RUN AGAIN** behind a "READY IN 1…" countdown (`GameOverView.swift:472-475`) precisely to stop accidental restarts, so the hazard is already understood — **FULL STATS, CONTINUE and BACK TO MENU are simply not covered by it.**
+- Fix sketch:  Extend the existing countdown gate to the whole panel, not just RUN AGAIN — ignore any touch whose gesture began before the panel appeared. Tracking the gesture's start timestamp against the panel's presentation time is enough.
+- Blast radius: `UI/GameView.swift` (gesture layer), `UI/GameOverView.swift`.
+- Verification: XCUITest: begin a drag, force a death mid-drag, release over each panel control, assert no navigation occurred.
+- Note:         Strengthens PR-0135 (the countdown can only ever read "1") — the countdown is load-bearing for more than it currently covers.
+
+## PR-0296 · SEV3 · The attract track scrolls visibly through the hub's translucent cards — owner call
+- Area:        UI/MenuView, Render
+- Found by:    S-001 addendum (observed on a running build, three launches)
+- Status:      OPEN
+- Symptom:     The menu-mode track's bright magenta grid lines read straight through the DAILY RUSH / REWARDS / MISSIONS and CHARACTERS / SHOP / WORLDS cards, and a horizontal line sweeps across the three nav labels as the track scrolls.
+- Why:         The hub cards are translucent and sit over the live attract-mode RealityKit scene. The PLAY button is opaque and correctly occludes the track; the lower cards are not.
+- Impact:      **This may be the intended neon aesthetic — it is a judgment call, not a provable defect, and it needs Rayan's eye rather than an agent's.** Recorded because a line sweeping across a nav label repeatedly does hurt legibility, which decree 6 cares about. Do not "fix" it without an answer.
+- Fix sketch:  If unintended: raise the card fill opacity or add a scrim behind the bottom two rows. If intended: note it here as accepted so no future session re-files it.
+- Verification: Owner decision recorded in `04_DECISIONS.md`.
