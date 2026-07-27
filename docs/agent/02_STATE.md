@@ -105,9 +105,40 @@ Nothing can move past `VERIFY-PENDING` without him. Carried forward every sessio
 Note the device gotcha recorded in memory: this repo lives under iCloud-synced `~/Desktop`, so
 codesigned builds must use a `-derivedDataPath` **outside** the synced tree. Sim builds are fine.
 
+## Session 001 addendum — the build was actually run
+
+Rayan asked why no agent had launched the app. Correct catch: the 181 items above were pure static
+reading. The build was then run for real — `./Tools/build.sh` → BUILD OK, installed and launched on
+iPhone 17 Pro / iOS 26.5 (`10C15FE0-3D9A-40D5-9E45-C0702E906DF3`), driven with `PR_AUTOPLAY` and
+`PR_SCREEN`.
+
+Fifteen minutes produced four findings, one of them a money bug:
+
+- **PR-0290 (SEV1)** — the shop renders hardcoded USD prices on live, tappable buy buttons whenever
+  StoreKit has not loaded. A non-US player sees a price they will not be charged. Ten agents read
+  `IAPCatalog.swift` and did not flag it.
+- **PR-0291 (SEV2)** — score popups stack into an unreadable smear (seen at 189 m and again at
+  660 m, so systematic).
+- **PR-0292 (SEV2)** — a near-field tall obstacle washes out the SHIELD deploy button.
+- **PR-0293 (SEV2)** — the Mystery Box discloses no odds.
+- **PR-0294 (SEV3)** — `state.md`'s "Store unavailable fallback verified" note is no longer true.
+
+**This is now mandatory** for every behavioural session: `01_RULES.md` §4, decisions D-003 and
+D-004. Backlog total is **186**.
+
+**Resolved by running it:** open question 5 and charter assumption A4 — the Mystery Box costs
+**300 coins**, not real money, so Guideline 3.1.1's odds requirement does not bite. The charter's
+own stricter non-negotiable still does (PR-0293).
+
+**Blocked on Rayan:** the native simulator integration will not attach, reporting "Xcode is
+installed but not selected" even though `xcode-select -p` already returns the right path and
+`xcodebuild` works. Needs `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`. Until
+then sessions drive the simulator through `xcrun simctl`, which cannot synthesise taps or swipes —
+so interaction has to go through launch hooks or XCUITests.
+
 ## Open questions for Rayan
 
-Carried in `HANDOFF.md` until answered. Ranked.
+Carried in `HANDOFF.md` until answered. Ranked. **Question 5 is resolved — see the addendum above.**
 
 1. **Is App Store submission still the goal, and on what timescale?** Everything in Phase 2 is
    priced against "yes, soon". (Charter assumption A1.)

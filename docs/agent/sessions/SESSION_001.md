@@ -200,3 +200,74 @@ Non-blocking. Full versions with context in `02_STATE.md`.
 4. PR-0052 — is the Daily Challenge a *layout* guarantee or an *identical-experience* guarantee?
 5. Can the Mystery Box ever be opened with real money, or is it coins only? The answer decides
    whether odds disclosure is a hard 3.1.1 blocker.
+
+---
+
+# Addendum — the build was actually run
+
+Rayan, reading the session report: *"so you're saying no agents are actually spinning up a
+simulator on xcode to run the code and actually see what's going on? cause it should def do that."*
+
+He was right, and it was the single biggest defect in this session. Everything above this line is
+static reading. `swift test` genuinely executed 178 tests, but **nobody built the app, launched it,
+or looked at a frame** — and I wrote a handoff sending AUDIT-004 (Impatient Player) and AUDIT-005
+(Device Matrix QA) into work that is *definitionally* impossible from source.
+
+## What was then done
+
+```
+$ ./Tools/build.sh
+BUILD OK
+
+$ xcrun simctl install 10C15FE0-3D9A-40D5-9E45-C0702E906DF3 .dd/Build/Products/Debug-iphonesimulator/PrismRush.app
+INSTALLED
+$ xcrun simctl launch 10C15FE0-3D9A-40D5-9E45-C0702E906DF3 com.rayancheca.prismrush
+com.rayancheca.prismrush: 30351
+```
+
+Then: splash captured; `PR_AUTOPLAY=1` run with six frames over ~36 s of real gameplay (189 m →
+660 m); all six meta screens captured via `PR_SCREEN`; hub captured. Fourteen screenshots, opened
+and read.
+
+## What fifteen minutes of running it found
+
+| ID | Sev | Finding |
+|---|---|---|
+| PR-0290 | SEV1 | The shop renders **hardcoded USD prices on live, tappable buy buttons** whenever StoreKit has not loaded. `displayPrice` falls back to `IAPCatalog`'s `fallbackPrice` strings (`IAPManager.swift:127-128`, `IAPCatalog.swift:28-35`). A non-US player is shown a price they will not be charged |
+| PR-0291 | SEV2 | Score popups stack into an unreadable smear — seen at 189 m and again at 660 m, so systematic, not a collision |
+| PR-0292 | SEV2 | A near-field tall obstacle washes the SHIELD deploy button out to near-invisible |
+| PR-0293 | SEV2 | The Mystery Box discloses no odds |
+| PR-0294 | SEV3 | `state.md`'s "Store unavailable fallback verified" note is no longer true of the shipped build |
+
+**PR-0290 is the one that matters.** Ten agents read `IAPCatalog.swift` in full during the survey.
+The `fallbackPrice` field is right there, with a comment explaining it. Not one flagged that the
+buy button stays live while a fabricated price is on screen — because in source it reads as a
+sensible loading affordance, and only on screen is it obviously a price tag on a working button.
+
+Also resolved by looking: **the Mystery Box costs 300 coins, not real money.** That closes charter
+assumption A4 and open question 5 — Guideline 3.1.1's odds requirement does not bite. Two agents
+had flagged it as a possible hard blocker; one screenshot settled it.
+
+## What this changes about the program
+
+- `01_RULES.md` §4 amended (D-003, on Rayan's explicit instruction — the one authorised edit to the
+  rules file): any session concerning behaviour must build and run the app before writing findings,
+  and a finding that could have been confirmed on a running build and was not is an **incomplete
+  finding**.
+- `HANDOFF.md` now opens with a mandatory run-the-app block before AUDIT-001 reads any source.
+- D-004 records that the native simulator integration is blocked on
+  `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` (which needs Rayan's password,
+  and which is odd because `xcode-select -p` already returns that path), so sessions drive
+  `xcrun simctl` instead — no synthetic taps, so arbitrary input must become an XCUITest.
+
+## Where I was wrong (addendum)
+
+- **I treated "read every file exhaustively" as equivalent to "understand the product."** It is
+  not, and the gap is not marginal — it is a money bug and every finding AUDIT-004 and AUDIT-005
+  exist to produce. Ten agents and 2.5M tokens of reading did not surface what one screenshot did.
+- **I wrote a handoff that would have propagated the mistake.** The original version sent the
+  Completeness Auditor to grep for markers and read `ui-meta.md`. Its actual job — "is this
+  finished" — is answered by launching the thing.
+- **I trusted `state.md`'s verified-behaviour note** about the shop's offline fallback. It was
+  wrong (PR-0294). The lesson generalises: a doc saying "verified" records what someone saw once,
+  on some build, and this repo's docs are demonstrably stale in a dozen places.

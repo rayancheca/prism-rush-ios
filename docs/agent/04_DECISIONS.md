@@ -68,3 +68,55 @@ time re-deriving why. Do not write one for routine implementation choices.
                `HANDOFF.md` until answered.
 - Revisit if:  Rayan answers the charter questions — then rewrite `00_CHARTER.md` and mark
                the assumptions resolved.
+
+## D-003 · Every behavioural audit must run the app, not just read it
+- Date:        2026-07-27
+- Session:     S-001 (addendum)
+- Status:      ACCEPTED
+- Context:     Session 001 produced 181 findings entirely from static reading. Rayan asked why no
+               agent had spun up a simulator. Within fifteen minutes of actually building,
+               launching and driving the app, four new findings appeared — including **PR-0290**,
+               a money bug (hardcoded USD prices on live buy buttons when StoreKit has not
+               loaded) that ten agents reading `IAPCatalog.swift` had not flagged, and two
+               readability defects (PR-0291, PR-0292) that are invisible in source by
+               construction. AUDIT-004 (Impatient Player) and AUDIT-005 (Device Matrix QA) are
+               *entirely* about properties that do not exist in a source file.
+- Options:     (a) Keep audits read-only and add a single play-test session at the end.
+               (b) Require every behavioural audit to run the app as its first act.
+               (c) Require it only for AUDIT-004 and AUDIT-005.
+- Decision:    (b), on Rayan's explicit instruction ("it should def do that"). Running the app is
+               now part of the Definition of Done for any audit or fix that concerns behaviour,
+               and `01_RULES.md` §4 is amended to say so. This is the one authorised edit to the
+               rules file.
+- Consequences: Audit sessions get slower and better. A finding that could have been confirmed on
+               a running build and was not is now an incomplete finding. Screenshots become the
+               default evidence format, which also feeds the global README screenshot rule and
+               PR-0051 (`Tools/screenshots.sh` cannot currently produce them).
+               Note the sequencing constraint: **never drive the simulator while `xcodebuild
+               test` is running on it** — concurrent installs crash the test host.
+- Revisit if:  Simulator runs start costing more session time than the findings are worth, which
+               would mean the app-driving harness needs fixing (PR-0051), not the rule.
+
+## D-004 · Drive the simulator through `xcrun simctl` while the native integration is blocked
+- Date:        2026-07-27
+- Session:     S-001 (addendum)
+- Status:      ACCEPTED
+- Context:     The Claude Code iOS Simulator integration refuses to attach, reporting "Xcode is
+               installed but not selected" and asking for
+               `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`. That path is
+               *already* what `xcode-select -p` returns, and `xcodebuild -version` reports Xcode
+               26.6 working normally, so the check appears to be misreporting. It needs Rayan's
+               password either way, so no session can fix it.
+- Options:     (a) Block on the integration.
+               (b) Drive the simulator directly with `xcrun simctl` + `xcodebuild`.
+               (c) Drive the Simulator app with generic screen-control tools.
+- Decision:    (b). `simctl` gives install, launch, environment injection and screenshots — all
+               that an audit needs. What it does *not* give is synthetic taps and swipes, so
+               interaction must go through the repo's own launch hooks (`PR_AUTOPLAY`,
+               `PR_SCREEN`, `PR_FIRSTRUN`, `PR_WORLD`, …) and the XCUITest target.
+- Consequences: Audits can see the app but cannot freely poke at it. Anything needing arbitrary
+               touch input has to be expressed as an XCUITest — which is a better outcome anyway,
+               because it leaves a regression test behind. The live watch-along panel stays
+               unavailable to Rayan until the `xcode-select` command is run.
+- Revisit if:  Rayan runs the command and `attach` starts working, at which point prefer the
+               native integration for interactive probing.

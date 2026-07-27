@@ -859,3 +859,75 @@ end to end. Same confidence caveat as everything above.
 | PR-0283 | Fabricated `coinsPurchasedByDevice` slots make `merged()` *credit* the difference on every device, so a forged balance is re-granted on each sync | `ProfileStore.swift:659-663` | Falls out of the PR-0002 / PR-0252 rework; verify explicitly |
 | PR-0284 | Clearing `grantedTransactionIDs` re-arms the IAP replay dedupe, so a StoreKit redelivery re-pays real grants; `firstPurchaseBonusUsed = false` re-arms the one-time +50% bonus | `ProfileStore.swift:161-168` | Derive replay protection from a source the save cannot forge |
 | PR-0285 | Eight `PR_*` launch env hooks that mutate the real profile and grant power-ups ship in the release binary | `GameView.swift:146-253` | Gate behind `#if DEBUG` or a signed build check; difficulty to exploit is hard, but the cost of gating is near zero |
+
+---
+
+# Findings from actually running the build (PR-0290+)
+
+Filed by **session 001 addendum**, after the owner pointed out that no agent had launched the app.
+Everything above this line is static reading. Everything below was seen on a running build:
+`./Tools/build.sh` → BUILD OK → installed and launched on iPhone 17 Pro / iOS 26.5
+(`10C15FE0-3D9A-40D5-9E45-C0702E906DF3`), driven with the repo's own `PR_AUTOPLAY` and `PR_SCREEN`
+launch hooks. Evidence screenshots were captured to the session scratchpad (transient — regenerate
+with the commands in `08_TESTING.md`).
+
+**These are the only findings in this file that are visually confirmed.** They took about fifteen
+minutes and one of them is a money bug that ten agents reading `IAPCatalog.swift` did not flag.
+
+## PR-0290 · SEV1 · The shop displays hardcoded US dollar prices when StoreKit has not loaded
+- Area:        IAP/IAPCatalog, IAP/IAPManager, UI/ShopView
+- Found by:    S-001 addendum (observed on a running build)
+- Status:      OPEN
+- Symptom:     A player outside the US sees `$0.99 / $1.99 / $2.99 / $4.99 / $9.99 / $19.99` on live, tappable buy buttons, and is then charged in their own currency at their own storefront price. The displayed price is not the price.
+- Repro:       1. Launch the app without the StoreKit configuration attached (a bare `simctl launch`, or any real launch where the product load is slow, offline, or fails). 2. Open the Shop. 3. Observe fully-priced, fully-tappable cards. **Screenshot captured — this is what the shop renders today.**
+- Why:         `IAPManager.displayPrice(_:)` is `storeProduct(id)?.displayPrice ?? (IAPCatalog.product(id)?.fallbackPrice ?? "")` (`IAPManager.swift:127-128`), and every `fallbackPrice` in `IAPCatalog.swift:28-35` is a hardcoded USD string. The comment says "shown if StoreKit hasn't loaded real pricing yet" — the problem is that the buy button is live at the same time.
+- Impact:      Money. A non-US player is shown a price they will not be charged. This is Guideline 2.3.1 / 3.1 pricing-accuracy exposure, and it violates owner decree 5 (honest monetization) directly. It is also the exact case `state.md` believed was covered by a "Store unavailable" fallback — that fallback did not appear.
+- Fix sketch:  Never render a price string that did not come from StoreKit. Show a skeleton or a neutral "…" while loading, and disable purchase until `availability == .ready`. Keep `fallbackValue` for internal value-badge math if it is genuinely needed, but never surface `fallbackPrice` to the player.
+- Blast radius: `IAP/IAPManager.swift`, `IAP/IAPCatalog.swift`, `UI/ShopView.swift`.
+- Verification: Launch with no StoreKit config; assert no `$` string appears and no buy button is enabled. Then launch with the config and assert real prices appear.
+- Note:         Interacts with PR-0032 (a purchase can fail with no feedback in `.notConfigured`) and PR-0160 (`auroraID` prices every premium skin). Fix the three together — they are one "what does the shop show when the store is not ready" question.
+
+## PR-0291 · SEV2 · Score popups stack into an illegible smear
+- Area:        UI/EffectsOverlay, UI/GameView
+- Found by:    S-001 addendum (observed on a running build, two independent frames)
+- Status:      OPEN
+- Symptom:     Four or more `+50` popups render on top of each other in the same place, producing an unreadable cyan blur instead of feedback.
+- Repro:       Run with `SIMCTL_CHILD_PR_AUTOPLAY=1`; observed at 189 m and again at 660 m, so it is systematic rather than a one-off collision.
+- Why:         Not yet diagnosed — popups appear to spawn at the collected gem's position with no stagger, jitter, or coalescing, and gems arrive in tight arcs and trails by design (a gem arc is 7 gems, a coin trail more).
+- Impact:      The reward feedback for the single most frequent action in the game is unreadable exactly when the player is doing well. Decree 6 (clarity beats spectacle). This is a direct hit on the "one more run" feel loop that AUDIT-002 will care about.
+- Fix sketch:  Coalesce simultaneous popups into one `+N` total, or stagger their spawn position and lifetime. Coalescing is probably better — it also reads as a bigger reward.
+- Blast radius: `UI/EffectsOverlay.swift`, `UI/GameView.swift` (the FX sink).
+- Verification: Autoplay through a gem arc and a coin trail; every popup legible.
+
+## PR-0292 · SEV2 · A near-field tall obstacle swallows the SHIELD deploy button
+- Area:        UI/GameView, Render/Reality/RealityRenderer
+- Found by:    S-001 addendum (observed on a running build at 660 m)
+- Status:      OPEN
+- Symptom:     When a tall wall passes on the right at close range, its bright cyan face fills the bottom-right of the screen and the SHIELD button's glyph, label and charge badge wash out to near-invisible against it.
+- Repro:       `SIMCTL_CHILD_PR_AUTOPLAY=1`, wait for a tall wall in the right lane at close range. **Screenshot captured.**
+- Why:         The deploy buttons are flat translucent SwiftUI overlays with no scrim or contrast floor against whatever the renderer draws behind them.
+- Impact:      A control the player paid for becomes unreadable at exactly the moment they most need it — a wall in their lane is when you reach for Shield. Decree 6.
+- Fix sketch:  Give the deploy buttons an opaque or strongly-scrimmed backing, or a contrast-adaptive stroke. Cheap.
+- Blast radius: `UI/GameView.swift` (`deployButton`).
+- Verification: Same repro; the button stays legible against a full-brightness obstacle.
+- Note:         Compounds PR-0047 (the same buttons create swipe dead zones in both bottom thumb corners). Same three controls, two independent problems — fix together.
+
+## PR-0293 · SEV2 · The Mystery Box discloses no odds
+- Area:        UI/MysteryBoxView, UI/ShopView
+- Found by:    S-001 addendum (observed on a running build)
+- Status:      OPEN
+- Symptom:     The card reads "Coins, slow-mo, or a loadout boost — 1,200-coin jackpot!" for 300 coins, with no probability for any outcome.
+- Why:         No odds are rendered anywhere on the card or in the reveal.
+- Impact:      **Resolves charter assumption A4 and open question 5: the Mystery Box is a 300-coin purchase, not real money.** That means Guideline 3.1.1's loot-box odds requirement does not bite. But the charter's own non-negotiable says "**any** randomized purchase must disclose odds", which is deliberately stricter than Apple. By the project's own standard this is a gap.
+- Fix sketch:  Print the outcome table on the card, or in a tappable "odds" affordance next to it. The distribution already exists in code; surface it.
+- Blast radius: `UI/MysteryBoxView.swift`, `UI/ShopView.swift`.
+- Verification: Odds visible before the player spends, matching the code's actual distribution.
+
+## PR-0294 · SEV3 · The `.storekit` fallback path is not what `state.md` believes it is
+- Area:        docs, IAP
+- Found by:    S-001 addendum
+- Status:      OPEN
+- Symptom:     `state.md` records that under a bare `simctl` launch the shop shows a correct "Store unavailable" fallback, and cites it as verified v1.2 behaviour. On a running v1.6 build it shows fully-priced tappable cards instead.
+- Impact:      A documented "verified" behaviour is no longer true, and the doc is what a future session would trust instead of re-checking. Either the behaviour regressed since v1.2 or the original observation was of a different state.
+- Fix sketch:  Correct `state.md` once PR-0290 lands, and record the real fallback behaviour.
+- Verification: Re-run the bare-launch shop capture and describe what is actually on screen.

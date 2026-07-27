@@ -63,6 +63,49 @@ Determine whether Prism Rush is actually finished, and produce the **Completenes
 row per user-facing feature the project claims, with columns for `implemented`, `reachable`,
 `tested`, `polished` — as a permanent section of `02_STATE.md`.
 
+## Before you read a single source file: run the app
+
+This is mandatory (`01_RULES.md` §4, decision D-003). Session 001 filed 181 findings from static
+reading, then found a **money bug in the first fifteen minutes of actually launching it** —
+PR-0290, the shop rendering hardcoded USD prices on live buy buttons whenever StoreKit has not
+loaded. Ten agents had read `IAPCatalog.swift` and missed it.
+
+Your persona's whole job is "is this actually finished." You cannot answer that from source.
+
+```bash
+./Tools/build.sh
+```
+
+```bash
+xcrun simctl boot 10C15FE0-3D9A-40D5-9E45-C0702E906DF3
+```
+
+```bash
+xcrun simctl install 10C15FE0-3D9A-40D5-9E45-C0702E906DF3 .dd/Build/Products/Debug-iphonesimulator/PrismRush.app
+```
+
+```bash
+SIMCTL_CHILD_PR_SCREEN=shop SIMCTL_CHILD_PR_SKIP_SPLASH=1 xcrun simctl launch 10C15FE0-3D9A-40D5-9E45-C0702E906DF3 com.rayancheca.prismrush
+```
+
+```bash
+xcrun simctl io 10C15FE0-3D9A-40D5-9E45-C0702E906DF3 screenshot shop.png
+```
+
+Then **open the PNG and look at it.** A captured screenshot nobody read is not evidence.
+
+Walk every screen this way — `PR_SCREEN` takes `shop`, `characters`, `levels`, `missions`,
+`stats`, `settings`; `PR_AUTOPLAY=1` plays the game for you; `PR_FIRSTRUN=1` gives the first-run
+tutorial state; and `PR_DEMOPROFILE`, `PR_DEEPWORLDS`, `PR_WORLD`, `PR_SKIN`, `PR_SHIELD`,
+`PR_SNEAKERS`, `PR_TUTORIAL`, `PR_FOCUS`, `PR_DEMO` reach the rest. **Screenshot the zero-coin,
+everything-owned, and offline states in particular** — those are where decree 3 ("no
+broken-looking states for expected situations") gets violated, and they are your persona's
+richest hunting ground.
+
+Two constraints: `simctl` **cannot synthesise taps or swipes**, so anything needing arbitrary
+touch input must be written as an XCUITest; and **never drive the simulator while `xcodebuild
+test` is running on it** — concurrent installs crash the test host.
+
 ## In scope
 
 Everything in the AUDIT-001 brief in `docs/agent/audits/PERSONAS.md`. The highest-yield leads

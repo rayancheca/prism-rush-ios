@@ -111,6 +111,38 @@ An item is `DONE` only when all of these hold and the evidence is pasted into th
 
 If something cannot be verified in this environment — simulator unavailable, device-only behavior, needs App Store Connect, needs a real purchase — mark the item `VERIFY-PENDING` instead of `DONE`, and add a line to `02_STATE.md` under "Needs Rayan on a device." Never mark `DONE` on the strength of reasoning alone.
 
+### Run the app (added by D-003, on Rayan's explicit instruction)
+
+**If your session concerns behaviour, you must build and run the app before you write your
+findings.** Reading the source is not verification. Session 001 produced 181 findings from static
+reading alone and then found a money bug in the first fifteen minutes of actually launching it
+(PR-0290: hardcoded USD prices on live buy buttons), plus two readability defects that cannot
+exist in a source file (PR-0291, PR-0292).
+
+The minimum, in order:
+
+```bash
+./Tools/build.sh                                    # BUILD OK, ~2 min
+xcrun simctl boot <UDID> && xcrun simctl install <UDID> .dd/Build/Products/Debug-iphonesimulator/PrismRush.app
+SIMCTL_CHILD_PR_AUTOPLAY=1 xcrun simctl launch <UDID> com.rayancheca.prismrush
+xcrun simctl io <UDID> screenshot shot.png          # then actually LOOK at it
+```
+
+Full working command set, hook table, and the current simulator UDID: `08_TESTING.md`.
+
+- **Look at the screenshots.** A captured PNG nobody opened is not evidence.
+- **Reach states with the repo's launch hooks**, not by guessing: `PR_AUTOPLAY`, `PR_SCREEN`
+  (`shop`/`characters`/`levels`/`missions`/`stats`/`settings`), `PR_FIRSTRUN`, `PR_SKIP_SPLASH`,
+  `PR_WORLD`, `PR_SKIN`, `PR_DEEPWORLDS`, `PR_SHIELD`, `PR_SNEAKERS`, `PR_DEMOPROFILE`,
+  `PR_TUTORIAL`, `PR_FOCUS`, `PR_DEMO`.
+- **`simctl` cannot synthesise taps or swipes.** Anything needing arbitrary touch input must be
+  written as an XCUITest — which is the better outcome anyway, since it leaves a regression test
+  behind.
+- **Never drive the simulator while `xcodebuild test` is running on it.** Concurrent installs
+  crash the test host and report a false TEST FAILED.
+- A finding that *could* have been confirmed on a running build and was not is an **incomplete
+  finding**. Mark it as unconfirmed rather than presenting it as established.
+
 **Forbidden ways to make the gate pass:** deleting or skipping a test, lowering a threshold, adding `@unchecked Sendable`, adding `MainActor.assumeIsolated` to silence an isolation error, wrapping in `try?` to swallow, `#if DEBUG`-ing a failure away, or suppressing a warning. Each of those is a *finding* to log, never a fix to apply.
 
 ---
