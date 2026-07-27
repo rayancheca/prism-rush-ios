@@ -954,3 +954,252 @@ minutes and one of them is a money bug that ten agents reading `IAPCatalog.swift
 - Impact:      **This may be the intended neon aesthetic — it is a judgment call, not a provable defect, and it needs Rayan's eye rather than an agent's.** Recorded because a line sweeping across a nav label repeatedly does hurt legibility, which decree 6 cares about. Do not "fix" it without an answer.
 - Fix sketch:  If unintended: raise the card fill opacity or add a scrim behind the bottom two rows. If intended: note it here as accepted so no future session re-files it.
 - Verification: Owner decision recorded in `04_DECISIONS.md`.
+
+---
+
+# Findings from AUDIT-001, The Completeness Auditor (session 002)
+
+Filed by session 002. Method: 10-agent hostile fan-out, **two independent adversarial verifiers per
+dimension**, plus the auditor's own hands on a running build. Every item below survived at least one
+verifier whose explicit job was to refute it. `[RUNTIME]` = observed on a running build.
+
+**Read `docs/agent/audits/AUDIT_002_completeness.md` §5 before working any session-001 item** — that
+section re-scores PR-0290, refutes PR-0293 and PR-0161, and demotes PR-0130 and PR-0176. Session 001
+items were not renumbered, merged, or deleted.
+
+## PR-0300 · SEV1 · Cold launch adopts the cloud profile wholesale and discards the local one
+- Area:        Meta/ProfileStore
+- Found by:    AUDIT-001 (session 002), finder `silent-failure`, both verifiers
+- Status:      OPEN
+- Symptom:     A player plays offline on device A, then launches on device B (or relaunches after a KVS push). The offline session's coins, XP and unlocks are gone.
+- Repro:       Needs two devices or airplane mode — see AUDIT_002 §6. Static: find the cold-launch profile load and confirm it assigns the cloud value rather than calling `merged()`.
+- Why:         `ProfileStore` has a `merged()` function that exists to prevent exactly this, and the cold-launch path does not call it. Verifier verdict: "SURVIVES (SEV1, borders SEV0)."
+- Impact:      Silent, unrecoverable progress loss. Money-adjacent: purchased coins can be destroyed.
+- Fix sketch:  Route the cold-launch path through the same `merged()` the sync path uses. Do not special-case first load.
+- Blast radius: `Meta/ProfileStore.swift`.
+- Verification: Two-device test, plus a unit test that asserts cold launch with both a local and a cloud profile keeps the union.
+- Note:         **Overlaps session 001's PR-0005. Session 009 should merge these.** Filed separately because the mechanism — merge not called *on that specific path* — is more precise than PR-0005 records.
+
+## PR-0301 · SEV1 · No Privacy Policy URL exists anywhere, and neither ship doc asks for one
+- Area:        Store/, docs/, project.yml
+- Found by:    AUDIT-001 (session 002), finder `docs-vs-code`, both verifiers
+- Status:      OPEN
+- Symptom:     The app ships Sign in with Apple, Game Center and iCloud KVS with no privacy policy to point App Store Connect at.
+- Repro:       Static: grep the repo. Absent from `project.yml`, `Store/metadata.md`, `docs/SHIP_CHECKLIST.md`, `docs/APP_STORE_SETUP.md`.
+- Why:         Never written. The ship docs do not list it as a gate, so the omission is invisible to the checklist.
+- Impact:      A submission cannot be completed without it.
+- Fix sketch:  Write the policy, host it, add the URL to `Store/metadata.md` and add a HUMAN GATE row to `SHIP_CHECKLIST.md`.
+- Verification: AUDIT-003 (session 004) scores it against the live guidelines.
+- Note:         Compliance is AUDIT-003's remit; filed here because a **missing artifact** is squarely the completeness mandate. Interacts with PR-0009.
+
+## PR-0302 · SEV2 · [RUNTIME] The Mystery Box OPEN button is inert when unaffordable, and the app already has the right pattern
+- Area:        UI/MysteryBoxView, UI/ShopView
+- Found by:    AUDIT-001 (session 002), observed on a running build
+- Status:      OPEN
+- Symptom:     With 100 coins, `OPEN · 300` renders as a full-saturation cyan→magenta CTA. Tapping it does nothing at all — no shortfall copy, no route to coins, no shake, no toast, no disabled styling.
+- Repro:       1. `SIMCTL_CHILD_PR_SCREEN=shop SIMCTL_CHILD_PR_SKIP_SPLASH=1 xcrun simctl launch <UDID> com.rayancheca.prismrush` with fewer than 300 coins. 2. Scroll to POWER-UP PACKS, tap Mystery Box. 3. Tap `OPEN · 300`. **Observed: no change whatsoever, balance unmoved.**
+- Why:         The unaffordable branch has no handler at all, unlike its siblings.
+- Impact:      A dead primary CTA on a monetised surface. Decrees 3 and 4.
+- Fix sketch:  Reuse the existing pattern verbatim — `UnlockPanel` shows `NEED 400 MORE` + a `GET COINS` button; `GameOverView`'s revive shows `NEED 46 MORE  150` on a dimmed pill. Both are already written.
+- Blast radius: `UI/MysteryBoxView.swift`.
+- Verification: Launch with < 300 coins, tap OPEN, assert a shortfall message and a route to coins.
+- Note:         One workflow finder described this button as "dimmed". It is not — at 100 coins it is at full saturation. The screenshot is authoritative.
+
+## PR-0303 · SEV2 · [RUNTIME] The Mystery Box overlay has no backdrop scrim, making the odds table the least legible thing on screen
+- Area:        UI/MysteryBoxView
+- Found by:    AUDIT-001 (session 002), observed on a running build
+- Status:      OPEN
+- Symptom:     The odds panel and the OPEN/CLOSE controls are drawn directly over fully-legible Shop content. `BALANCED PICK`, `7,000`, `$4.99`, `FIRST PURCHASE +50%` (×2), `+32% BONUS`, `BEST VALUE`, `16,000` and `40,000` all read straight through the odds rows and buttons.
+- Repro:       Shop → Mystery Box. **Verified settled, not mid-animation: two consecutive screenshots are identical.**
+- Why:         No dimming layer behind the overlay.
+- Impact:      The one surface that exists to satisfy the charter's "any randomized purchase must disclose odds" non-negotiable is the hardest thing on screen to read. Decree 6.
+- Fix sketch:  Add the scrim the other modal overlays use. Separately, give `CLOSE` real button chrome — it is currently bare text, unlike every other control in the app.
+- Blast radius: `UI/MysteryBoxView.swift`.
+- Verification: Screenshot the overlay; no Shop text may be legible behind the odds panel.
+
+## PR-0304 · SEV2 · [RUNTIME] The Missions board says "ALL CLEAR" on first launch, when every mission is 0/N
+- Area:        UI/MissionsView
+- Found by:    AUDIT-001 (session 002), observed on a running build
+- Status:      OPEN
+- Symptom:     `ALL CLEAR · NEW BOARD IN 3:32` sits above seven rows reading `0/150`, `0/15`, `0/10`, `0/1.0k`, `0/75`, `0/30`, `0/5`.
+- Repro:       Fresh install → `SIMCTL_CHILD_PR_SCREEN=missions`. **Screenshot captured.**
+- Why:         The summary strip's state is derived from "nothing claimable" rather than "nothing in progress", and those coincide on an empty board.
+- Impact:      The first thing a new player reads on this screen tells them they have finished it. Decree 3 — first launch is the most important state this surface has.
+- Fix sketch:  Distinguish the two states: `6 MISSIONS AVAILABLE` when nothing is complete, `ALL CLEAR` only when every mission is genuinely done.
+- Blast radius: `UI/MissionsView.swift`.
+- Verification: Fresh profile, open Missions, assert the strip does not read ALL CLEAR.
+- Note:         Same screen shows `RESETS 3:32` (no unit) beside `RESETS 3D` — two formats, one screen. Fix together.
+
+## PR-0305 · SEV2 · [RUNTIME] Mute cannot be undone from the hub or Settings, and it survives relaunch
+- Area:        UI/GameView, UI/SettingsView
+- Found by:    AUDIT-001 (session 002), finder `dead-affordances`, verifier SURVIVES (SEV2)
+- Status:      OPEN
+- Symptom:     A player who mutes mid-run, quits to the menu and relaunches has a permanently silent game with no visible way to fix it.
+- Repro:       Start a run, tap the corner speaker, quit to menu, force-quit, relaunch. Audio stays off; Settings offers no mute control.
+- Why:         `toggleMute()` (`GameView.swift:603`) has exactly one caller — `GameView.swift:1072`, the in-run/game-over corner control. It persists to the profile (`:606`) and is restored at launch (`:200-201`). `SettingsView` has three volume sliders and no mute.
+- Impact:      The player must guess that starting a run reveals the only unmute. Decree 4.
+- Fix sketch:  Add a mute row to Settings bound to the same profile field.
+- Blast radius: `UI/SettingsView.swift`.
+- Verification: Mute in-run, relaunch, unmute from Settings.
+
+## PR-0306 · SEV2 · [RUNTIME] Pre-approval store: seven hardcoded USD prices at full opacity, every one inert
+- Area:        IAP/IAPCatalog, IAP/IAPManager, UI/ShopView
+- Found by:    AUDIT-001 (session 002), observed on a running build
+- Status:      OPEN
+- Symptom:     With `availability == .notConfigured` the Shop shows `$2.99`, `$1.99`, `$0.99`, `$4.99`, `$9.99`, `$19.99` and Aurora `$1.99` at full opacity. **Tapping `$0.99` produces nothing — no toast, no sheet, no error, no state change.** The only disclosure is a grey `PRICES SHOWN · APP STORE SETUP PENDING` footnote roughly six screens below the first price.
+- Repro:       Bare `simctl launch` (no StoreKit config) → `PR_SCREEN=shop`. **Screenshots captured of both the prices and the no-op tap.**
+- Why:         `.loading` shimmers the price pills (`ShopView.swift:705`, `:722`) and `.offline` renders a first-viewport RETRY card (`:72-99`). `.notConfigured` has neither mitigation, and its tap handler has no branch.
+- Impact:      Decrees 3 and 4. Every price-shaped control on the app's monetised surface is dead, silently, in exactly the state a pre-approval build sits in.
+- Fix sketch:  Give `.notConfigured` the same treatment as `.offline` — a first-viewport card — and never render a `$` string that did not come from StoreKit.
+- Blast radius: `UI/ShopView.swift`, `IAP/IAPManager.swift`.
+- Verification: Launch with no StoreKit config; assert no `$` string appears above the disclosure.
+- Note:         **This RE-SCORES PR-0290 from SEV1 to SEV2 and refutes its "money bug" framing** — nothing is charged because nothing happens. See AUDIT_002 §5. Do not work PR-0290 and this item separately.
+
+## PR-0307 · SEV2 · Post-revive play is invisible to missions, achievements and XP, but still moves the Profile stats
+- Area:        UI/GameView (`recordRunResults`), Meta/MissionCatalog
+- Found by:    AUDIT-001 (session 002), finder `catalog-missions`; **both verifiers independently PROMOTED it SEV3 → SEV2**
+- Status:      OPEN
+- Symptom:     A player pays 150 coins to CONTINUE. Everything after the revive counts toward their lifetime stats and toward no mission, no achievement and no XP.
+- Why:         The run summary is captured at the first death; the post-revive continuation is not folded back in.
+- Impact:      Decree 5 — the advertised benefit of a paid continue is not fully delivered. This is the most expensive single action in the game.
+- Fix sketch:  Fold the post-revive segment into the same summary before `applyRunSummary`. Iron rule 9 applies: payouts stay per-death deltas, `applyRunSummary` once per run.
+- Blast radius: `UI/GameView.swift:680-792`.
+- Verification: Revive, collect gems, die; assert the daily gem mission advanced by the full run total.
+- Note:         Related to PR-0176 — both are "the run summary is captured too early".
+
+## PR-0308 · SEV2 · Restore Purchases reports success when nothing was restored
+- Area:        IAP/IAPManager, UI/SettingsView
+- Found by:    AUDIT-001 (session 002) — found independently by **three** of the ten finders
+- Status:      OPEN
+- Symptom:     A player who has never purchased anything taps Restore Purchases and is told "Purchases restored." The failure path separately leaks a raw error string into a different screen.
+- Why:         The success message is unconditional on completion rather than conditional on a non-empty restore set.
+- Impact:      Decree 3. A player debugging a missing purchase is actively misled.
+- Fix sketch:  Report the count. "Nothing to restore" is an honest, intentional-looking outcome.
+- Blast radius: `IAP/IAPManager.swift`, `UI/SettingsView.swift`.
+- Verification: Restore with no purchases; assert the message says nothing was restored.
+
+## PR-0309 · SEV2 · Sign in with Apple completes and changes nothing observable
+- Area:        Services/AccountService, UI/ProfileView
+- Found by:    AUDIT-001 (session 002), finders `dead-affordances` + `unreachable-code`, both verifiers SURVIVES
+- Status:      OPEN
+- Symptom:     The card promises to "secure your account across devices". The flow completes. No signed-in state differs from signed-out; nothing reads the resulting identity.
+- Impact:      Decree 4, and the largest gap between what a feature claims and what it does. Also drags in PR-0301 and PR-0008 (an account that can be created must be deletable).
+- Fix sketch:  Either wire the identity to the cloud save key, or remove the card until it does something. Removing is legitimate and cheaper.
+- Blast radius: `Services/AccountService.swift`, `UI/ProfileView.swift`.
+- Verification: Sign in; assert an observable state change.
+
+## PR-0310 · SEV2 · The daily Game Center leaderboard is advertised in four documents and has no in-app viewer
+- Area:        Services/GameCenterService, UI
+- Found by:    AUDIT-001 (session 002), finder `docs-vs-code`
+- Status:      OPEN
+- Symptom:     `prismrush.daily` is submitted to and never displayed. The player has no way to see the board they are competing on.
+- Fix sketch:  Add a daily board entry point on the Daily Rush surface, or stop advertising it.
+- Blast radius: `Services/GameCenterService.swift`, `UI/RewardsBar.swift`.
+- Verification: Open the daily board from inside the app.
+
+## PR-0311 · SEV2 · [RUNTIME] The Game Center row on Profile is a dead card that tells the player to quit the app
+- Area:        UI/ProfileView
+- Found by:    AUDIT-001 (session 002), observed on a running build + finder `empty-error-states`
+- Status:      OPEN
+- Symptom:     `Leaderboards need Game Center` / `Sign in from the Settings app, then relaunch.` — no tap target, no in-app sign-in, and the copy asks the player to leave the app and come back.
+- Repro:       Fresh install, `PR_SCREEN=stats`, not signed in to Game Center. **Screenshot captured.**
+- Impact:      Decree 4. This is the signed-out state's only Game Center surface, and it leads nowhere.
+- Fix sketch:  Present `GKLocalPlayer`'s own auth view controller from a tappable row.
+- Blast radius: `UI/ProfileView.swift`, `Services/GameCenterService.swift`.
+- Verification: Tap the row while signed out; assert the Game Center sign-in sheet appears.
+
+## PR-0312 · SEV2 · Every character swatch crops the top off the character
+- Area:        UI/CharacterSwatch, UI/CharacterSelectView, UI/ShopView
+- Found by:    AUDIT-001 (session 002), finder `catalog-skins`
+- Status:      OPEN
+- Symptom:     18 of 20 crests and every antenna tip are cut off in the grid, shop and next-unlock swatches. The legendary aura ring is structurally wider than its own canvas and is clipped on **every** surface, including the menu hero and the splash.
+- Why:         The preview canvas's drawing bounds do not account for the crest/antenna/aura extents above the body.
+- Impact:      **Decree 2 — previews never lie.** The rarest visual tell in the game (the legendary aura) is the one the player never sees intact.
+- Fix sketch:  Compute the silhouette's true bounding box in `CharacterProportions` and inset the canvas by it.
+- Blast radius: `UI/CharacterSwatch.swift`, `Render/Reality/ProceduralMesh.swift`.
+- Verification: Render all 24 at swatch size; assert no non-background pixel touches the top edge.
+- Note:         `CharacterParityTests.swift` is `#if canImport(UIKit)`-gated and does **not** run under `swift test`, which is why this survived.
+
+## PR-0313 · SEV2 · Fourteen `PR_*` launch hooks compile into the Release binary with zero `#if DEBUG` gating
+- Area:        UI/GameView, App/
+- Found by:    AUDIT-001 (session 002), finder `silent-failure`; **gating verified independently by the auditor**
+- Status:      OPEN
+- Symptom:     Every state/cheat hook (`PR_AUTOPLAY`, `PR_SCREEN`, `PR_DEMOPROFILE`, `PR_DEEPWORLDS`, `PR_SHIELD`, …) is live in a release build. One of them destructively rewrites the saved profile.
+- Repro:       `grep -rn "#if DEBUG" PrismRush --include='*.swift'` → **0 results across 95 files**, against 17 `ProcessInfo` reads of `PR_*`.
+- Impact:      Debug affordances shipping in the release path. Exploitability is AUDIT-007's to price — a player cannot easily set env vars on a shipped iOS app — but the destructive profile hook makes the downside asymmetric.
+- Fix sketch:  Wrap every hook read in `#if DEBUG`. Keep them: they are how every future session reaches states. Just do not ship them.
+- Blast radius: `UI/GameView.swift`, `App/RootView.swift`.
+- Verification: Release build; assert every `PR_*` read is compiled out.
+
+## PR-0314 · SEV2 · Audio-engine start failure is permanent — every recovery path is gated behind the flag the failure clears
+- Area:        Audio/SynthEngine
+- Found by:    AUDIT-001 (session 002), finder `silent-failure`, verifier SURVIVES (SEV2, down from SEV1)
+- Status:      OPEN
+- Symptom:     One failed `AVAudioEngine` start and the app is silent for the rest of its life. No retry fires, and the player is told nothing.
+- Why:         The failure clears the same `running` flag that every recovery path checks before attempting a restart.
+- Impact:      A silent game reads as broken. Decree 3.
+- Fix sketch:  Track "failed" separately from "not running" so interruption recovery can still fire.
+- Blast radius: `Audio/SynthEngine.swift`.
+- Verification: Force a start failure, then trigger an interruption; assert audio recovers.
+
+## PR-0315 · SEV2 · Game Center scores are silently discarded for the whole session when auth fails at launch
+- Area:        Services/GameCenterService
+- Found by:    AUDIT-001 (session 002), finder `silent-failure`
+- Status:      OPEN
+- Symptom:     A player who launches without connectivity loses every score that session. No retry, no queue, no message.
+- Fix sketch:  Queue submissions and retry on auth success; persist the queue across launches.
+- Blast radius: `Services/GameCenterService.swift`.
+- Verification: Launch offline, set a best, reconnect; assert the score submits.
+
+## PR-0316 · SEV2 · Five products simultaneously advertise the single first-purchase bonus
+- Area:        UI/ShopView
+- Found by:    AUDIT-001 (session 002), observed on a running build
+- Status:      OPEN
+- Symptom:     All four coin packs carry `FIRST PURCHASE +50%` and the Starter Bundle carries `FIRST PURCHASE OFFER`. Exactly one can ever be true; the badge reads as a per-pack property.
+- Repro:       Open the Shop on a profile with no purchases. **Screenshot captured.**
+- Impact:      Decree 5 — honest in mechanism, misleading as presented.
+- Fix sketch:  State it once, as an account-level banner: "Your first purchase gets +50%."
+- Blast radius: `UI/ShopView.swift`.
+- Verification: Assert the bonus is asserted once per screen, not five times.
+
+## PR-0317 · SEV2 · Two icon systems for the same five power-ups
+- Area:        UI/ShopView, UI/PackRewardBurst, UI/LoadoutStrip vs UI/PowerUpGlyph
+- Found by:    AUDIT-001 (session 002), finder `half-migrated`
+- Status:      OPEN
+- Symptom:     The shop, the reward burst and the hub draw SF Symbols; the in-run surfaces draw the procedural `PowerUpGlyph`. The same power-up is a different picture depending on where the player meets it.
+- Impact:      Decree 2, and it defeats the purpose of having an identity glyph at all.
+- Fix sketch:  Route the three stragglers through `PowerUpGlyph`. The component already exists.
+- Blast radius: `UI/ShopView.swift`, `UI/PackRewardBurst.swift`, `UI/LoadoutStrip.swift`.
+- Verification: Grep for SF Symbol names in those three files; expect none for power-ups.
+
+## PR-0318 · SEV2 · Achievement-gated characters need a CLAIM tap the requirement copy never mentions
+- Area:        UI/CharacterSelectView, Meta/SkinUnlocks
+- Found by:    AUDIT-001 (session 002), finders `catalog-skins` + `catalog-missions`
+- Status:      OPEN
+- Symptom:     The progress bar reaches 100% and the character stays locked, with nothing on screen explaining that a mission tier must be claimed first.
+- Impact:      A player who has genuinely earned the unlock believes the game is broken. Decree 3.
+- Fix sketch:  Either auto-claim on completion, or say "Claim the mission to unlock" on the locked card.
+- Blast radius: `UI/CharacterSelectView.swift`, `Meta/SkinUnlocks.swift`.
+- Verification: Complete an achievement-gated requirement without claiming; assert the card explains what remains.
+
+## SEV3 — compact rows (per this file's format note)
+
+| ID | Sev | Finding | Cite |
+|---|---|---|---|
+| PR-0319 | SEV3 | `startRun` folds the checkpoint world by `% 3` (pre-v1.5 modulus) while `stepWorld` uses `Tuning.worldFamilyCount` = 12. **[RUNTIME] Latent, not player-visible** — picked world 4, correctly got Orbital Drift, because the renderer derives the world from distance and never reads the field `startRun` corrupts. Fires the day anyone re-wires `GameCore.world`. | `Core/GameCore.swift:110` vs `:290` |
+| PR-0320 | SEV3 | `Synth.noise(swell:)` is never read — four "rising whoosh" SFX decay instead of swelling, and the test guarding it passes vacuously. | `Audio/Synth.swift` |
+| PR-0321 | SEV3 | `Profile.ownedProducts` is written by all four IAP grant paths, persisted, decoded and cloud-merged — and read by nothing. | `Meta/Profile.swift:116` |
+| PR-0322 | SEV3 | [RUNTIME] Profile stacks `LEVEL 1` and a `LVL 3 · PEBBLE` chip in one card with no "NEXT" label; the Characters screen labels the identical fact correctly as `NEXT UNLOCK`. | `UI/ProfileView.swift` |
+| PR-0323 | SEV3 | The meta header's coin badge is a Shop link on four screens and inert on two — same pixels, different behaviour. | `UI/MetaScreenScaffold.swift` |
+
+## Re-scores and refutations from session 002 (do not re-file these)
+
+| Existing item | Session 002 verdict |
+|---|---|
+| PR-0290 | **RE-SCORED SEV1 → SEV2**; "money bug" framing refuted (tapping a buy button does nothing). Superseded in substance by PR-0306. |
+| PR-0293 | **REFUTED — recommend `WONTFIX`.** Odds *are* disclosed before spending and sum to 100%. Only the legibility problem survives, as PR-0303. |
+| PR-0130 | Dead code **CONFIRMED**; consequence **REFUTED** → SEV3. The HUD stays visible behind the pause veil, so the player can see their distance. |
+| PR-0176 | **SURVIVES, demoted to SEV4.** Value is pinned to 0, but no mission uses the metric, so nothing is broken for a player. |
+| PR-0161 | **Partially REFUTED.** `featuredPool` is a 4-element constant of known ids, so the `default:` branch cannot fire today. Latent only. |
+| PR-0131, PR-0138, PR-0158, PR-0160 | **CONFIRMED.** PR-0158 confirmed at runtime and escalated — the panel has no labelled exit at all. |
+| PR-0296 | **CONFIRMED and quantified** (band sweeps y = 0.667 → 0.799 over 10 s, full width). Still an owner call. Do not fix without Rayan. |
