@@ -271,3 +271,36 @@ had flagged it as a possible hard blocker; one screenshot settled it.
 - **I trusted `state.md`'s verified-behaviour note** about the shop's offline fallback. It was
   wrong (PR-0294). The lesson generalises: a doc saying "verified" records what someone saw once,
   on some build, and this repo's docs are demonstrably stale in a dozen places.
+
+## Addendum 2 — real touch input
+
+Rayan ran `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` and the native
+simulator panel attached. Coordinate space **402×874 points**, origin top-left. That gave synthetic
+taps and swipes for the first time, which is a different class of testing from screenshots.
+
+**PR-0295 (SEV2), reproduced.** A gesture still in flight when you die carries through into the
+game-over panel. A `touch_path` ending at tap-space y=504 killed the player; `GameOverView` was
+inserted under the still-moving finger; the lift landed on "FULL STATS ›" at y≈493 and navigated to
+Profile. The player never saw SHATTERED, the +9 coins, the +42 XP, or the CONTINUE offer. The panel
+*already* gates RUN AGAIN behind a "READY IN 1…" countdown for exactly this hazard — FULL STATS,
+CONTINUE and BACK TO MENU are simply outside the gate.
+
+**PR-0296 (SEV3), filed as an owner call.** The attract track's grid reads through the hub's
+translucent cards and a line sweeps across the three nav labels. Might be the intended neon look.
+Recorded without asserting it is a defect.
+
+**PR-0291 confirmed a third time**, now under manual play (`+10` stacked three deep at 55 m).
+
+### A finding I nearly filed and did not
+
+Twice, Missions and then Profile appeared without my asking, and I said out loud that it looked
+like taps falling through dismissing overlays — which would have been a juicy SEV2 tied to PR-0137
+(zIndex disagreeing with declaration order). A controlled relaunch killed it: **`PR_SCREEN` launches
+leave stale `activeSheet` state, so a later plain launch can open on the previous launch's sheet.**
+My own tooling caused it.
+
+Two lessons, both now in `HANDOFF.md`:
+1. **Always relaunch clean before concluding anything about navigation.** The launch hooks that make
+   the app testable also contaminate the next launch.
+2. A hunch stated confidently is still a hunch. The cost of testing it was ninety seconds; the cost
+   of filing it would have been an audit session chasing my own tooling artefact.

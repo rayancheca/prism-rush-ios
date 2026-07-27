@@ -102,9 +102,18 @@ everything-owned, and offline states in particular** — those are where decree 
 broken-looking states for expected situations") gets violated, and they are your persona's
 richest hunting ground.
 
-Two constraints: `simctl` **cannot synthesise taps or swipes**, so anything needing arbitrary
-touch input must be written as an XCUITest; and **never drive the simulator while `xcodebuild
-test` is running on it** — concurrent installs crash the test host.
+**The native simulator panel now works** — Rayan ran the `xcode-select` fix. Prefer it over raw
+`simctl` for anything interactive: it gives you real `tap`, `swipe`, and `touch_path`, in a
+**402×874 point** coordinate space, origin top-left. Use `attach` first, then `screenshot` /
+`tap` / `swipe` / `touch_path`. Fall back to `xcrun simctl` only for install, launch with
+`SIMCTL_CHILD_*` env hooks, and batch screenshots.
+
+Two constraints that still bite: **never drive the simulator while `xcodebuild test` is running
+on it** (concurrent installs crash the test host), and **launch hooks leave stale `activeSheet`
+state between launches** — a `PR_SCREEN=missions` launch can make the *next* plain launch open on
+Missions. Session 001 briefly mistook that for a tap-through bug. **Always relaunch clean before
+concluding anything about navigation**, and never file a navigation finding you have not
+reproduced from a fresh launch.
 
 ## In scope
 
