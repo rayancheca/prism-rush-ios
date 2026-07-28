@@ -230,6 +230,26 @@ final class GameModel {
         if ProcessInfo.processInfo.environment["PR_DEEPWORLDS"] == "1" {
             ProfileStore.shared.mutate { $0.maxWorldReached = max($0.maxWorldReached, 14) }
         }
+        // Debug/screenshot: a LATE-GAME hub state — deep reach (evolved palette live), a real best,
+        // a high level, money banked, and every claimable already taken so the hub renders its idle
+        // rewards state. The hub reads differently at each end of the profile range and a layout
+        // verified only at first launch is not verified (PR-0452); this pins the far end so the
+        // capture is repeatable across sessions.
+        if ProcessInfo.processInfo.environment["PR_HUBDEEP"] == "1" {
+            ProfileStore.shared.mutate {
+                $0.coins = 24_500
+                $0.bestScore = 128_400
+                $0.totalRuns = 214
+                $0.totalXP = 42_000
+                $0.xpLevelRewarded = XPCurve.level(for: 42_000)
+                $0.maxWorldReached = 14
+                $0.headStartCharges = 3
+                $0.coinSurgeCharges = 2
+                $0.lastDailyClaim = Date()   // idle rewards state: nothing to claim
+                $0.lastChestOpen = Date()
+            }
+            core.best = ProfileStore.shared.profile.bestScore
+        }
         // Debug/UITest: pin a true zero-run profile (first-run gate + FIRST RUN chip flows),
         // regardless of what earlier autoplay/CI cycles banked on this simulator.
         if ProcessInfo.processInfo.environment["PR_FIRSTRUN"] == "1" {
@@ -1097,9 +1117,21 @@ struct GameView: View {
             // where every tappable card lives, so the track fades into the void colour under it —
             // the neon look survives up top around the hero and the wordmark, which is the part
             // worth keeping, and nothing crosses a glyph below. Menu only; hit-testing untouched.
+            //
+            // S-005 adds the mirrored top band. The masthead's wordmark used to sit straight on the
+            // city skyline (PR-0452's "the wordmark collides with the city backdrop"); the redesign
+            // left-aligns it and rules a hairline under it, which only reads as deliberate chrome if
+            // there is a plate behind it. The band is shallow — fully clear again by 16% — so the
+            // skyline and the whole hero region are untouched.
             if model.core.snapshot.mode == .menu && model.activeSheet == nil {
                 LinearGradient(stops: [
-                    .init(color: .clear, location: 0.00),
+                    // Four stops, not two, and a long tail: a short fade met the untouched skyline
+                    // as a visible horizontal seam across the buildings, right where the masthead
+                    // rule sits — which read as a rendering artefact rather than as chrome.
+                    .init(color: Self.voidColor.opacity(0.78), location: 0.00),
+                    .init(color: Self.voidColor.opacity(0.46), location: 0.07),
+                    .init(color: Self.voidColor.opacity(0.17), location: 0.14),
+                    .init(color: .clear, location: 0.23),
                     .init(color: Self.voidColor.opacity(0.55), location: 0.50),
                     .init(color: Self.voidColor.opacity(0.93), location: 0.66),
                     .init(color: Self.voidColor.opacity(0.97), location: 1.00),
@@ -1124,7 +1156,13 @@ struct GameView: View {
                              onLevels: { model.open(.levels) },
                              onProfile: { model.open(.stats) },
                              onSettings: { model.open(.settings) },
-                             rewards: AnyView(RewardsBar(model: model, onMissions: { model.open(.missions) })),
+                             onMissions: { model.open(.missions) },
+                             // The hub's own actions, passed as closures rather than an injected
+                             // AnyView (PR-0134): an AnyView here is the exact shape that severed
+                             // @Observable tracking and shipped the "Head Start does nothing" bug.
+                             onDailyRush: { model.startDailyChallenge() },
+                             onClaimDaily: { model.claimDailyReward() },
+                             onOpenChest: { model.openChest() },
                              loadout: LoadoutStrip(model: model),
                              onHowToPlay: { showHowToPlayInfo = true })
                 }

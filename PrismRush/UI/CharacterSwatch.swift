@@ -34,6 +34,14 @@ struct AnimatedCharacterSwatch: View {
     /// pass a taller value so the tallest antennas (Blossom) and the full up-bob never crop — the
     /// owner's "characters sit in a square smaller than them" fix.
     var heightScale: CGFloat = 1.5
+    /// Horizontal room, same idea as `heightScale`. The body glow is drawn `bodyR * 3.2` wide — i.e.
+    /// 1.6 × `size` at unit skin scale — so at `1.0` it is HARD-CLIPPED by the canvas bounds and
+    /// leaves a faint vertical band with visible edges either side of the figure. On a small dark
+    /// grid card that is invisible; on the hub, where the stage is large and the live 3D scene shows
+    /// through, it reads as a box behind the character (PR-0453). The default 1.0 keeps every
+    /// existing call site byte-identical; the hub hero passes 1.6 so the glow lands inside the
+    /// canvas and falls off to nothing on its own.
+    var widthScale: CGFloat = 1.0
     /// Where the figure's center sits in the canvas (0 = top, 1 = bottom). 0.5 keeps the grids
     /// centered; the hero/splash bias it down so the added headroom lands above the antenna while
     /// the feet stay near the disc.
@@ -55,7 +63,9 @@ struct AnimatedCharacterSwatch: View {
         .overlay(alignment: .bottom) {
             if silhouette { lockChip }
         }
-        .frame(width: size, height: size * heightScale)   // antenna headroom + bob never clips
+        // Antenna headroom + bob never clip vertically; `widthScale` gives the body glow room to
+        // fall off instead of being cut square at the canvas edge.
+        .frame(width: size * widthScale, height: size * heightScale)
         .accessibilityHidden(true)                 // containers carry the meaning (name/state labels)
     }
 
@@ -372,6 +382,11 @@ struct CharacterHeroStage: View {
     /// Hero-stage tease opacity (grid cards use the swatch default 0.45).
     private static let stageTeaseOpacity = 0.6
 
+    /// The body glow is drawn 1.6 × `size` wide, so the stage's canvases are widened to match and
+    /// the halo falls off to nothing instead of being cut square (PR-0453). Kept just under the
+    /// pedestal disc's 1.7 so the ZStack's width — and therefore the stage's clip — is unchanged.
+    private static let glowWidthScale: CGFloat = 1.6
+
     // 0.42 (was 0.5): the figure now renders in a 1.85× canvas with real antenna headroom, so it
     // sizes down a touch to keep the taller, never-cropped stage inside the menu's height budget.
     private var swatchSize: CGFloat { height * 0.42 }
@@ -388,7 +403,7 @@ struct CharacterHeroStage: View {
                 // Offset so the mirrored feet meet the real feet; the stage frame clips the rest.
                 // Locked: plain render faded harder (0.18 × 0.6) — a mirrored lock chip is noise.
                 if !reduceMotion && showsReflection {
-                    AnimatedCharacterSwatch(skin: skin, size: swatchSize)
+                    AnimatedCharacterSwatch(skin: skin, size: swatchSize, widthScale: Self.glowWidthScale)
                         .scaleEffect(x: 1, y: -1)
                         .opacity(locked ? 0.11 : 0.18)
                         .mask(LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .center))
@@ -396,7 +411,8 @@ struct CharacterHeroStage: View {
                 }
                 AnimatedCharacterSwatch(skin: skin, size: swatchSize,
                                         silhouette: locked, teaseOpacity: Self.stageTeaseOpacity,
-                                        heightScale: 1.85, verticalAnchor: 0.66)
+                                        heightScale: 1.85, widthScale: Self.glowWidthScale,
+                                        verticalAnchor: 0.66)
             }
             // Clip matches the figure's own 1.85× canvas, so the antenna + up-bob are never cropped
             // (anchor 0.66 lands the headroom above the tip); only the mirrored reflection's spill
