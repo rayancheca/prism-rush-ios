@@ -125,18 +125,21 @@ struct ClaimRibbon: View {
     }
 }
 
-/// Daily Rush, standing beside PLAY where a second way to start a run belongs — not in a rewards
-/// rail, which is what made it look like something to collect. Narrower than PLAY and unfilled, so
-/// the primary verb keeps its weight; the amber hairline brightens while today's track is unplayed.
-/// Starts the seeded daily challenge through the model, which interposes the first-run tutorial
-/// gate exactly as the rail cell did.
-struct DailyRushLauncher: View {
+/// Daily Rush, sitting directly UNDER a full-width PLAY as the secondary way to start a run — not
+/// in a rewards rail, which is what made it look like something to collect.
+///
+/// It stood *beside* PLAY first. The owner's call, and he is right: PLAY should own the full width
+/// of the screen, and a 112 pt block next to it was taking a third of the primary verb's span to
+/// say something secondary. Underneath, the reading order is also the right one — primary first,
+/// alternative second — and the two run-starting verbs are still adjacent, which was the point of
+/// pulling Daily Rush out of the rail in the first place.
+///
+/// Deliberately a light 48 pt row against PLAY's 78 pt gradient: no fill of its own beyond the
+/// standard surface, an amber hairline that brightens while today's track is unplayed, and the
+/// value hard right. Starts the seeded daily challenge through the model, which interposes the
+/// first-run tutorial gate exactly as the rail cell did.
+struct DailyRushRow: View {
     var onDailyRush: () -> Void = {}
-
-    /// Fixed width: PLAY takes the remaining span, so the deck reads as one dominant block and one
-    /// secondary block rather than two halves.
-    private static let width: CGFloat = 112
-
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             let now = context.date
@@ -146,26 +149,35 @@ struct DailyRushLauncher: View {
             let amber = Theme.color(0xFF9F1C)
 
             Button(action: onDailyRush) {
-                VStack(spacing: 3) {
+                HStack(spacing: Theme.Space.s) {
+                    // Tinted glyph chip, the nav rail's anatomy rather than the ribbon's bare
+                    // glyph — so the two full-width rows in the deck don't read as twins.
                     Image(systemName: "bolt.fill")
-                        .font(.system(size: 17, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(amber)
-                    Text("DAILY")
+                        .frame(width: 28, height: 28)
+                        .background(amber.opacity(0.16), in: RoundedRectangle(cornerRadius: 9))
+                    Text("DAILY RUSH")
                         .typeScale(.caption)
                         .foregroundStyle(Theme.Role.textPrimary)
+                    Spacer(minLength: Theme.Space.s)
                     // The verb, not a bare countdown: "NEW 8:43" reads as "locked for 8:43".
-                    Text(bestToday > 0 ? "BEST \(bestToday)" : "PLAY · \(endsCountdown(now: now))")
+                    Text(bestToday > 0 ? "BEST \(bestToday)" : "PLAY · ENDS \(endsCountdown(now: now))")
                         .typeScale(.micro)
                         .monospacedDigit()
                         .foregroundStyle(Theme.Role.textTertiary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(Theme.Role.textTertiary)
                 }
                 .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .padding(.horizontal, 6)
-                .frame(width: Self.width, height: 78)
-                .background(Theme.Role.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.l))
-                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.l)
-                    .strokeBorder(amber.opacity(unplayed ? 0.75 : 0.28), lineWidth: 1))
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, Theme.Space.m)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .background(Theme.Role.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.m))
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m)
+                    .strokeBorder(amber.opacity(unplayed ? 0.55 : 0.22), lineWidth: 1))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.neon)

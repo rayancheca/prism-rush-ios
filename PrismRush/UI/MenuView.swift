@@ -274,9 +274,12 @@ struct MenuView<Loadout: View>: View {
     // MARK: - C · launch deck
 
     /// Everything that is about *the next run*, in the order you decide it: what's waiting for you,
-    /// what you're bringing, then how you start. PLAY is the only thing at its weight — Daily Rush
-    /// is a narrower, unfilled sibling, so the two ways to start a run sit together without
-    /// competing.
+    /// what you're bringing, how you start, and then the one alternative way to start.
+    ///
+    /// **PLAY takes the full width** (the owner's call, S-005): a Daily Rush block beside it was
+    /// eating a third of the primary verb's span to say something secondary. Daily Rush drops
+    /// underneath as a light 48 pt row, which also puts the reading order the right way round —
+    /// primary first, alternative second — while keeping the two run-starting verbs adjacent.
     private var launchDeck: some View {
         VStack(spacing: Theme.Space.s) {
             ClaimRibbon(onClaimDaily: onClaimDaily, onOpenChest: onOpenChest)
@@ -288,10 +291,8 @@ struct MenuView<Loadout: View>: View {
                 loadout
                 Spacer(minLength: 0)
             }
-            HStack(spacing: Theme.Space.s) {
-                playButton
-                DailyRushLauncher(onDailyRush: onDailyRush)
-            }
+            playButton
+            DailyRushRow(onDailyRush: onDailyRush)
         }
     }
 

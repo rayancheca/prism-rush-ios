@@ -1693,8 +1693,8 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
 - **Resolution (S-005).** Direction picked before any code: **editorial/arcade**, executed as
   *three species of surface* rather than one card grid.
   1. **Gradient = the verb.** PLAY (78 pt, ~65% width, 28 pt black type, a 1 px top light edge for
-     depth) and nothing else. A lit claim ribbon is the only other filled surface and it is gold —
-     the money role, never the action gradient.
+     depth) and nothing else, at the **FULL width of the screen**. A lit claim ribbon is the only
+     other filled surface and it is gold — the money role, never the action gradient.
   2. **Cards = objects you act on.** The claim ribbon, the Daily Rush launcher, the loadout chips.
      They appear, change size and disappear with your state.
   3. **Bare rail = exits.** Characters / Shop / Worlds / Missions under a hairline at the bottom
@@ -1702,7 +1702,7 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
      navigation reading as the same class of object. Each keeps the neon hue it owned as a tile
      (the owner's "so light gray I'd have to click each"); the hue now rides the glyph alone.
 - **The structural insight.** The old rail put three *different kinds of thing* in three identical
-  cells. Daily Rush is a way to START A RUN -> it now stands beside PLAY, narrower and unfilled.
+  cells. Daily Rush is a way to START A RUN -> it is now a light 48 pt row directly UNDER PLAY.
   Rewards is COINS WAITING -> a full-width gold bar with a real CTA pill when claimable, a slim
   40 pt tertiary strip when not (a different height, so the hub visibly relaxes once you have
   taken everything). Missions is a BOARD YOU VISIT -> a nav exit with a gold count badge. They
@@ -1728,6 +1728,14 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
   green**; clean-launch screenshots (uninstall -> install -> launch) at fresh / rewards-claimable /
   world-15, **opened and read**, in `docs/agent/scratch/s005/after_*.png`. A new `PR_HUBDEEP=1`
   launch hook pins the late-game state so that third capture is repeatable by later sessions.
+- **Owner revision, same session.** Daily Rush first stood *beside* PLAY at 112 pt. Rayan: *"i feel
+  like the play button should be the whole width of the screen so put daily somewhere else more
+  sensible."* Correct — a secondary block was taking a third of the primary verb's span, which
+  undercuts the one rule the redesign is built on. It moved to a full-width 48 pt row directly
+  **under** PLAY, which also fixes the reading order (primary first, alternative second) while
+  keeping the two run-starting verbs adjacent — the whole reason for pulling Daily Rush out of the
+  rail. Its glyph now rides a tinted chip (the nav rail's anatomy) so the deck's two full-width
+  rows do not read as twins. Re-verified: build OK, 194 + 11 green, all three states recaptured.
 - **Trap discovered, and it cost two suite runs.** `.accessibilityElement(children: .ignore)`
   placement is load-bearing and cuts BOTH ways:
   - on the **rail elements** (`railRewards`, `railDaily`) it must land **BEFORE** the identifier

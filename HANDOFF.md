@@ -139,12 +139,14 @@ to pick one:
 
 | Species | Means | Is |
 |---|---|---|
-| **Gradient** | the verb | PLAY, alone |
+| **Gradient** | the verb | PLAY, alone, at full screen width |
 | **Cards** | objects you act on | claim ribbon, Daily Rush launcher, loadout chips |
 | **Bare rail** | exits | Characters / Shop / Worlds / Missions — **no card chrome** |
 
 The old 3-cell rail is gone because it mixed three different kinds of thing: **Daily Rush** is a way
-to start a run (now beside PLAY), **Rewards** is coins waiting (now a full-width gold bar when
+to start a run (now a light 48 pt row directly under a full-width PLAY — it stood beside PLAY at
+first and Rayan moved it: the primary verb should own the full width), **Rewards** is coins waiting
+(now a full-width gold bar when
 claimable, a slim strip when not), **Missions** is a board you visit (now a nav exit with a gold
 count badge). The centre axis breaks on an editorial masthead — wordmark hard left, world dateline
 hard right, identity and resources as two balanced clusters. Only the hero and PLAY stay centred.
