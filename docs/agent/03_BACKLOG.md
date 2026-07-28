@@ -1203,3 +1203,315 @@ items were not renumbered, merged, or deleted.
 | PR-0161 | **Partially REFUTED.** `featuredPool` is a 4-element constant of known ids, so the `default:` branch cannot fire today. Latent only. |
 | PR-0131, PR-0138, PR-0158, PR-0160 | **CONFIRMED.** PR-0158 confirmed at runtime and escalated — the panel has no labelled exit at all. |
 | PR-0296 | **CONFIRMED and quantified** (band sweeps y = 0.667 → 0.799 over 10 s, full width). Still an owner call. Do not fix without Rayan. |
+
+---
+
+# AUDIT-002 (The Game Designer) — session 003, PR-0400 onward
+
+Filed by session 003. **Every item below survived an independent hostile verifier** who re-opened
+each citation, recomputed the arithmetic, and grepped this backlog for duplicates before accepting
+it. 124 raised → 92 survived → 32 killed; 34 severities were downgraded in review, and those
+downgrades are reflected here. Where a verifier corrected a claim, the corrected version is what is
+written below.
+
+Working detail (arithmetic, pattern tables, refutations) is in `docs/agent/audits/scratch/` —
+gitignored, ~450 KB, will not survive a clone. Mine it before it is gone.
+
+**Three of these are reversal requests, not bug reports** (PR-0414, PR-0420, PR-0427): they ask to
+undo a deliberate, documented owner decision. Read the "Why" field before treating them as defects.
+
+## PR-0400 · SEV1 · The difficulty curve ends at 3,200 m and never changes again
+- Area:        Core/Tuning · Core/Spawner
+- Found by:    AUDIT-002 (Game Designer) — reached independently by 4 of 10 lenses
+- Status:      OPEN
+- Symptom:     A 4,000 m run and a 40,000 m run are the same run at the same difficulty with the
+               same 14 patterns. The game's entire endgame is a patience test.
+- Repro:       `SIMCTL_CHILD_PR_AUTOPLAY=1` launch; screenshot the HUD every 10 s. Measured: five
+               consecutive intervals at 33.5–33.7 m/s, flat score rate (5,874 pts/337 m at 3.6 km
+               vs 6,171/336 m at 5.0 km).
+- Why:         Last new pattern unlocks at 1,920 m (`Spawner.maxIndex`); speed caps at 3,077 m
+               ((33−17)/0.0052, `Tuning.swift:15`); gap floors at 3,200 m (`diffFullAt`,
+               `Tuning.swift:59`). Nothing is a function of distance past 3,200 m.
+- Impact:      Every player who gets good. The mastery ceiling, the reason the game dies, and the
+               premise the whole world/leaderboard superstructure is built on.
+- Fix sketch:  A second act gated past 3,200 m. `Spawner.maxIndex` already gates by prefix index —
+               the seam exists. Options: a second speed ramp on world ordinal, per-world pattern
+               weights, or one genuinely new entity at 4/6/8 km.
+- Blast radius: `Core/Spawner.swift`, `Core/Tuning.swift`, possibly `Core/Patterns.swift`.
+- Verification: `SolvabilityBotTests` green (200×6,000 m + 12,000 m soak) AND
+               `DailyChallenge.layoutVersion` bumped with `DailyChallengeTests` goldens repinned
+               (iron rule 3). Re-run the autoplay HUD capture and show a non-flat tail.
+
+## PR-0401 · SEV1 · The meta loop is a decoration loop — zero of 83,500 coins buy a new way to play
+- Area:        Meta/SkinCatalog · Meta/XPCurve · UI
+- Found by:    AUDIT-002
+- Status:      OPEN
+- Symptom:     A player at run 500 owning every skin and world plays exactly the same game as a
+               player at run 5 owning nothing.
+- Why:         24 characters are colour/shape/eye/idle/trail only (`Meta/SkinCatalog.swift`;
+               `applySkin` at `Render/Reality/RealityRenderer.swift:701` is render-side). Worlds are
+               a palette + start offset. The only play-affecting purchases are single-run
+               consumable charges.
+- Impact:      The entire between-run loop. Earning has no mechanical consequence, so the 83,500-coin
+               sink is a wardrobe.
+- Fix sketch:  One permanent unlock that alters a verb (a second air-jump, a longer slide, a
+               lane-dash). Scope it as ONE item, not a system.
+- Blast radius: `Meta/Profile.swift` (new field → iron rule 7 default), `Core/GameCore.swift`.
+- Verification: The chosen unlock changes a `GameCore` verb, is decoded from an old save, and the
+               solvability bot stays green with it inactive.
+
+## PR-0402 · SEV2 · Onboarding is inverted: ~17 concepts in a pre-run text wall, zero in context
+- Area:        UI/HowToPlay · UI/GameView
+- Found by:    AUDIT-002 (verified on device, clean install)
+- Status:      OPEN
+- Symptom:     A player who has never seen a prism ring reads a paragraph about scoring a bullseye
+               at its apex, before their first input. Nothing is ever taught at the moment it
+               appears. In-run cues are capped at three, run 1 only.
+- Repro:       Uninstall, install, launch, tap PLAY → 5-page carousel: CONTROLS · SCORING · RINGS &
+               FLOW · WORLDS · POWER-UPS.
+- Why:         All teaching is front-loaded and text-based; there is no just-in-time callout layer.
+- Impact:      Every new player. Retention of a 17-concept carousel read before first input is ~0.
+- Fix sketch:  Keep the gate, but add first-encounter callouts (first ring, first magnet, first
+               CLOSE). Move depth out of the carousel into the moment.
+- Blast radius: `UI/GameView.swift` (cue system), `UI/HowToPlay*`.
+- Verification: Cold-install run shows a contextual cue on first ring and first magnet.
+- Note:        **Supersedes the false claim in `02_STATE.md` ledger row 53** ("teaches 3 of ~8
+               mechanics") and the HANDOFF claim that magnet/streaks/flow/slide are untaught. All
+               four ARE taught. The defect is the shape of the teaching, not its absence.
+
+## PR-0403 · SEV1 · A world transition introduces no mechanic, pattern, or demand
+- Area:        Core/Spawner · Core/Patterns · Core/GameCore
+- Found by:    AUDIT-002 — 3 lenses independently
+- Status:      OPEN
+- Symptom:     Crossing into a new world every 800 m changes the palette and sky and nothing else,
+               while being presented as the progression spine (hub headline, a tutorial page,
+               5 coins per crossing).
+- Why:         `Spawner.fill(to:dist:rng:emit:)` takes `dist` and nothing else. `Patterns.run(idx,
+               base:rng:out:)` takes **no world parameter**. Grepping `world` across both files
+               returns one hit, in a doc comment. `stepWorld` (`GameCore.swift:286-298`) writes
+               palette indices only. It is structurally impossible for a world to alter play.
+- Impact:      The 800 m beat is the game's most frequent "reward" and it is a reskin.
+- Fix sketch:  Either give `Spawner` a world-conditional weight (pattern mix per world) or stop
+               selling worlds as progression and present them honestly as chapters/scenery.
+- Blast radius: `Core/Spawner.swift` + iron rule 3 (bot + layoutVersion) if weights are added.
+- Verification: If mechanical: bot green + layoutVersion bumped. If cosmetic-honest: UI copy diff.
+
+## PR-0404 · SEV2 · The world price ladder is a treadmill over a flat value curve
+- Area:        Meta/XPCurve
+- Found by:    AUDIT-002
+- Status:      OPEN
+- Symptom:     Prices run 400 → 13,400 then +2,000/rung forever (`XPCurve.swift:83-95`), buying a
+               cosmetic start offset whose value is provably flat past 3,200 m (PR-0400).
+- Impact:      71% of the permanent coin sink (59,400) is spent on an axis with no gameplay payload.
+- Fix sketch:  Cap the ladder, or make deep starts carry a mechanical difference (ties to PR-0400).
+- Blast radius: `Meta/XPCurve.swift`, `Tests/CoreTests/ShopValueTests.swift`.
+- Verification: `EconomyTests` + `ShopValueTests` green with the new ladder.
+
+## PR-0405 · SEV2 · The ×5 multiplier is a loading bar, not a system
+- Area:        Core/Tuning · Core/GameCore · UI/HUDView
+- Found by:    AUDIT-002 — 4 lenses; measured on device
+- Status:      OPEN
+- Symptom:     The multiplier reads ×5 in **all 20 sampled frames**, from the 143 m / 32-gem sample
+               through 5,331 m. Capped within the first few seconds and pinned for ~96% of the run.
+- Why:         `streakPerMult` 5 × `multCap` 5 (`Tuning.swift:51`) → ×5 at 20 gems. `streak` only
+               increments (`GameCore.swift:488-490`); missing gems costs nothing. It resets only on
+               `shieldAbsorbed` (`:407`) — which the player experiences as a rescue — or death
+               (`:581`). `HUDView.swift:57,136-145` spring-animates it as contested state.
+- Impact:      The HUD's most prominent "skill" readout is a constant. A tutorial page is spent on
+               a ×1→×5 ladder the player observes for seconds, ever.
+- Fix sketch:  Decay the streak on missed gems or on a hit-free-distance timer, or raise `multCap`
+               so the top rungs cost real routing.
+- Blast radius: `Core/Tuning.swift`, `Core/GameCore.swift`, `Tests/CoreTests/` streak tests.
+- Verification: Re-run the autoplay HUD capture; the chip must show more than one value.
+
+## PR-0406 · SEV1 · The first-death panel sells an unaffordable revive above the free retry
+- Area:        UI/GameOverView
+- Found by:    AUDIT-002 (measured, genuine first install)
+- Status:      OPEN
+- Symptom:     First-ever death — 72 m, score 132, **+1 coin** — and the panel's largest,
+               highest-contrast element is a solid amber "NEED 149 MORE — 150 🪙", directly above
+               "GET COINS — FIRST PURCHASE +50% BONUS", with the free RUN AGAIN below both.
+- Repro:       Uninstall → install → launch → PLAY → through the gate → let the runner die.
+- Why:         Visual hierarchy is ordered purchase-first. Every element is honest; the sequencing
+               is not, and a dark pattern needs no lie.
+- Impact:      100% of players, once, at the exact moment they decide whether this game is for them.
+               Decree 5 (no dark patterns) by placement, and decree 3 (no broken-looking states for
+               expected situations — being broke on your first death is the most expected situation
+               in the game, and it renders as a permanently disabled button).
+- Fix sketch:  RUN AGAIN is the visual primary. Suppress the revive and the GET COINS row entirely
+               when the player cannot afford it and has no run history.
+- Blast radius: `UI/GameOverView.swift`.
+- Verification: Cold-install death screenshot shows RUN AGAIN as the dominant element.
+
+## PR-0407 · SEV2 · No notification of any kind — four retention mechanics cannot reach the player
+- Area:        Services · project.yml
+- Found by:    AUDIT-002 — 2 lenses
+- Status:      OPEN
+- Symptom:     Daily Rush countdown, login streak, rotating missions and day-gated skins all depend
+               on the player spontaneously remembering to open the app.
+- Why:         `grep -rn "UNUserNotification|requestAuthorization|import UserNotifications"` → 0.
+               `PrismRush.entitlements` declares only `applesignin`, `game-center`,
+               `ubiquity-kvstore-identifier`; no `aps-environment`.
+- Impact:      D1. **Scoped down from SEV1 in review:** `challengeDays(7/14)` skins are cumulative
+               distinct UTC days (`SkinUnlocks.swift:13`), not consecutive habits; the only truly
+               consecutive mechanic is the login ladder (`ProfileStore.swift:305-313`) and it pays
+               2,650 coins over 7 days — 3.2% of the collection.
+- Fix sketch:  ONE opt-in, once-daily Daily Rush reminder. **Not** a 30-minute chest ping — charter
+               non-negotiable #1 plus the 4+ age rating makes that a manipulative notification.
+- Blast radius: New `Services/NotificationService.swift`, `project.yml`, `Info.plist`.
+- Verification: Device only — `VERIFY-PENDING` until Rayan confirms delivery. Needs a decision
+               first: this touches the charter's anti-manipulation line.
+
+## PR-0409 · SEV2 · Depth is execution-only: the survival layer needs no decision
+- Area:        Core/Autopilot · Core/Spawner
+- Found by:    AUDIT-002
+- Status:      OPEN
+- Symptom:     A fixed greedy policy with a 30-unit horizon clears everything the game can generate.
+- Why:         `Autopilot.swift` reads only `c.activeObstacles` (`:28`, `:95`); grep for
+               `activeGems`, `activePickups`, `gemCount`, `score`, `bonus` → **zero occurrences**.
+               `reach = 30` (`:19`). `SolvabilityBotTests.swift:17-26`: 200 seeds × 6,000 m + 64 ×
+               12,000 m, zero deaths. No routing, resource or risk/reward decision is required.
+- Impact:      The game asks for reflexes and never for a decision.
+- Fix sketch:  Give the player one decision the bot would have to model — a risk-priced collectible
+               (see PR-0414) or a resource with an opportunity cost.
+- Blast radius: `Core/Patterns.swift`, `Core/Spawner.swift` (iron rule 3 applies).
+- Verification: Bot green + layoutVersion bumped.
+- Note:        **Corrected in review — do NOT restate this as "the game has no skill ceiling."**
+               That is a category error: the bot has perfect information at 30 units regardless of
+               draw distance, actuates at 120 Hz, and has zero input latency, while the human path
+               fires on finger lift. `SolvabilityBotTests` proves **fairness** (iron rule 3) and it
+               does so correctly.
+
+## PR-0414 · SEV2 · REVERSAL REQUEST — the coin trail is painted on the provably safe lane
+- Area:        Core/Spawner · Core/Patterns
+- Found by:    AUDIT-002
+- Status:      OPEN
+- Symptom:     Greed and survival are the same input, so there is no routing decision in a game
+               whose currency is a collectible.
+- Why:         `Spawner.swift:53-58` emits a gem breadcrumb into `safeEntryLane` before EVERY
+               pattern; `safeEntryLane` (`:67-84`) is *defined* as the lane with no tall/movingTall/
+               splitBar cover. Verified exhaustively across all 14 patterns: **no gem in the
+               catalogue requires entering an unsafe lane.**
+- Impact:      Gem income is an attention tax, not a decision — and gems are 76–88% of the faucet.
+- Fix sketch:  Price some gems in risk: a denser cluster in a lane safe only inside a tight window,
+               or a breadcrumb that leaves you badly placed for the NEXT pattern (routing debt).
+- Blast radius: `Core/Spawner.swift`, `Core/Patterns.swift` — iron rule 3 (bot + layoutVersion).
+- Verification: Bot green + layoutVersion bumped + `PatternOrderTests` repinned.
+- **Why this is a reversal request:** `Spawner.swift:49-52` documents this as a deliberate v1.6
+  change — *"Subway-style… following the coins is always a takeable route"* — echoed at
+  `Patterns.swift:128` and `:163` ("coins are the path"). **Needs Rayan's sign-off, not a fix.**
+
+## PR-0415 · SEV2 · The economy pays ~7% for the activity the game is named for
+- Area:        UI/GameView:696-711 · Meta/XPCurve
+- Found by:    AUDIT-002
+- Status:      OPEN
+- Symptom:     `coins = gems + floor(dist/35) + 5×worlds + min(closes+slicks,40)×2`. At the measured
+               0.365 gems/m, gems are 76–88% of income at every run length; distance is ~7% of coins
+               and ~12% of score (at 5,331 m: `distance×2` = 10,662 of 91,072).
+- Why:         Style — the design's own stated skill premium — is hard-capped at 80 coins/run and
+               the autopilot farms it. The leaderboard ranks score; the economy rewards hoovering.
+               Optimal coin play and optimal score play diverge and the game never says which it
+               wants.
+- Impact:      The game pays most for what requires least, and ranks you on what it barely pays for.
+- Fix sketch:  Raise the distance and style terms materially, or lower gem density. Recompute
+               time-to-collection afterwards (currently ~175 runs / 2.2 h).
+- Blast radius: `UI/GameView.swift:696-711`, `Meta/XPCurve.swift`, `EconomyTests` (30 tests).
+- Verification: `EconomyTests` + `ProgressionTests` green; recompute the §5 table in the bible.
+
+## PR-0416 · SEV2 · CLOSE cannot be aimed at — an ~89 ms accident, untaught
+## PR-0417 · SEV2 · SLICK has no timing window; the tutorial card claims otherwise
+## PR-0418 · SEV2 · Moving walls award CLOSE for zero player input
+## PR-0419 · SEV2 · No variable-ratio reward exists anywhere in the run loop
+## PR-0420 · SEV2 · REVERSAL REQUEST — per-world music is pinned to world 0 by owner decree
+## PR-0421 · SEV2 · PERFECT rings pay +0 score; the popup shows the same number for both
+## PR-0422 · SEV2 · The score gradient runs opposite the difficulty gradient
+## PR-0423 · SEV1 · Coin Surge is a 177–1,040% ROI purchase
+## PR-0424 · SEV2 · The daily leaderboard has no viewer; the competitive layer is invisible at death
+## PR-0425 · SEV2 · The Daily Rush ladder is exhausted in ~35 s and pays zero afterwards
+## PR-0426 · SEV2 · The login streak is only ever shown as a receipt, never as a stake
+## PR-0427 · SEV2 · 9,600 m buys a 49° hue rotation ("Pulse City II")
+## PR-0428 · SEV2 · Post-revive death panel replays XP/level-up/unlock it did not grant
+## PR-0429 · SEV2 · SLOW-MO is a −116-point button styled as the twin of a +18-point button
+## PR-0430 · SEV2 · Nothing tells the player what to chase next after run 5
+## PR-0431 · SEV3 · The FLOW meter never renders completion — it deletes itself as it fills
+## PR-0432 · SEV3 · 13.8% of the endgame track requires zero input (one 1.45 s block)
+## PR-0433 · SEV3 · Jump and slide get monotonically easier as speed rises; only lane change scales
+## PR-0434 · SEV3 · Unlocking tier 3 at 576 m measurably LOWERS obstacle density
+## PR-0435 · SEV3 · `spawnHorizon` is 115 m but the player can see only ~65 m
+## PR-0436 · SEV3 · `gemArc` stops being a jump-path telegraph past 1,133 m; doc comment goes stale
+## PR-0437 · SEV3 · No build — zero player-chosen run-to-run variance
+## PR-0438 · SEV3 · Level 30 is a wall; the only thing behind it is paying to skip more of the game
+## PR-0439 · SEV3 · Zero shareability — the game's only differentiator cannot leave the phone
+## PR-0440 · SEV3 · No App Store review prompt; the ideal trigger is computed and thrown away
+## PR-0441 · SEV3 · Two of five coin-spend packs are dead stock (level-ups gift 13,049 coins of it)
+## PR-0442 · SEV3 · `DESIGN_progression.md:47` overstates style XP by 3–5×
+## PR-0443 · SEV3 · First-run gate has no SKIP and its ✕ silently eats the PLAY you tapped
+## PR-0444 · SEV3 · The 30-minute chest permanently outranks Daily Rush in the lit-cell ladder
+
+> **PR-0416 … PR-0444 are filed in compact form**, following the session-001 precedent recorded in
+> PR-0001: full ten-field blocks for the items a session is likely to pick up first, compact rows
+> for the long tail. **Any of these promoted into a session's scope must be expanded to the full
+> block before work starts** — the evidence, arithmetic and corrections for every one of them are
+> in `docs/agent/audits/scratch/` (gitignored; mine before it is lost).
+
+## PR-0411 · SEV1 · "Earn 2× coins, forever" under-delivers on a paid product
+- Area:        Meta/ProfileStore · IAP
+- Found by:    AUDIT-002 (raised SEV0, cut to SEV1 in verification)
+- Status:      OPEN
+- Symptom:     The advertised permanent 2× coin multiplier does not deliver 2× by the app's own
+               accounting.
+- Why:         Full accounting in `docs/agent/audits/scratch/economy.md` §F1 and
+               `verify-economy.md` §F1 (every cite re-opened, repo-wide `coinMultiplier` grep).
+- Impact:      **Decree 5 — "advertised bonuses are always delivered" — on a real-money purchase.**
+               Also a metadata-accuracy exposure for AUDIT-003.
+- Fix sketch:  Either make the multiplier apply to every coin channel, or change the store copy to
+               state exactly what it multiplies.
+- Blast radius: `Meta/ProfileStore.swift`, `UI/GameView.swift:696-711`, IAP copy, `EconomyTests`.
+- Verification: A test asserting a `doubleCoins` profile earns exactly 2× a baseline profile on an
+               identical `RunSummary`.
+- **Flagged to Rayan in the session-003 report.**
+
+## PR-0412 · SEV1 · Buying a world silently disqualifies the run and credits zero reach
+- Area:        Meta/ProfileStore · UI/WorldsView
+- Found by:    AUDIT-002
+- Status:      OPEN
+- Symptom:     A player spends up to 13,400 coins on a world start and is never told the run is
+               leaderboard-ineligible and earns no reach credit.
+- Why:         The *behaviour* is correct and deliberate — `ProfileStore.swift:282-292`,
+               `GameView.swift:718-721`, iron rule 10. Nothing surfaces it.
+- Impact:      The single largest coin purchase in the game has an undisclosed cost.
+- Fix sketch:  One line on the world card and on the death panel: "Runs started here are not ranked."
+- Blast radius: `UI/WorldsView.swift`, `UI/GameOverView.swift` — copy only.
+- Verification: Screenshot the world card showing the disclosure.
+- Note:        **File as a DISCLOSURE defect, not a bug** — it will otherwise be closed WONTFIX on
+               sight of the (correct) code comment.
+
+## PR-0413 · SEV1 · The first-run tutorial banner names the wrong verb ~1 prompt in 5
+- Area:        UI/GameView:344-347
+- Found by:    AUDIT-002
+- Status:      OPEN
+- Symptom:     During the only in-run teaching the game has, the banner tells the player to do the
+               wrong thing roughly 21% of the time.
+- Why:         The trigger window is blind to anything closer than 12 m (`GameView.swift:344`
+               array, `:347` window predicate).
+- Impact:      Every new player, during the one minute that decides retention.
+- Fix sketch:  Widen the lookahead to cover the near band, or suppress the banner when the nearest
+               obstacle is inside it rather than naming a farther one.
+- Blast radius: `UI/GameView.swift`.
+- Verification: Replay the hint logic against the real spawn stream over N seeds; mismatch rate 0.
+
+## PR-0445 · SEV2 · The attract track cuts through hub text and the bottom card row
+- Area:        UI/MenuView
+- Found by:    AUDIT-002 (measured, clean launch) — closes the open question in PR-0296
+- Status:      OPEN
+- Symptom:     On a clean launch the magenta attract grid crosses the "HEAD START ×1" glyphs, and a
+               solid magenta band cuts horizontally across the CHARACTERS / SHOP / WORLDS row.
+- Repro:       Uninstall → install → launch → skip splash → observe the hub.
+- Why:         The attract track renders above/through the card layer rather than behind it.
+- Impact:      Fails decree 6 (clarity beats spectacle): the lines cross glyphs and reduce
+               legibility. Session 002 quantified this as PR-0296 and deliberately left it unscored;
+               this is the design ruling it was waiting for.
+- Fix sketch:  Push the attract track behind the card layer, or fade it under the lower third.
+- Blast radius: `UI/MenuView.swift` z-ordering.
+- Verification: Clean-launch screenshot with no grid line crossing a glyph.
+- Blocked by:  Needs Rayan's yes/no — it is possible this is the intended neon look (open question 4).

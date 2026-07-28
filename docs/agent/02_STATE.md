@@ -4,9 +4,9 @@
 > wins** and the other file gets fixed. That includes `state.md` and `README.md` at the repo root,
 > which are the project's human-facing history, not the agent's source of truth.
 
-- **Last written by:** session 002 (2026-07-27) — AUDIT-001, The Completeness Auditor
-- **Program phase:** Phase B (adversarial audits), **1 of 7 done**. Sessions 003–008 remain.
-- **Next session:** 003 — AUDIT-002, The Game Designer
+- **Last written by:** session 003 (2026-07-28) — AUDIT-002, The Game Designer
+- **Program phase:** Phase B (adversarial audits), **2 of 7 done**. Sessions 004–008 remain.
+- **Next session:** 004 — AUDIT-003, The App Review Rejector
 - **Code changed by the program so far:** none. Sessions 001–009 are read-only by design.
 
 ---
@@ -29,6 +29,13 @@ What is genuinely solid, and session 002 did not dent it:
 features are fully implemented and exactly one is outright absent, yet only 13 of 59 clear the
 owner's own six decrees, and every failure state in the app is unfinished in the same way.**
 
+**Session 003's one-sentence verdict: the app is also not designed past two minutes — the
+difficulty curve, the speed ramp and the pattern catalogue are all exhausted by 3,200 m, after
+which nothing in the simulation ever changes again, and none of the 83,500 coins of permanent
+sink buys anything that alters play.** Measured on device: five consecutive 10 s intervals at
+33.5–33.7 m/s with a flat score rate. The design bible this project never had is now
+`docs/agent/05_GAME_DESIGN.md`; read it before touching tuning, economy or progression.
+
 ## The three things that should worry you most
 
 1. **Every failure state fails identically.** Store not loaded, not enough coins, empty mission
@@ -42,7 +49,12 @@ owner's own six decrees, and every failure state in the app is unfinished in the
    `CharacterParityTests.swift` is `#if canImport(UIKit)`-gated and silently compiles to nothing
    there. The whole interactive surface is 6 XCUITests in one file. Every session-002 finding lives
    in exactly the region the suite cannot see — that is the mechanism, not a coincidence.
-3. **The docs are confidently wrong in the files agents read first.** `CLAUDE.md` is wrong on four
+3. **The game runs out of design at 3,200 m** (PR-0400, session 003). Last new pattern at 1,920 m,
+   speed cap at 3,077 m, density cap at 3,200 m — verified in source and measured on device by four
+   independent lenses. Every endgame structure (the infinite world ladder, 13,400-coin deep rungs,
+   the leaderboard, the 12,000 m soak) rests on distance being an axis of challenge. Past 3,200 m it
+   is an axis of patience. The fix seam already exists: `Spawner.maxIndex` gates by prefix index.
+4. **The docs are confidently wrong in the files agents read first.** `CLAUDE.md` is wrong on four
    load-bearing facts. `Store/metadata.md` sells a three-world game and the ship docs say to paste it
    verbatim into App Store Connect (PR-0010). The README claims 12 bespoke skies (9 exist) and
    per-world music that an owner decree deliberately disabled. A chain of sessions inheriting wrong
@@ -50,14 +62,19 @@ owner's own six decrees, and every failure state in the app is unfinished in the
 
 ## Backlog summary
 
-| Severity | Session 001 | + Session 002 | Total |
-|---|---:|---:|---:|
-| SEV0 (conditional, unproven) | 1 | 0 | 1 |
-| SEV1 | 14 | 2 | 16 |
-| SEV2 | 40 | 17 | 57 |
-| SEV3 | 123 | 5 | 128 |
-| SEV4 | 3 | 0 | 3 |
-| **Total** | **181 (+5 addendum = 186)** | **24** | **210** |
+| Severity | Session 001 | + Session 002 | + Session 003 | Total |
+|---|---:|---:|---:|---:|
+| SEV0 (conditional, unproven) | 1 | 0 | 0 | 1 |
+| SEV1 | 14 | 2 | 7 | 23 |
+| SEV2 | 40 | 17 | 21 | 78 |
+| SEV3 | 123 | 5 | 18 | 146 |
+| SEV4 | 3 | 0 | 0 | 3 |
+| **Total** | **181 (+5 addendum = 186)** | **24** | **46** | **256** |
+
+Session 003's 46 items are `PR-0400 … PR-0445`. **124 findings were raised, 92 survived an
+independent hostile verifier, 32 were killed, and 34 severities were downgraded in review** — the
+severities above are post-review. `PR-0416 … PR-0444` are filed compact (see the note beside them);
+expand to the full block before working one.
 
 Session 002's 24 items are `PR-0300 … PR-0323`. **Every one survived at least one adversarial
 verifier whose explicit job was to refute it.** Session 002 also re-scored or refuted seven
@@ -144,13 +161,20 @@ Columns, defined so a future session scores identically:
 | 50 | Account deletion | ❌ | ❌ | ❌ | ❌ | **the one outright-absent feature.** Required because row 49 exists. PR-0008 |
 | 51 | Settings (volumes, haptics, reduce-flash) | ✅ | ✅ | ❌ | ⚠️ | |
 | 52 | Mute / unmute | ✅ | ⚠️ | ❌ | ❌ | PR-0305 — only unmute is the in-run corner control; mute persists |
-| 53 | How to Play / first-run gate | ✅ | ✅ | ⚠️ | ⚠️ | teaches 3 of ~8 mechanics |
+| 53 | How to Play / first-run gate | ✅ | ✅ | ⚠️ | ⚠️ | **corrected S-003:** teaches ~17 concepts over 5 pages, and PLAY routes into it on a true first launch. The defect is the shape, not the coverage — all text, pre-run, never in context (PR-0402) |
 | 54 | Power-Ups reference catalog | ✅ | ✅ | ❌ | ⚠️ | PR-0317 — different icons than the hub |
 | 55 | Splash | ✅ | ✅ | ❌ | ✅ | does not auto-dismiss, by design |
 | 56 | Music | ✅ | ✅ | ✅ | ⚠️ | **pinned to world 0 by explicit owner decree — the other 11 beds are intentionally unreachable. The defect is that the README still sells them** |
 | 57 | SFX | ✅ | ✅ | ⚠️ | ⚠️ | PR-0320 — 4 "rising whoosh" SFX decay instead of swelling |
 | 58 | Haptics | ✅ | ✅ | ❌ | — | needs a device |
 | 59 | Pause | ✅ | ✅ | ⚠️ | ⚠️ | PR-0130 — session-summary block is dead code (HUD still visible behind the veil) |
+
+**Session 003 amendments to this Ledger** (the Ledger stays owned by AUDIT-001; these are
+corrections of fact, not re-scores): row 53 above. Row 9 (`timeSurvived`) confirmed on device —
+the death panel shows `72m · World 1` and `0 close calls` and no duration. Row 56 (music) confirmed
+as an owner decree, not a defect. Row 26 (the ladder past 12) is now ruled on in
+`05_GAME_DESIGN.md §6`: **compliant but weak** — "II" does real work so it does not lie, but it
+dresses repetition as progression.
 
 ### Roll-up
 
@@ -182,10 +206,10 @@ Provisional. **Session 009 rewrites this** with all seven audits visible.
 
 Carried forward every session until done.
 
-- PR-0296 — **is the attract-track bleed-through through the hub cards intended?** Session 002
-  quantified it (a full-width magenta band sweeps y = 0.667 → 0.799 over 10 s, repeatedly crossing
-  the nav labels). It is a judgment call, not a provable defect. **Do not "fix" it without an
-  answer.**
+- PR-0296 / **PR-0445** — **is the attract-track bleed-through through the hub cards intended?**
+  Session 002 quantified it; **session 003 ruled on it and filed PR-0445 (SEV2)**: on a clean launch
+  the grid crosses the "HEAD START ×1" glyphs and a solid band cuts the CHARACTERS/SHOP/WORLDS row,
+  which fails decree 6. Still a judgment call — **do not "fix" it without a yes/no from Rayan.**
 - PR-0024 — do camera/pose lerps land the same on 60 Hz and 120 Hz hardware?
 - PR-0025, PR-0260 — Instruments allocation and idle-battery traces.
 - PR-0026, PR-0047 — tap-to-jump latency, bottom-corner swipe dead zones.
@@ -209,9 +233,17 @@ Carried in `HANDOFF.md` until answered. **Question 5 was resolved by session 001
 2. **PR-0254 — should a run that used a paid revive be leaderboard-eligible?** Iron rule 10 says yes
    by omission. Product call. **Session 002 sharpens this:** PR-0307 shows post-revive play does not
    count for missions or XP — so a revived run is currently *partly* counted, which is the worst of
-   both answers.
+   both answers. **Session 003 rules:** revived runs should count for missions and XP and be
+   **leaderboard-ineligible** — exactly the rule checkpoint runs already follow. One line of policy
+   instead of two half-answers. Needs your yes/no.
 3. **PR-0040 — the music is a 1.82 s loop for the whole session.** Design change, needs sign-off.
 4. **PR-0052 — is the Daily Challenge a *layout* guarantee or an *identical-experience* guarantee?**
+6. **PR-0411 — "Earn 2× coins, forever" under-delivers on a paid product.** Filed SEV1 by session
+   003 after surviving verification (raised as SEV0, cut in review). This is decree 5 —
+   "advertised bonuses are always delivered" — on real money. Worth your eyes before Phase 2.
+7. **PR-0414 is a reversal request, not a bug.** "Coins are the path" (`Spawner.swift:49-52`) was a
+   deliberate v1.6 change of yours; it is also the reason routing has no decision in it. You cannot
+   have both a guaranteed-safe coin line and a greed-vs-survival tension. Pick one knowingly.
 5. ~~Mystery Box real money?~~ **Resolved (S-001): 300 coins, not real money.** Session 002 further
    confirms the odds are disclosed and sum to 100%, so 3.1.1's requirement is met today.
 6. **NEW — PR-0296: is the attract track showing through the hub cards the intended neon look?**
@@ -219,12 +251,15 @@ Carried in `HANDOFF.md` until answered. **Question 5 was resolved by session 001
 
 ## Program hygiene
 
-- `docs/agent/scratch/` and `docs/agent/audits/scratch/` are **gitignored**. They now hold session
-  001's 537 KB survey plus session 002's ~600 KB of finder + verifier output and
-  `runtime-auditor.md`. They will not survive a fresh clone. The committed audit file summarises them
-  but does not contain them.
-- Recovery tags: `pre-s001`, `pre-s002` exist locally.
-- This worktree is `.claude/worktrees/prism-rush-audit-91c7ba` on branch
-  `claude/prism-rush-audit-91c7ba`, based on session 001's `dc2be8d`. Session 001's own worktree
-  (`beautiful-davinci-797e3b`) still exists; **session 003 should branch from session 002's tip, not
-  from `main`** — `main` does not contain `docs/agent/` at all.
+- `docs/agent/scratch/` and `docs/agent/audits/scratch/` are **gitignored** and now hold ~1.5 MB:
+  session 001's 537 KB survey, session 002's ~600 KB, and session 003's ~450 KB of 10 finder +
+  10 verifier files. **They will not survive a fresh clone.** The committed audit files summarise
+  them but do not contain them. Session 003 carried sessions 001–002's scratch across worktrees by
+  hand (`cp -R`, since git will not move gitignored files) — **the next session must do the same or
+  the whole chain's working detail is lost.**
+- Recovery tags: `pre-s001`, `pre-s002`, `pre-s003` exist locally.
+- This worktree is `.claude/worktrees/prism-rush-design-audit-562d27` on branch
+  `claude/prism-rush-design-audit-562d27`. It was created from `main` and **reset onto session
+  002's tip `e7f7841`** at session start. `main` still does not contain `docs/agent/` at all —
+  **session 004 must branch from session 003's tip, never from `main`**, and must copy both scratch
+  directories across if it works in a new worktree.
