@@ -19,9 +19,16 @@ Two independent executions of the same command, both on 2026-07-27:
 |---|---|---|---|---|
 | 13:51 (survey, session 001) | `/usr/bin/time -p swift test -c release` | **178 tests, 0 failures** | 7.283 s | **28.89 s** (`user 25.09`, `sys 3.24`) — included a release recompile |
 | 14:14 (session 002, confirming) | `/usr/bin/time -p swift test -c release` | **178 tests, 0 failures** | 7.681 s | **8.86 s** (`user 7.91`, `sys 0.54`) — warm `.build`, no recompile |
+| 2026-07-28 (session 004, after PR-0400/0414) | `swift test -c release` | **187 tests, 0 failures** | 24.04 s | warm `.build` |
 
-Read that as: **~8–9 s warm, ~30 s when `.build` needs a release compile.** The XCTest portion is
-~7.3–7.7 s either way; the variance is compilation.
+Read the first two as: **~8–9 s warm, ~30 s when `.build` needs a release compile.**
+
+**Session 004 changed both numbers.** The count is now **187**: `DifficultyCurveTests` (5) plus four
+new gates in `DifficultyTests`. The XCTest time roughly tripled to ~24 s, and that is expected, not
+a regression — `DifficultyCurveTests` plays **64 seeded Autopilot runs to 9,600 m** plus a 16-seed
+× 12,000 m greed-line sweep, because measuring a difficulty curve honestly means simulating it. It
+is the second-most expensive test in the suite after the solvability bot. If you need the fast loop,
+`--filter` around it.
 
 Trailing output of both runs ends with:
 
@@ -57,7 +64,10 @@ that doing it introduces the first `@Test` in the repo; it will work, but the co
 | SmokeTests | 2 | 0.000 |
 | SolvabilityBotTests | 4 | 6.817 |
 | SynthTests | 10 | 0.041 |
-| **total** | **178** | **7.283** |
+| **total (session 001)** | **178** | **7.283** |
+| + DifficultyCurveTests (S-004) | 5 | ~16.9 |
+| + DifficultyTests, 4 new gates (S-004) | 4 | ~0.02 |
+| **total (session 004)** | **187** | **24.04** |
 
 ### The four slowest tests — 96 % of the runtime
 
@@ -76,12 +86,12 @@ which surfaces as a "STALLED" failure, not a hang.**
 
 | bundle | tests | how derived |
 |---|---|---|
-| SPM (`swift test`) | **178** | measured twice above |
-| Xcode unit bundle `PrismRushTests` | **185** | `Tests/` path = 181 declared in `Tests/CoreTests/**` + 4 in `Tests/WorldPaletteTests.swift`; all 181 compile on iOS (the 3 UIKit-gated ones become live) |
+| SPM (`swift test`) | **187** | S-004; was 178 through S-003 |
+| Xcode unit bundle `PrismRushTests` | **194** | `Tests/` path = 181 declared in `Tests/CoreTests/**` + 4 in `Tests/WorldPaletteTests.swift`; all 181 compile on iOS (the 3 UIKit-gated ones become live) |
 | Xcode UI bundle `PrismRushUITests` | **11** | `UITests/InteractionUITests.swift` |
-| whole scheme (`xcodebuild test`) | **196** | 185 + 11 |
+| whole scheme (`xcodebuild test`) | **205** | 194 + 11 |
 
-`Tests/CoreTests/**` declares **181** `func test`; only **178** execute under `swift test`. The
+`Tests/CoreTests/**` declares **190** `func test`; only **187** execute under `swift test`. The
 3-test delta is `CharacterParityTests`, gated behind `#if canImport(UIKit)`
 (`Tests/CoreTests/CharacterParityTests.swift:4`). See "What compiles where".
 
@@ -90,14 +100,14 @@ which surfaces as a "STALLED" failure, not a hang.**
 | file:line | what it says | reality |
 |---|---|---|
 | `CLAUDE.md:44` | "→ 95 tests (89 unit + 6 XCUITest)" | **196** (185 unit + 11 XCUITest) |
-| `CLAUDE.md:50` | "`swift test -c release` # 89 tests, ~9 s" | **178** tests; ~7.7 s XCTest, ~8.9 s warm wall / ~29 s with compile |
+| `CLAUDE.md:50` | "`swift test -c release` # 89 tests, ~9 s" | **187** tests; ~24 s XCTest since S-004, ~25 s warm wall |
 | `CLAUDE.md:52` | "Core/, **4** Meta files, Audio/Synth.swift" | `Package.swift:16-22` lists **7** Meta files |
 | `CLAUDE.md:53-54` | non-SPM layers are "**not even type-checked**" on CI | Half-true and misleading. True for the Linux job. **False for CI overall**: `.github/workflows/ios-build.yml:48-54` runs `build-for-testing` against `generic/platform=iOS Simulator`, which type-checks all 70 production files and all 22 test files |
 | `Tools/ci.sh:9-10` | "The full suite is 174 tests (163 unit + 11 XCUITest) at v1.4.3" | **196** (185 + 11) at v1.6 — off by 22 |
 | `README.md:115` | "38 unit + 6 XCUITest interaction tests" | historical v1.x row; **196** today |
-| `README.md:127` | "the full **89-test** suite" | **178** on SPM |
-| `README.md:158` | "89/89 unit tests" on Linux | **178/178** |
-| `README.md:206` | "`swift test -c release` **129/129**" (labelled v1.3-era) | **178/178** |
+| `README.md:127` | "the full **89-test** suite" | **187** on SPM |
+| `README.md:158` | "89/89 unit tests" on Linux | **187/187** |
+| `README.md:206` | "`swift test -c release` **129/129**" (labelled v1.3-era) | **187/187** |
 
 Correct-today claims, for contrast (so you know which docs to trust):
 `README.md:14` ("196 tests green (185 unit + 11 XCUITest)"), `README.md:398`, `README.md:452`,
@@ -116,7 +126,7 @@ cd <repo root>
 swift test -c release
 ```
 
-- **Covers:** the 178 SPM tests — `Core/` (all 10 files), 7 `Meta/` files, `Audio/Synth.swift`.
+- **Covers:** the 187 SPM tests — `Core/` (all 10 files), 7 `Meta/` files, `Audio/Synth.swift`.
   Includes the 200-seed solvability bot and the 12,000 m deep soak.
 - **Time:** ~8.9 s warm, ~29 s with a release compile, more on a cold `.build`.
 - **Prereqs:** a Swift 6 toolchain. No Xcode project, no simulator, no signing, no network.
@@ -281,7 +291,7 @@ compiled there. `Meta/` currently has **7 files**, all listed; `Audio/` has **3*
 | runner | `ubuntu-24.04`, container `swift:6.0-noble` | `macos-15`, newest installed Xcode |
 | trigger | push to `main` + all PRs | push to `main` + all PRs |
 | type-checks | the 18 SPM files + `Tests/CoreTests/**` | **all 70 production files + all 22 test files** (`build-for-testing`, `generic/platform=iOS Simulator`, lines 48-54) |
-| executes | 178 tests | 185 unit tests, **only if a simulator literally named "iPhone 16" exists** (line 63) |
+| executes | 187 tests | 185 unit tests, **only if a simulator literally named "iPhone 16" exists** (line 63) |
 | never executes | — | the 11 XCUITests — `-only-testing:PrismRushTests` (line 64) |
 
 **Files CI never type-checks: none.** CLAUDE.md's "not even type-checked" claim predates
@@ -301,7 +311,7 @@ PR but their *runtime behaviour* is proven only by a human running `Tools/ci.sh`
 
 `canImport(UIKit)` is **false on plain macOS** and false on Linux. So under `swift test` — on your
 Mac, right now — this file compiles to *nothing*. There is no "skipped" line in the output; the tests
-simply do not exist. That is the entire 181-vs-178 delta.
+simply do not exist. That is the entire 190-vs-187 delta.
 
 Consequence: the 3 rig↔preview proportion pins run **only** inside the iOS-Simulator Xcode bundle. If
 `ios-build.yml`'s `test-without-building` step is removed, or its "iPhone 16" lookup fails, those 3
@@ -746,7 +756,7 @@ test method. A broken menu reads as one failure, not ten.
 
 | file | runs | notes |
 |---|---|---|
-| `.github/workflows/core-tests.yml` (19 lines) | `swift test -c release` in `swift:6.0-noble` on `ubuntu-24.04`; push-to-main + all PRs | 178 tests. The one always-reliable gate |
+| `.github/workflows/core-tests.yml` (19 lines) | `swift test -c release` in `swift:6.0-noble` on `ubuntu-24.04`; push-to-main + all PRs | 187 tests. The one always-reliable gate |
 | `.github/workflows/ios-build.yml` (65 lines) | `macos-15`; newest Xcode → brew xcodegen → generate → `build-for-testing` (generic sim) → `test-without-building -only-testing:PrismRushTests` on `iPhone 16, OS=latest` | See defects below |
 
 **`ios-build.yml` defects:**
@@ -782,9 +792,10 @@ cd <repo root>
 swift test -c release
 ```
 
-Expected: `Executed 178 tests, with 0 failures (0 unexpected) in ~7.7 seconds`, then the harmless
+Expected: `Executed 187 tests, with 0 failures (0 unexpected) in ~24 seconds`, then the harmless
 `✔ Test run with 0 tests in 0 suites passed` from the swift-testing runner. **Duration ~9 s warm,
-~30 s if it recompiles.** If the count is not 178, something changed structurally — find out what
+~30 s if it recompiles (S-004: ~24 s of that is now XCTest itself — `DifficultyCurveTests` plays
+64 seeded Autopilot runs).** If the count is not 187, something changed structurally — find out what
 before reading the failures.
 
 ### Step 2 — the app must compile

@@ -4,11 +4,14 @@
 > wins** and the other file gets fixed. That includes `state.md` and `README.md` at the repo root,
 > which are the project's human-facing history, not the agent's source of truth.
 
-- **Last written by:** session 003 (2026-07-28) — AUDIT-002, The Game Designer
+- **Last written by:** session 004 (2026-07-28) — the second act + risk-priced gems
 - **Program phase:** audits 2 of 7 done, and the phase gate is gone (D-005) — audits and fixes now
-  interleave.
-- **Next session:** 004 — PR-0400 + PR-0414, the two spawn-path changes, in one `layoutVersion` bump. See `HANDOFF.md`.
-- **Code changed by the program so far:** PR-0411 only (S-003, copy fix, verified).
+  interleave. S-004 was a pure fix session; no audit ran.
+- **Next session:** 005 — **PR-0452, the hub redesign. Rayan asked for it directly.** See `HANDOFF.md`.
+- **Code changed by the program so far:** PR-0411 (S-003 + S-004 residue), **PR-0400, PR-0414,
+  PR-0445, PR-0451 (S-004)**. The game's simulation has now been changed, not just its copy.
+- **`DailyChallenge.layoutVersion` is 8** as of S-004. Every daily track changed; that is expected
+  and is what a layout bump means.
 - **The read-only phase is over (D-005).** Sessions may now fix code as they go. The audit sequence
   continues because it is producing real findings, not because a rule requires it.
 - **Rayan's standing instruction (2026-07-28):** *"never be limited by arbitrary rules — just work
@@ -30,7 +33,9 @@ binary assets except the generated app icon.
 What is genuinely solid, and session 002 did not dent it:
 - The deterministic core is real. Fixed 1/120 s timestep, seeded SplitMix64, a 200-seed solvability
   bot plus a 12,000 m soak, golden-pinned daily-challenge seeds. `RendererPort` is clean.
-- **178 SPM tests pass in 8.85 s, re-measured this session at `dc2be8d`, zero failures.**
+- **187 SPM tests pass in ~24 s, re-measured by session 004 at `9766e7d`, zero failures.** The
+  jump from 178 is S-004's `DifficultyCurveTests` (5) and four new gates in `DifficultyTests`. The
+  runtime grew because the difficulty instrument plays 64 seeded Autopilot runs to 9,600 m.
 - Zero `TODO` / `FIXME` / `HACK` / `XXX` / `fatalError` in 95 files. Re-verified, still true.
 - All 12 world families render distinctly, verified on device. Character previews are internally
   truthful (hero and swatch move in exact lockstep).
@@ -45,6 +50,18 @@ which nothing in the simulation ever changes again, and none of the 83,500 coins
 sink buys anything that alters play.** Measured on device: five consecutive 10 s intervals at
 33.5–33.7 m/s with a flat score rate. The design bible this project never had is now
 `docs/agent/05_GAME_DESIGN.md`; read it before touching tuning, economy or progression.
+
+**Session 004 fixed the first half of that.** There is now an *act two*: past 3,200 m the pattern
+mix sheds its breather beats in three front-loaded waves, the gap keeps closing 5 → 4, the moving
+walls swing off centre so the safe lane must be read rather than remembered, and a second gem line
+is hung in a lane each pattern closes so greed and survival stop being the same input. Measured
+(`DifficultyCurveTests`, 64 seeds): obstacles/100 m **6.02 → 7.63 (+27%)**, Autopilot inputs/100 m
+**3.93 → 4.44 (+13%)**, obstacle-free track **27.1% → 12.4%**, gems priced in risk **0.7% → 14.6%**.
+v1.6 was flat in every one of those columns across the whole 3,000–8,000 m range.
+
+**What S-004 did NOT fix, and said so:** the catalogue is still 14 patterns (**PR-0450**) — act two
+changes how often you meet things, not what things exist. And **the coin sink still buys nothing
+that alters play** (PR-0401); that half of S-003's verdict stands untouched.
 
 ## The three things that should worry you most
 
@@ -80,6 +97,10 @@ sink buys anything that alters play.** Measured on device: five consecutive 10 s
 | SEV3 | 123 | 5 | 18 | 146 |
 | SEV4 | 3 | 0 | 0 | 3 |
 | **Total** | **181 (+5 addendum = 186)** | **24** | **46** | **256** |
+
+Session 004 added three (`PR-0450` SEV2, `PR-0451` SEV3, `PR-0452` SEV2) and closed five
+(`PR-0400`, `PR-0414`, `PR-0445`, `PR-0451`, and the `PR-0411` repo-side residue) → **259 items,
+6 DONE.**
 
 Session 003's 46 items are `PR-0400 … PR-0445`. **124 findings were raised, 92 survived an
 independent hostile verifier, 32 were killed, and 34 severities were downgraded in review** — the
@@ -216,10 +237,17 @@ Provisional. **Session 009 rewrites this** with all seven audits visible.
 
 Carried forward every session until done.
 
-- PR-0296 / **PR-0445** — **is the attract-track bleed-through through the hub cards intended?**
-  Session 002 quantified it; **session 003 ruled on it and filed PR-0445 (SEV2)**: on a clean launch
-  the grid crosses the "HEAD START ×1" glyphs and a solid band cuts the CHARACTERS/SHOP/WORLDS row,
-  which fails decree 6. Still a judgment call — **do not "fix" it without a yes/no from Rayan.**
+- **PR-0400 / PR-0414 — does act two FEEL right?** This is the one that most needs his thumbs.
+  The change is verified deterministic, fair (bot green) and measurably escalating, but "measurably
+  escalating" and "fun" are different claims and only a human can make the second. Specifically:
+  is the 3,200 m step noticeable? Do the swung moving walls past ~6,800 m read, or do they feel
+  cheap? Is the greed line legible at speed — can you *see* the two coin lines diverge in time to
+  choose? Is the choice worth making, or is the safe line obviously correct?
+- **PR-0452 — the hub redesign he asked for in S-004.** Direction is a taste call and his to make;
+  the item lists candidate directions but does not pick one.
+- ~~PR-0296 / PR-0445 — attract-track bleed-through~~ — **DONE (S-004).** Ruled on in D-008,
+  implemented as a lower-third scrim, verified by clean-launch before/after screenshots kept in
+  `docs/agent/scratch/s004/`. Worth 10 seconds of his eyes to confirm the taste call was right.
 - PR-0024 — do camera/pose lerps land the same on 60 Hz and 120 Hz hardware?
 - PR-0025, PR-0260 — Instruments allocation and idle-battery traces.
 - PR-0026, PR-0047 — tap-to-jump latency, bottom-corner swipe dead zones.

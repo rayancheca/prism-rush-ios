@@ -41,15 +41,15 @@ why the whole sim is testable headless.
 ./Tools/ci.sh             # generate + build + full test suite
 xcodebuild test -project PrismRush.xcodeproj -scheme PrismRush \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' CODE_SIGNING_ALLOWED=NO
-# → 95 tests (89 unit + 6 XCUITest). Sim overrides: PR_SIM_NAME / PR_SIM_OS / PR_SIM_UDID.
+# → 205 tests (194 unit + 11 XCUITest). Sim overrides: PR_SIM_NAME / PR_SIM_OS / PR_SIM_UDID.
 # Autoplay demo: SIMCTL_CHILD_PR_AUTOPLAY=1 xcrun simctl launch booted com.rayancheca.prismrush
 ```
 
 **Linux / CI (deterministic layers only, via `Package.swift`):**
 ```bash
-swift test -c release     # 89 tests, ~9 s — Core + Meta + Synth DSP (incl. the 200-seed bot)
+swift test -c release     # 187 tests, ~25 s — Core + Meta + Synth DSP (incl. the 200-seed bot)
 ```
-Linux compiles ONLY what `Package.swift` lists (Core/, 4 Meta files, Audio/Synth.swift). Everything
+Linux compiles ONLY what `Package.swift` lists (Core/, 7 Meta files, Audio/Synth.swift). Everything
 touching UIKit/RealityKit/SwiftUI/StoreKit/AVFoundation/GameKit is **not even type-checked** there —
 at best `swiftc -parse` (syntax only). Any UI/Render/engine change needs a Mac build to be trusted.
 CI (`.github/workflows/core-tests.yml`) runs the SPM suite on every push/PR.
@@ -84,10 +84,14 @@ with a decree, the doc is wrong — amend the doc, never "ship the doc". Current
 
 ## Revoked / amended decrees
 
-- **"Coins are the path" — REVOKED (D-006, 2026-07-28).** `Spawner.swift:49-52` and
-  `Patterns.swift:128,:163` still describe a guaranteed-safe gem breadcrumb. Rayan's intent was
-  *structure* (gems in deliberate formations rather than scattered randomly), **not** *safety*.
-  Gems may now be priced in risk. The code comments are stale until PR-0414 lands.
+- **"Coins are the path" — REVOKED (D-006, 2026-07-28).** Rayan's intent was *structure* (gems in
+  deliberate formations rather than scattered randomly), **not** *safety*. **Implemented in v1.7
+  (S-004, PR-0414)**: the safe breadcrumb is unchanged, and past `Tuning.riskGemsFrom` (1,440 m) the
+  spawner *also* hangs a greed line in a lane the pattern closes, ending `riskExitSeconds` (0.30 s)
+  short of the wall. The stale comments at `Spawner.swift:49-52` and `Patterns.swift:128,:163` were
+  rewritten in the same commit. Note the solvability bot cannot certify the greed line — it never
+  collects a gem — so `DifficultyCurveTests.testEveryGreedGemLeavesATakeableExit` is its fairness
+  proof; keep it green if you touch gem placement.
 
 ## Iron rules
 
@@ -97,8 +101,10 @@ with a decree, the doc is wrong — amend the doc, never "ship the doc". Current
    No `Double.random`, no `Date()` in Core. A seed must fully determine a run.
 3. **Any spawner/pattern/RNG-consumption change must (a) keep the solvability bot green**
    (200 seeds × 6,000 m, zero deaths — plus the 12,000 m deep soak) **and (b) bump
-   `DailyChallenge.layoutVersion`** (goldens pinned in `DailyChallengeTests`). Consuming one extra
-   `rng.unit()` anywhere in the spawn path silently changes every seeded run.
+   `DailyChallenge.layoutVersion`** (goldens pinned in `DailyChallengeTests` **and** in
+   `MissionsTests.testTodaysChallengeSeedMatchesUTCGoldens`, which pins the same seeds from the meta
+   layer and is easy to miss). Consuming one extra `rng.unit()` anywhere in the spawn path silently
+   changes every seeded run. **Currently at layoutVersion 8** (v1.7, S-004); a v9 pin is pre-armed.
 4. **Pattern order is load-bearing**: the spawner gates by prefix index. Moving walls stay LAST.
 5. **G3 — never `@State` a shared `@Observable`, never snapshot `store.profile` into a `let` at the
    top of `body`.** Reference singletons (`ProfileStore.shared`, `IAPManager.shared`, …) directly in
