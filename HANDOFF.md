@@ -35,7 +35,8 @@ things static reading missed, and your goal this session lives entirely in the h
 `swift test` does not compile.
 
 Report back in three lines.
-This file's absolute path: <repo>/HANDOFF.md
+This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/projects/prism-rush-ios/.claude/worktrees/prism-rush-spawn-path-c7d88a/HANDOFF.md
+Branch: claude/prism-rush-spawn-path-c7d88a (a worktree — docs/agent/scratch/ will NOT come with a clone)
 ```
 
 ---
