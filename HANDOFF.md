@@ -224,9 +224,17 @@ fixes and audits interleave, and polish outranks compliance until Rayan says oth
 
 # Rayan action items (surface them; do not try to do them)
 
-1. **App Store Connect still says "Earn 2x coins, forever."** The repo-side copy-paste sources were
-   fixed in S-004, so what he pastes is now correct — but **the live product description in ASC is
-   still false and only he can change it.** It blocks honest submission.
+1. **The `Double Coins` in-app purchase description in App Store Connect.** ASC is Apple's web
+   console (appstoreconnect.apple.com) — the listing, pricing, IAPs and submissions live there, not
+   in this repo. Each IAP carries its own **Description** that Apple shows in the purchase sheet.
+   **Careful with the framing: this app has never been submitted, so nothing is public.** Earlier
+   handoffs called this a "live listing" — that was inherited and overstated, and S-005 corrected
+   it. The accurate statement: *if* Rayan has already created `com.rayancheca.prismrush.doublecoins`
+   in ASC with the old "Earn 2x coins, forever" wording, it must be corrected before submission,
+   because the app no longer claims that (PR-0411 made the claim match the code). If he has not
+   created it yet there is nothing to fix — `docs/APP_STORE_SETUP.md` and `docs/SHIP_CHECKLIST.md`
+   both now carry the correct text to paste: **`Every run pays 2× coins. Forever.`**
+   Either way only he can touch ASC.
 2. **Does the new hub feel right?** He asked for the redesign without naming a direction, and an
    autonomous session cannot ask, so one was picked and documented (editorial/arcade, three species
    of surface). Screenshots at three profile states are in `docs/agent/scratch/s005/after_*.png` —
