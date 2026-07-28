@@ -87,7 +87,7 @@ struct AnimatedCharacterSwatch: View {
         let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height * verticalAnchor + yOff)
 
         // Prism: the SAME 8 s shimmer the in-run body runs — one shared clock→color function
-        // (`SkinCatalog.prismaticColor`), so this preview and the RealityKit rig show the same
+        // authored `bodyHex`, so this preview and the RealityKit rig show the same
         // hue at the same instant (decree 2). Static frames (t == 0: Reduce Motion, off-screen
         // grids) hold phase 0 = the authored cyan body, matching the in-run Reduce Motion look.
         let bodyColor = Theme.color(skin.bodyHex)

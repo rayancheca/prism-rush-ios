@@ -47,14 +47,14 @@ final class RealityRenderer: RendererPort {
     private let chasmRimMesh: MeshResource   // one lit rim bar (two per chasm: near and far edge)
 
     // Selected character skin — authored hexes only, NEVER world-driven (owner decree 1).
-    // Defaults reproduce Prism's fixed prismatic identity for the pre-`applySkin` frame.
+    // Defaults reproduce Prism's authored identity for the pre-`applySkin` frame.
     private var skinBodyHex: UInt32 = 0x00F5FF
     private var skinAntennaHex: UInt32 = 0xFF2BD6
 
     // v1.3 skin rig (set by `applySkin(_ skin:)`). All visual-only — the hitbox
     // (Core's bodyRadius/groundedCenterY) never sees any of this.
     private var skinTrailColor =                    // always the skin's OWN color, never the world
-        UIColor(red: 0, green: 245 / 255.0, blue: 1, alpha: 1)   // (prismatic: the live shimmer hue)
+        UIColor(red: 0, green: 245 / 255.0, blue: 1, alpha: 1)   // Prism's authored cyan 0x00F5FF
     private var skinBodyShape: Skin.BodyShape = .sphere
     private var skinScale: Float = 1                // folded into the per-frame pose, 0.85…1.12
     private var skinEyeRadius: Float = 0.13
@@ -727,9 +727,9 @@ final class RealityRenderer: RendererPort {
         applyCharacterColors()
     }
 
-    /// Paint the rig from the authored skin hexes — on equip/rig rebuild only, never per frame
-    /// and never from the world palette. The prismatic body is then re-painted ~30 Hz by the
-    /// shimmer step in `advanceVisuals`; the antenna — stem AND tip — pins to the authored
+    /// Paint the rig from the authored skin hexes — on equip/rig rebuild only, never per frame,
+    /// never from the world palette, and (since v1.8 / D-009) never from a clock either: the body
+    /// is its authored `bodyHex` for the whole run. The antenna — stem AND tip — pins to the
     /// `antennaHex`, exactly what the preview strokes (AUDIT D2-1: the swatch is the purchase
     /// promise — a body-colored stem erased Mono's black spike and Thorn's leaf-green cue),
     /// and never moves hue with anything — world or clock.
