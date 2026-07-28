@@ -34,9 +34,24 @@ Build and RUN the app before you claim anything works. That rule is four for fou
 things static reading missed, and your goal this session lives entirely in the half of the codebase
 `swift test` does not compile.
 
+FIRST COMMAND, before anything else. docs/agent/scratch/ and docs/agent/audits/scratch/ are
+gitignored and hold ~2 MB of working detail from four sessions, including the before/after hub
+screenshots PR-0452's critique is built on. Git does NOT move them between worktrees, so if you are
+anywhere other than the session-004 worktree they are missing and the brief loses its evidence.
+This copies them from wherever they still exist into your checkout, and is a no-op if you already
+have them:
+
+  for w in prism-rush-spawn-path-c7d88a prism-rush-design-audit-562d27 prism-rush-audit-91c7ba; do
+    s="/Users/rayankarimcheca/Desktop/ClaudeProjects/projects/prism-rush-ios/.claude/worktrees/$w/docs/agent"
+    [ -d "$s/scratch" ] && mkdir -p docs/agent/scratch && cp -Rn "$s/scratch/." docs/agent/scratch/ 2>/dev/null
+    [ -d "$s/audits/scratch" ] && mkdir -p docs/agent/audits/scratch && cp -Rn "$s/audits/scratch/." docs/agent/audits/scratch/ 2>/dev/null
+  done; du -sh docs/agent/scratch docs/agent/audits/scratch
+
+Expect ~772K and ~1.2M. If both are empty, say so in your report rather than working blind — the
+audit scratch is where the arithmetic behind most of the backlog lives.
+
 Report back in three lines.
-This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/projects/prism-rush-ios/.claude/worktrees/prism-rush-spawn-path-c7d88a/HANDOFF.md
-Branch: claude/prism-rush-spawn-path-c7d88a (a worktree — docs/agent/scratch/ will NOT come with a clone)
+This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/projects/prism-rush-ios/HANDOFF.md
 ```
 
 ---
@@ -182,7 +197,9 @@ risk 0.7% → 14.6%. v1.6 was flat in all four across 3,000–8,000 m.
   disagree with `02_STATE.md`, `02_STATE.md` wins.
 - `docs/agent/scratch/` and `docs/agent/audits/scratch/` are **gitignored** and hold ~2 MB from four
   sessions, including S-004's before/after hub screenshots. Git will not move them between
-  worktrees — `cp -R` by hand if you make a new one.
+  checkouts. **The prompt at the top of this file opens with a command that recovers them — run it.**
+  They currently exist in the `prism-rush-spawn-path-c7d88a`, `prism-rush-design-audit-562d27` and
+  `prism-rush-audit-91c7ba` worktrees; deleting all three without copying first destroys them.
 - Don't put `./Tools/build.sh` (~2 min) inside a fan-out. Build once, up front, in the background.
 
 ---
