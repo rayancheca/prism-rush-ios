@@ -22,7 +22,7 @@ final class SynthTests: XCTestCase {
         assertSane(Synth.gem(streak: 0), 0.08, 0.12, "gem0")
         assertSane(Synth.gem(streak: 25), 0.08, 0.12, "gem25")
         assertSane(Synth.jump(), 0.16, 0.20, "jump")
-        assertSane(Synth.slide(), 0.12, 0.16, "slide")
+        assertSane(Synth.slide(), 0.18, 0.22, "slide")   // v1.8: ramped whoosh needs room to ramp
         assertSane(Synth.crash(), 0.44, 0.48, "crash")
         assertSane(Synth.chime(), 0.26, 0.30, "chime")
         assertSane(Synth.worldSweep(), 0.70, 0.74, "worldSweep")

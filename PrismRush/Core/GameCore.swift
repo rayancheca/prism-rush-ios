@@ -262,10 +262,16 @@ final class GameCore {
 
     func slide() {
         guard mode == .play else { return }
+        // `.slid` is EDGE-triggered (v1.8). Re-arming is called every tick by the Autopilot, and
+        // `.slid` drives both a one-shot SFX and the `slidesThisRun` mission counter — so emitting
+        // per call meant 120 overlapping slide sounds a second, and a slide stat that counted ticks
+        // rather than slides, in every autoplay/demo run. The re-arm itself is unchanged: holding a
+        // slide still works exactly as before, it just stops re-announcing itself.
+        let wasSliding = slideT > 0
         slideT = Tuning.slideDuration
         sy = Tuning.slideScaleY               // snap to the low slide profile immediately (responsive +
         if !grounded { vy = Tuning.slamVy }   // avoids the mid-lerp window where a bar still clips you)
-        emit(.slid(x: px))
+        if !wasSliding { emit(.slid(x: px)) }
     }
 
     // MARK: - Steps

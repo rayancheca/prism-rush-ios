@@ -32,12 +32,23 @@ enum Synth {
         }
     }
 
-    /// Filtered noise burst (one-pole low/high pass) with a linear decay — or a linear swell when
-    /// `swell` is set (whooshes that build instead of die) — summed into `buf`.
-    static func noise(_ buf: inout [Float], dur: Float, vol: Float, cutoff: Float, highpass: Bool = false, swell: Bool = false, offset: Int = 0, seed: UInt32 = 0x1234_5678) {
+    /// Filtered noise burst summed into `buf`.
+    ///
+    /// - `swell`  — rise into the tail instead of decaying out of the attack (whooshes that build).
+    ///              **This was declared and never applied until v1.8 (PR-0320): the body always
+    ///              used `(1 - frac)`, so all four callers that asked for a swelling whoosh got a
+    ///              dying one.** The parameter existed, read correctly at every call site, and did
+    ///              nothing — which is why the defect survived so long.
+    /// - `attack` — fraction of the burst spent ramping IN, 0…1. At 0 the burst is at full
+    ///              amplitude on its very first sample, and broadband noise starting instantly is
+    ///              a click: it is the single biggest cause of a "harsh" one-shot.
+    /// - `poles`  — filter order. One pole is 6 dB/oct, which leaves a lot of energy an octave or
+    ///              two above `cutoff` (audible as hiss). Two poles (12 dB/oct) turns the same
+    ///              burst into air.
+    static func noise(_ buf: inout [Float], dur: Float, vol: Float, cutoff: Float, highpass: Bool = false, swell: Bool = false, attack: Float = 0, poles: Int = 1, offset: Int = 0, seed: UInt32 = 0x1234_5678) {
         let n = Int(dur * sampleRate)
         var rng = seed
-        var lp: Float = 0
+        var lp: Float = 0, lp2: Float = 0
         let coeff = min(0.99, cutoff / (cutoff + sampleRate / (2 * .pi)))
         for i in 0..<n {
             let idx = offset + i
@@ -45,9 +56,16 @@ enum Synth {
             rng = rng &* 1_664_525 &+ 1_013_904_223
             let white = Float(rng >> 8) / Float(0xFF_FFFF) * 2 - 1
             lp += coeff * (white - lp)
-            let sample = highpass ? (white - lp) : lp
+            var filtered = lp
+            if poles >= 2 {
+                lp2 += coeff * (lp - lp2)
+                filtered = lp2
+            }
+            let sample = highpass ? (white - filtered) : filtered
             let frac = Float(i) / Float(n)
-            buf[idx] += sample * vol * (1 - frac)
+            let shape = swell ? frac : (1 - frac)
+            let ramp = attack > 0 ? min(1, frac / attack) : 1
+            buf[idx] += sample * vol * shape * ramp
         }
     }
 
@@ -73,10 +91,23 @@ enum Synth {
         var b = blank(0.18); tone(&b, 260, 560, dur: 0.16, .sine, vol: 0.22); return b
     }
 
+    /// Slide (retuned v1.8 — owner: *"so harsh and horrible"*).
+    ///
+    /// The old sound was a one-pole 600 Hz noise burst at `vol` 0.20 that reached FULL amplitude on
+    /// its very first sample. Two things made that harsh, and both are structural rather than a
+    /// matter of taste:
+    ///   1. **No attack.** An instantaneous broadband onset is a click. Every other percussive cue
+    ///      in this game gets away with it because they are tones; noise does not.
+    ///   2. **A 6 dB/oct filter at 600 Hz** still passes plenty of 2–5 kHz, the band the ear is most
+    ///      sensitive to. That is hiss, not air.
+    /// So: a 35% attack ramp, a second filter pole, cutoff down 600 → 320, and level down 0.20 →
+    /// 0.14. It now reads as the player ducking under something rather than as a burst of static.
+    /// Slightly longer (0.16 → 0.20 s) because a ramped whoosh needs room to be a whoosh; still far
+    /// inside `slideDuration` 0.55, so a held slide never overlaps its own cue.
     static func slide() -> [Float] {
-        var b = blank(0.16)
-        noise(&b, dur: 0.13, vol: 0.20, cutoff: 600)        // louder, deeper whoosh
-        tone(&b, 180, 120, dur: 0.12, .sine, vol: 0.10)     // percussive low "thud" anchor
+        var b = blank(0.20)
+        noise(&b, dur: 0.18, vol: 0.14, cutoff: 320, attack: 0.35, poles: 2)
+        tone(&b, 150, 96, dur: 0.15, .sine, vol: 0.075)     // soft low anchor under the air
         return b
     }
 
