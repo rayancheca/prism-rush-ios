@@ -1,13 +1,5 @@
 import SwiftUI
 
-/// SwiftUI bridge for the shared Prism shimmer — `SkinCatalog.prismaticColor` is pure
-/// Foundation; both this preview layer and the RealityKit body material feed it the same
-/// reference-date wall clock, so the menu hero and the in-run body match at any instant.
-private func prismaticTint(at t: TimeInterval) -> Color {
-    let c = SkinCatalog.prismaticColor(at: t)
-    return Color(red: c.r, green: c.g, blue: c.b)
-}
-
 /// Live procedural character preview — Canvas + TimelineView at 30 Hz (no per-card RealityViews;
 /// 24 RealityKit instances in a grid is a memory/stutter trap). Draws the same `Skin` recipe the
 /// renderer rebuilds in 3D: body shape/scale, eye tint + pupil style, antenna height/tip, and the
@@ -98,7 +90,7 @@ struct AnimatedCharacterSwatch: View {
         // (`SkinCatalog.prismaticColor`), so this preview and the RealityKit rig show the same
         // hue at the same instant (decree 2). Static frames (t == 0: Reduce Motion, off-screen
         // grids) hold phase 0 = the authored cyan body, matching the in-run Reduce Motion look.
-        let bodyColor = skin.isPrismatic ? prismaticTint(at: t) : Theme.color(skin.bodyHex)
+        let bodyColor = Theme.color(skin.bodyHex)
 
         // Glow — teased renders keep it: the whole canvas fades as one, so the glow reads as a
         // dimmed version of the owned look rather than a different art style.
@@ -218,7 +210,7 @@ struct AnimatedCharacterSwatch: View {
     /// static grids) the loop freezes into a staggered static streak — present, just still.
     private func drawTrailWisp(_ ctx: inout GraphicsContext, t: TimeInterval, center: CGPoint,
                                bodyR: CGFloat) {
-        let tint = skin.trailHex.map { Theme.color($0) } ?? prismaticTint(at: t)
+        let tint = skin.trailHex.map { Theme.color($0) } ?? Theme.color(skin.bodyHex)
         let head = CGPoint(x: center.x - bodyR * 0.52, y: center.y + bodyR * 0.72)
         let tail = CGPoint(x: size * 0.07, y: center.y + bodyR * 1.18)
         let puffs = 5
@@ -337,7 +329,7 @@ struct AnimatedCharacterSwatch: View {
     /// brighter on the near (lower) pass. Pure of state — at `t == 0` the nodes freeze in place
     /// (Reduce Motion / static grids show the ring, never a missing one). Mirrors the rig's torus.
     private func drawAura(_ ctx: inout GraphicsContext, t: TimeInterval, center: CGPoint, bodyR: CGFloat) {
-        let tint = skin.trailHex.map { Theme.color($0) } ?? prismaticTint(at: t)
+        let tint = skin.trailHex.map { Theme.color($0) } ?? Theme.color(skin.bodyHex)
         let a = bodyR * 1.5, b = bodyR * 0.55
         let cy = center.y + bodyR * 0.22
         let ringRect = CGRect(x: center.x - a, y: cy - b, width: a * 2, height: b * 2)
@@ -429,13 +421,7 @@ struct CharacterHeroStage: View {
     /// the SAME shared 8 s shimmer as its body (no skin ever tracks the world palette);
     /// static at phase 0 under Reduce Motion, per uiux §1.8.
     @ViewBuilder private var glowDisc: some View {
-        if skin.isPrismatic && !reduceMotion {
-            TimelineView(.animation(minimumInterval: 0.2)) { tl in
-                disc(tint: prismaticTint(at: tl.date.timeIntervalSinceReferenceDate))
-            }
-        } else {
-            disc(tint: discTint)
-        }
+        disc(tint: discTint)
     }
 
     private func disc(tint: Color) -> some View {

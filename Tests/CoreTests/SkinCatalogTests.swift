@@ -15,8 +15,8 @@ final class SkinCatalogTests: XCTestCase {
 
         // The legacy 16 keep exact ids/hexes/costs — owners must notice nothing but upgrades.
         // (Two sanctioned exceptions, both v1.4.2: Prism's bodyHex-0 sentinel was retired by
-        // owner decree 1 for real authored hexes — its prismatic shimmer is fixed + time-based,
-        // never world — and Eclipse's body lightened 0x1A1A2E → 0x2A2A4A per AUDIT D3-4 so the
+        // owner decree 1 for real authored hexes — and v1.8 retired its time-based shimmer too,
+        // so that cyan is now simply what Prism looks like — and Eclipse's body lightened 0x1A1A2E → 0x2A2A4A per AUDIT D3-4 so the
         // level-25 skin is actually visible in-run. Pure upgrades, identities unchanged.)
         let pins: [(id: String, cost: Int, body: UInt32, antenna: UInt32, premium: Bool)] = [
             ("default", 0, 0x00F5FF, 0xFF2BD6, false),
@@ -62,11 +62,10 @@ final class SkinCatalogTests: XCTestCase {
         for s in all { XCTAssertTrue((0.85...1.12).contains(s.scale), "\(s.id) scale is visual-only") }
         XCTAssertTrue(all.allSatisfy { $0.bodyHex != 0 },
                       "decree 1: zero followsWorld — every skin owns real authored hexes")
-        XCTAssertEqual(all.filter(\.isPrismatic).map(\.id), ["default"],
-                       "exactly one prismatic skin — a FIXED time-based shimmer, never the world")
         XCTAssertEqual(all.filter(\.premium).map(\.id), ["aurora"], "exactly one IAP skin")
-        XCTAssertEqual(all.filter { $0.trailHex == nil }.map(\.id), ["default"],
-                       "nil trail = the prismatic shimmer source — Prism only, never the world accent")
+        XCTAssertEqual(all.filter { $0.trailHex == nil }.map(\.id), [],
+                       "decree 1 in TIME too (v1.8): every skin authors its own trail — `nil` used "
+                       + "to mean \"ride Prism's shimmer\", and the shimmer is gone")
 
         // XP-locked roster matches the curve's unlock levels exactly (R1 single source of truth).
         let levelLocks = all.compactMap { if case .level(let n) = $0.unlock { n } else { nil } }
@@ -101,47 +100,21 @@ final class SkinCatalogTests: XCTestCase {
         XCTAssertEqual(SkinCatalog.skin("nope").id, "default", "unknown id falls back to Prism")
     }
 
-    /// The shared Prism shimmer is the decree-1 contract: one PURE clock→color function used
-    /// by the in-run body material, every character FX burst, and the SwiftUI previews. Its
-    /// signature takes ONLY time, so the world palette structurally cannot influence it.
-    func testPrismaticShimmerIsPureDeterministicAndPeriodic() async {
-        // Pure + deterministic: the same t always yields the same color — no hidden state.
-        for t in [0.0, 0.123, 1.9, 4.0, 7.999, 123.456, -3.21] {
-            let a = SkinCatalog.prismaticColor(at: t)
-            let b = SkinCatalog.prismaticColor(at: t)
-            XCTAssertEqual(a.r, b.r, "r at t=\(t)")
-            XCTAssertEqual(a.g, b.g, "g at t=\(t)")
-            XCTAssertEqual(a.b, b.b, "b at t=\(t)")
-        }
-
-        // Phase 0 is exactly Prism's authored bodyHex 0x00F5FF — also the static Reduce
-        // Motion look, so menu hero and in-run body agree there too.
+    /// v1.8 — decree 1, tightened: a character's identity is fixed in SPACE (no skin follows the
+    /// world palette) and now also in TIME. Prism used to cycle cyan → magenta → amber on an 8 s
+    /// clock; the owner's call was that a runner which recolours as it runs makes having a roster
+    /// pointless. This pins the shimmer STAYING gone: every skin resolves to one authored body hex,
+    /// and nothing in the catalogue reintroduces a time-varying identity.
+    func testEverySkinHoldsOneFixedIdentity() async {
         let prism = SkinCatalog.skin("default")
-        XCTAssertTrue(prism.isPrismatic)
-        let c0 = SkinCatalog.prismaticColor(at: 0)
-        XCTAssertEqual(c0.r, 0, accuracy: 1e-12)
-        XCTAssertEqual(c0.g, 245.0 / 255.0, accuracy: 1e-12)
-        XCTAssertEqual(c0.b, 1, accuracy: 1e-12)
-        XCTAssertEqual(prism.bodyHex, 0x00F5FF, "phase 0 = the authored body hex")
+        XCTAssertEqual(prism.bodyHex, 0x00F5FF, "Prism's identity is its authored cyan")
+        XCTAssertEqual(prism.trailHex, 0x00F5FF, "and its trail is that same colour, not a shimmer")
 
-        // 8 s loop: t and t + period agree exactly, so the two layers can never drift apart.
-        let early = SkinCatalog.prismaticColor(at: 2.5)
-        let late = SkinCatalog.prismaticColor(at: 2.5 + SkinCatalog.prismaticPeriod)
-        XCTAssertEqual(early.r, late.r, accuracy: 1e-12)
-        XCTAssertEqual(early.g, late.g, accuracy: 1e-12)
-        XCTAssertEqual(early.b, late.b, accuracy: 1e-12)
-
-        // The cycle passes through the authored magenta and amber identity stops — the same
-        // three colors the old menu rainbow promised, now delivered in-run.
-        let third = SkinCatalog.prismaticPeriod / 3
-        let magenta = SkinCatalog.prismaticColor(at: third)
-        XCTAssertEqual(magenta.r, 1, accuracy: 1e-6)
-        XCTAssertEqual(magenta.g, 43.0 / 255.0, accuracy: 1e-6)
-        XCTAssertEqual(magenta.b, 214.0 / 255.0, accuracy: 1e-6)
-        let amber = SkinCatalog.prismaticColor(at: third * 2)
-        XCTAssertEqual(amber.r, 1, accuracy: 1e-6)
-        XCTAssertEqual(amber.g, 177.0 / 255.0, accuracy: 1e-6)
-        XCTAssertEqual(amber.b, 61.0 / 255.0, accuracy: 1e-6)
+        // No skin may leave its trail unauthored: `nil` used to mean "ride the shimmer", and the
+        // shimmer no longer exists. Every runner states its own trail colour.
+        for s in SkinCatalog.all {
+            XCTAssertNotNil(s.trailHex, "\(s.id) has no authored trail colour")
+        }
     }
 
     func testSkinUnlocksEarnedBoundaries() async {
