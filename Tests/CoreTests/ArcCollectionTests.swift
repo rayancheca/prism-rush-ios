@@ -62,7 +62,7 @@ final class ArcCollectionTests: XCTestCase {
     /// Length law: every arc-bearing pattern must fully contain its spawns — the last spawn sits
     /// at least 2 units before the pattern's end, at every speed (lengths grow with the span).
     func testArcPatternLengthLaw() async {
-        for idx in [1, 2, 6, 9, 11] {
+        for idx in [1, 2, 6, 9, 11, 14] {
             for b in [60.0, 300, 1_000, 2_500, 4_000, 8_000] {
                 for seed: UInt64 in [1, 7, 0xBEEF] {
                     var rng = SplitMix64(seed: seed)
@@ -76,6 +76,10 @@ final class ArcCollectionTests: XCTestCase {
                              let .superSneakers(d, _),
                              let .ring(d, _, _), let .boostPad(d, _):
                             return d
+                        // The chasm is the one spawn with an extent — measure its FAR rim, or the
+                        // length law would let a pattern end inside the hole it just dug.
+                        case let .chasm(d):
+                            return d + Tuning.chasmHalfLength
                         }
                     }.max() ?? b
                     XCTAssertLessThanOrEqual(lastD + 2, b + len,

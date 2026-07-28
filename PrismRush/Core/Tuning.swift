@@ -88,6 +88,9 @@ enum Tuning {
     // line. Pinned by `DifficultyCurveTests.testLiveGemCountStaysUnderThePoolCap`.
     static let capLow = 18, capTall = 14, capBar = 6, capGem = 112, capShield = 4, capMagnet = 4
     static let capDoubler = 2, capChrono = 2, capSplitBar = 6, capSuperSneakers = 2
+    /// One chasm per pattern and only pattern 14 places one; at the tightest act-two gap two
+    /// consecutive chasm patterns still span > `spawnHorizon`, so 3 is slack, not a budget.
+    static let capChasm = 3
 
     // MARK: v1.3 mechanics
 
@@ -179,4 +182,47 @@ enum Tuning {
     /// A greed gem this close to an obstacle is dropped — the line simply breaks around a low you
     /// have to jump, rather than rendering a gem inside it.
     static let riskGemClearance: Double = 1.5
+
+    // MARK: v1.8 — the chasm, tier six (PR-0450)
+
+    /// The catalogue's sixth and last tier, at `diff 0.8`. Two properties make this the right gate:
+    ///
+    /// 1. It is INSIDE a good run. A good run is about two minutes ≈ 3,300 m (§3 of the design
+    ///    bible), so a tier that opens at 2,560 m is one players actually meet — the whole point of
+    ///    PR-0450 was that the last new thing arrived at 1,920 m and nothing followed it.
+    /// 2. It is at or before `actTwoAt` (3,200 m). Act two draws from `Spawner.pool`, which is a
+    ///    slot table that BYPASSES `maxIndex` entirely — so a tier gate later than act two's start
+    ///    would let the table spawn a pattern its own ladder had not unlocked yet.
+    ///    `DifficultyTests.testEveryWaveKeepsTheFullCatalogueReachable` probes d = 3,300 and pins
+    ///    exactly this.
+    ///
+    /// Below this distance `maxIndex` returns 14, which is what `Patterns.count` used to be — so
+    /// every tier boundary under 2,560 m draws byte-identically to v1.7 (pinned by
+    /// `PatternOrderTests.testSixthTierLeavesTheEarlierLadderByteIdentical`).
+    static let chasmDiff: Double = 0.8                 // × diffFullAt → 2,560 m
+
+    /// Half the chasm's length along the track: the gap is `2 × 4 = 8` u of missing deck.
+    ///
+    /// Bounded above by `recycleObstacleZ` (10): the record is culled when its CENTRE passes z = +10,
+    /// so any half-length under 10 guarantees the trailing edge is already behind the player.
+    /// Bounded below by legibility — much shorter and it is a wide bar, not a hole.
+    static let chasmHalfLength: Double = 4.0
+
+    /// Feet must be at least this far off the deck to be over the gap rather than in it.
+    ///
+    /// With `jumpV0` 10.6 and `gravity` 26, `y(t) = 10.6t − 13t²` exceeds 0.30 for
+    /// t ∈ [0.0294, 0.7860] — a 0.7567 s airborne window out of 0.8154 s of total airtime (93%).
+    /// The chasm is therefore forgiving in the air and absolute on the ground, which is the read
+    /// we want: "be airborne", not "be airborne at exactly the apex".
+    static let chasmClearance: Double = 0.30
+
+    /// Seconds of travel before the chasm's LEADING edge at which the Autopilot commits its jump.
+    ///
+    /// The launch point must satisfy `0.0294·v ≤ lead ≤ 0.7860·v − 2·chasmHalfLength`. At the tier's
+    /// unlock speed (30.3 m/s) that is [0.89, 15.8]; at the cap (33) [0.97, 17.9]; under a pad boost
+    /// (36) [1.06, 20.3]. `0.28·v` lands at 8.5 / 9.2 / 10.1 — near the middle of all three, with
+    /// > 7 u of margin on either side. Clamped so the arithmetic cannot walk out of range if the
+    /// speed constants are ever retuned.
+    static let chasmBotLeadSeconds: Double = 0.28
+    static let chasmBotLeadMin: Double = 7, chasmBotLeadMax: Double = 11
 }

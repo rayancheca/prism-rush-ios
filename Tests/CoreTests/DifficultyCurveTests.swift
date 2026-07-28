@@ -23,7 +23,8 @@ final class DifficultyCurveTests: XCTestCase {
 
     struct Band {
         let from: Double, to: Double
-        var obstacles = 0            // low/tall/movingTall/bar/splitBar spawned in the band
+        var obstacles = 0            // low/tall/movingTall/bar/splitBar/chasm spawned in the band
+        var chasms = 0               // the tier-six beat alone (v1.8) — its arrival is a STEP
         var gems = 0                 // all gems
         var pricedGems = 0           // gems whose lane closes within `priceWindow`
         var restMetres = 0.0         // metres covered by obstacle-free stretches >= `restBeat`
@@ -34,6 +35,7 @@ final class DifficultyCurveTests: XCTestCase {
 
         var span: Double { to - from }
         var obstaclesPer100m: Double { measuredSpan == 0 ? 0 : Double(obstacles) / measuredSpan * 100 }
+        var chasmsPer1000m: Double { measuredSpan == 0 ? 0 : Double(chasms) / measuredSpan * 1_000 }
         var gemsPer100m: Double { measuredSpan == 0 ? 0 : Double(gems) / measuredSpan * 100 }
         var pricedShare: Double { gems == 0 ? 0 : Double(pricedGems) / Double(gems) }
         var restShare: Double { measuredSpan == 0 ? 0 : restMetres / measuredSpan }
@@ -76,9 +78,14 @@ final class DifficultyCurveTests: XCTestCase {
 
     private static func isObstacle(_ c: SpawnCmd) -> Bool {
         switch c {
-        case .low, .tall, .movingTall, .bar, .splitBar: return true
+        case .low, .tall, .movingTall, .bar, .splitBar, .chasm: return true
         default: return false
         }
+    }
+
+    private static func isChasm(_ c: SpawnCmd) -> Bool {
+        if case .chasm = c { return true }
+        return false
     }
 
     private static func distance(_ c: SpawnCmd) -> Double {
@@ -86,7 +93,7 @@ final class DifficultyCurveTests: XCTestCase {
         case let .low(d, _), let .tall(d, _), let .bar(d), let .gem(d, _, _),
              let .shield(d, _), let .magnet(d, _), let .doubler(d, _), let .chrono(d, _),
              let .superSneakers(d, _), let .ring(d, _, _), let .boostPad(d, _),
-             let .splitBar(d, _), let .movingTall(d, _):
+             let .splitBar(d, _), let .movingTall(d, _), let .chasm(d):
             return d
         }
     }
@@ -105,10 +112,12 @@ final class DifficultyCurveTests: XCTestCase {
     private static func measureSpawns(seed: UInt64, into bands: inout [Band]) {
         var obstacles: [(d: Double, lanes: [Int])] = []
         var gems: [(d: Double, lane: Int)] = []
+        var chasms: [Double] = []
         let end = bands.last!.to
         let boundaries = sweep(seed: seed, to: end) { cmd in
             let d = distance(cmd)
             if isObstacle(cmd) { obstacles.append((d, blockedLanes(cmd))) }
+            if isChasm(cmd) { chasms.append(d) }
             if case let .gem(gd, lane, _) = cmd { gems.append((gd, lane)) }
         }
         obstacles.sort { $0.d < $1.d }
@@ -119,6 +128,7 @@ final class DifficultyCurveTests: XCTestCase {
             bands[i].sweeps += 1
             bands[i].measuredSpan += e - b
             bands[i].obstacles += obstacles.filter { $0.d >= b && $0.d < e }.count
+            bands[i].chasms += chasms.filter { $0 >= b && $0 < e }.count
             let inBand = gems.filter { $0.d >= b && $0.d < e }
             bands[i].gems += inBand.count
             bands[i].pricedGems += inBand.filter { g in
@@ -182,8 +192,14 @@ final class DifficultyCurveTests: XCTestCase {
     /// Band edges aligned to act two's wave boundaries. Arbitrary fixed-width bands are a bad ruler
     /// here: within a single wave the pool is constant, so any variation across sub-bands is phase
     /// noise, and a band that straddles a wave edge reports a blend of two different games.
+    /// v1.8 splits the old 2,400–3,200 act-one band at `chasmDiff` (2,560 m), because that is now a
+    /// content boundary: the band below it is the last stretch of the v1.7 catalogue, the band above
+    /// it is the first stretch that can contain a chasm. Reading them merged would average the step
+    /// away — the exact failure mode the snapping comment above warns about, one level up.
     static let waveEdges: [Double] = [
-        0, 1_200, 2_400, Tuning.actTwoAt,                                      // act one
+        0, 1_200, 2_400,
+        Tuning.chasmDiff * Tuning.diffFullAt,                                  // 2,560 — tier six
+        Tuning.actTwoAt,
         Tuning.actTwoAt + (Tuning.actTwoFullAt - Tuning.actTwoAt) / 6,         // wave 1 → 2
         Tuning.actTwoAt + (Tuning.actTwoFullAt - Tuning.actTwoAt) / 2,         // wave 2 → 3
         Tuning.actTwoFullAt,
@@ -192,14 +208,57 @@ final class DifficultyCurveTests: XCTestCase {
     func testPrintDifficultyTable() async {
         let bands = Self.measure(Self.waveEdges)
         var out = "\n=== difficulty curve (mean of \(Self.seeds.count) seeds) ===\n"
-        out += "  band(m)      obst/100m  inputs/100m  gems/100m  priced%  rest%  phase\n"
-        let labels = ["act 1", "act 1", "act 1", "act 2 w1", "act 2 w2", "act 2 w3"]
+        out += "  band(m)      obst/100m  inputs/100m  gems/100m  priced%  rest%  chasm/km  phase\n"
+        let labels = ["act 1", "act 1", "act 1 t5", "act 1 t6", "act 2 w1", "act 2 w2", "act 2 w3"]
         for (b, label) in zip(bands, labels) {
-            out += String(format: "  %5.0f-%5.0f  %9.2f  %11.2f  %9.1f  %6.1f%%  %4.1f%%  %@\n",
+            out += String(format: "  %5.0f-%5.0f  %9.2f  %11.2f  %9.1f  %6.1f%%  %4.1f%%  %8.2f  %@\n",
                            b.from, b.to, b.obstaclesPer100m, b.inputsPer100m,
-                           b.gemsPer100m, b.pricedShare * 100, b.restShare * 100, label)
+                           b.gemsPer100m, b.pricedShare * 100, b.restShare * 100,
+                           b.chasmsPer1000m, label)
         }
         print(out)
+    }
+
+    /// PR-0450: the sixth tier must arrive as a STEP, not a slope.
+    ///
+    /// That distinction is the whole point of the item. Act two (v1.7) is a slope — it changes how
+    /// OFTEN you meet the existing fourteen patterns, and a player cannot point at a metre marker
+    /// and say "something new started here". A tier is different: below 2,560 m the chasm is
+    /// structurally impossible (the ladder cannot select index 14, and the spawn cursor never runs
+    /// behind the player), and above it the chasm is a recurring beat. This asserts both halves —
+    /// the hard zero below, and a rate that then keeps climbing through act two's waves.
+    func testTheSixthTierArrivesAsAStep() async {
+        let bands = Self.measure(Self.waveEdges)
+        let gate = Tuning.chasmDiff * Tuning.diffFullAt
+        let tier5 = bands[2]        // 2,400 – 2,560: the last of the v1.7 catalogue
+        let tier6 = bands[3]        // 2,560 – 3,200: act one, chasm unlocked
+        let wave1 = bands[4]
+        let deep = bands[6]
+
+        // The step itself: not "rare below", but IMPOSSIBLE below.
+        for b in bands.prefix(3) {
+            XCTAssertEqual(b.chasms, 0,
+                "no chasm may exist below the tier-six gate at \(gate) m "
+                + "(band \(b.from)-\(b.to) had \(b.chasms))")
+        }
+        XCTAssertGreaterThan(tier6.chasmsPer1000m, 1.0,
+            "past the gate the chasm must be a real beat, not a curiosity "
+            + "(\(tier6.chasmsPer1000m)/km)")
+        XCTAssertEqual(tier5.chasmsPer1000m, 0, accuracy: 1e-9)
+
+        // And the deep game meets it more often than act one does. Note the shape deliberately is
+        // NOT monotone: wave 1 DIPS below act one (~1.06 vs ~1.84/km) because act two's draw tables
+        // are larger, so a pattern that is not up-weighted gets diluted by them. Up-weighting the
+        // chasm in wave 1 to remove that dip was measured and rejected — the chasm pattern is sparse,
+        // so it cost `testSecondActEscalatesPastTheSpeedCap`, which protects a more important
+        // property. See the comment on `Spawner.poolWave1`. Do not "fix" the dip without re-running
+        // that gate.
+        XCTAssertGreaterThan(deep.chasmsPer1000m, tier6.chasmsPer1000m,
+            "deep act two must meet the chasm more often than act one does "
+            + "(act one t6 \(tier6.chasmsPer1000m)/km, deep \(deep.chasmsPer1000m)/km)")
+        XCTAssertGreaterThan(deep.chasmsPer1000m, wave1.chasmsPer1000m * 1.5,
+            "the chasm's frequency must recover strongly across the waves "
+            + "(wave1 \(wave1.chasmsPer1000m)/km, deep \(deep.chasmsPer1000m)/km)")
     }
 
     // MARK: - the gates
@@ -212,9 +271,12 @@ final class DifficultyCurveTests: XCTestCase {
     /// whole 3,000–8,000 m stretch with no trend at all in any of them.
     func testSecondActEscalatesPastTheSpeedCap() async {
         let bands = Self.measure(Self.waveEdges)
-        let plateau = bands[2]      // 2,400–3,200 m: act one saturated, the old end of the curve
-        let wave1 = bands[3]
-        let deep = bands[5]         // the last wave
+        // 2,560–3,200 m: act one saturated, the old end of the curve. v1.8 moved this reference up
+        // from 2,400 so it sits entirely inside tier six — which makes every gate below STRICTER,
+        // since the baseline it compares against now contains chasms too.
+        let plateau = bands[3]
+        let wave1 = bands[4]
+        let deep = bands[6]         // the last wave
 
         XCTAssertGreaterThan(wave1.obstaclesPer100m, plateau.obstaclesPer100m * 1.03,
             "act two must start escalating immediately, not at a depth nobody reaches "

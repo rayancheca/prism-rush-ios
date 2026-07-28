@@ -89,10 +89,25 @@ enum Autopilot {
         // Commit to (and hold) a slide from this far out. Generous so that when the bot is still
         // airborne from a preceding low, the air-slam has time to drop it under the bar.
         let slideCommit = clampD(c.effectiveSpeed * 0.42, 8, 14)
+        // The chasm (v1.8) is the only obstacle with an extent, and the only one whose jump has a
+        // window on BOTH sides: launching too early lands the bot in the hole. So it is tracked by
+        // its LEADING edge (the point the jump must already have cleared) and by its TRAILING edge
+        // (while that is still ahead of us, we are over the void).
+        let chasmLead = clampD(c.effectiveSpeed * Tuning.chasmBotLeadSeconds,
+                               Tuning.chasmBotLeadMin, Tuning.chasmBotLeadMax)
         var nearestBar = Double.infinity
         var nearestLowTarget = Double.infinity
+        var nearestChasmEdge = Double.infinity
+        var overChasm = false
         for o in c.activeObstacles {
             let arrival = o.d - c.distance
+            if o.kind == .chasm {
+                let lead = arrival - Tuning.chasmHalfLength    // leading rim
+                let trail = arrival + Tuning.chasmHalfLength   // trailing rim
+                if lead <= 0 && trail > 0 { overChasm = true }
+                if lead > 0 && lead <= reach { nearestChasmEdge = min(nearestChasmEdge, lead) }
+                continue
+            }
             guard arrival > 0, arrival <= reach else { continue }
             if o.kind == .bar || o.kind == .splitBar {
                 nearestBar = min(nearestBar, arrival)   // sliding clears a split bar in ANY lane
@@ -106,7 +121,11 @@ enum Autopilot {
 
         var decision = Decision(laneDir: laneDir)
         if c.grounded {
-            if nearestLowTarget <= jumpLead && nearestLowTarget <= nearestBar {
+            // The chasm outranks everything: it is the only obstacle that cannot be slid, steered
+            // around, or absorbed by arriving late, and its launch window closes behind us.
+            if nearestChasmEdge <= chasmLead {
+                decision.jump = true
+            } else if nearestLowTarget <= jumpLead && nearestLowTarget <= nearestBar {
                 decision.jump = true
             } else if nearestBar <= slideCommit {
                 decision.slide = true   // continuous low slide, re-armed each tick
@@ -116,7 +135,10 @@ enum Autopilot {
             // NEXT obstacle. So the instant we're descending (and not mid-clear of a low), air-slam
             // (vy = -14) to land early and be grounded & ready to time the next jump precisely.
             // Also slam to duck under an imminent bar.
-            if (c.vy < 0 || nearestBar <= slideCommit) && !lowImminentAhead {
+            //
+            // NEVER slam while over the void — the slam is what makes the bot land, and landing is
+            // exactly the failure here. `overChasm` is the one condition that outranks the bar duck.
+            if (c.vy < 0 || nearestBar <= slideCommit) && !lowImminentAhead && !overChasm {
                 decision.slide = true
             }
         }

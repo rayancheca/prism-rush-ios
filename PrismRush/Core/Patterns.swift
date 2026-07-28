@@ -15,16 +15,25 @@ enum SpawnCmd: Sendable, Equatable {
     case superSneakers(d: Double, lane: Int)
     case ring(d: Double, lane: Int, y: Double)
     case boostPad(d: Double, lane: Int)
+    case chasm(d: Double)          // full-width gap, `d` is its CENTRE
 }
 
-/// The 14-pattern catalogue (v1.3): 0–8 ported from the shipped prototype, 9 the prism-ring arc and
-/// 10 the overdrive runway (both new in v1.3 — the reward beats unlock before the pain tiers), 11
-/// the gauntlet, 12 the split bar (chrono reward), 13 the moving walls — kept LAST so the spawner's
-/// prefix gating can open every earlier tier without unlocking them (iron rule 4). Every pattern is
-/// provably solvable (see `SolvabilityBotTests`). Each function appends its spawns to `out` and
-/// returns its length (used by the spawner to advance the cursor).
+/// The 15-pattern catalogue: 0–8 ported from the shipped prototype, 9 the prism-ring arc and 10 the
+/// overdrive runway (both new in v1.3 — the reward beats unlock before the pain tiers), 11 the
+/// gauntlet, 12 the split bar (chrono reward), 13 the moving walls, 14 THE CHASM (v1.8, PR-0450 —
+/// the sole tier-six unlock and the only pattern carrying a new verb since v1.3).
+///
+/// **Order is load-bearing** (iron rule 4): the spawner gates by PREFIX index, so each tier must be
+/// a prefix of this array and a pattern's index is its unlock rank. v1.8 amends the rule's old
+/// shorthand — "moving walls stay LAST" — because tier six now sits behind them: moving walls are
+/// the last entry of tier FIVE (index 13, still exclusive to it, still pinned by
+/// `PatternOrderTests`), and the chasm is the last entry of the catalogue. The rule's actual
+/// purpose — every tier is a prefix, nothing is unlocked out of rank — is unchanged.
+///
+/// Every pattern is provably solvable (see `SolvabilityBotTests`). Each function appends its spawns
+/// to `out` and returns its length (used by the spawner to advance the cursor).
 enum Patterns {
-    static let count = 14
+    static let count = 15
 
     // MARK: helpers (gemLine verbatim from the prototype; gemArc rewritten ballistic in v1.3)
 
@@ -212,6 +221,36 @@ enum Patterns {
                  // LAST in the catalogue (rule 4).
             out.append(.movingTall(d: b + 9, phase: wallPhase(at: b, index: 0))); gemLine(b + 1, 0, 3, &out)
             out.append(.movingTall(d: b + 22, phase: wallPhase(at: b, index: 1))); gemLine(b + 14, 2, 3, &out); return 32
+
+        case 14: // THE CHASM (v1.8, PR-0450) — the sole tier-six unlock, and the first genuinely new
+                 // KIND of moment since v1.3. The deck itself stops: an 8 u full-width gap that can
+                 // only be crossed by being airborne along its whole span.
+                 //
+                 // Why this is not another low. Every jump in the catalogue is a ONE-SIDED window —
+                 // clear a plane, and jumping early is free. The chasm is the first two-sided one:
+                 // go too early and you land IN it. Nothing in the game punished going too soon.
+                 //
+                 // It is taught the way the catalogue already teaches: pattern 1's contract is "the
+                 // arc jump IS the survival jump", so the run-up line pulls the player into a lane on
+                 // the same 1.7 spacing, gem 0 of the ballistic arc lands as the launch cue, and the
+                 // gap is centred on the APEX of exactly that jump. Centring on the apex is what
+                 // makes the window symmetric: the launch may be ~±0.25 s early or late at any speed
+                 // (±7.5 u at the tier's unlock speed, ±8.5 u at the cap), which is the same order as
+                 // `jumpBuffer`. Three of the arc's gems hang over the void — the reward is collected
+                 // mid-flight, so the greedy line and the survival line are the same line here, by
+                 // design: this pattern prices TIMING, not routing.
+                 //
+                 // Speed-aware via the pure `crossingSpeed`, so placement consumes ZERO RNG beyond
+                 // the single lane draw (`PatternOrderTests` pins 1 call).
+            let l = rng.int(0, 2)
+            gemLine(b, l, 3, &out)                                  // run-up: b, b+1.7, b+3.4
+            let d0 = b + 5.1                                        // arc gem 0 — one more 1.7 step
+            let v = crossingSpeed(at: d0)
+            gemArc(d0, l, &out)
+            let centre = d0 + v * (Tuning.jumpV0 / Tuning.gravity)  // apex of the cued jump
+            out.append(.chasm(d: centre))
+            // Land clear of the far rim, then leave the usual trailing room before the next gap.
+            return max(34, centre + Tuning.chasmHalfLength + 12 - b)
 
         default:
             return 14

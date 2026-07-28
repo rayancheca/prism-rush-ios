@@ -39,15 +39,21 @@ struct Spawner {
         return lerp(Tuning.gapMin, Tuning.gapFloorActTwo, intensity(forDistance: dist))
     }
 
-    /// Highest selectable pattern index + 1 — the v1.3 five-tier prefix ladder (iron rule 4:
-    /// every tier is a prefix of the catalogue; moving walls stay LAST).
+    /// Highest selectable pattern index + 1 — the SIX-tier prefix ladder (iron rule 4: every tier is
+    /// a prefix of the catalogue, so a pattern's index is its unlock rank).
+    ///
+    /// The literal `14` below is deliberate and is the reason v1.8 leaves the early game alone: it is
+    /// what `Patterns.count` evaluated to before the chasm existed, so every draw under
+    /// `chasmDiff` calls `rng.int(0, 13)` exactly as v1.7 did. Writing `Patterns.count` there would
+    /// have silently handed tier five the tier-six pattern.
     static func maxIndex(forDistance dist: Double) -> Int {
         let diff = min(1, dist / Tuning.diffFullAt)
         if dist < Tuning.earlyDistance { return 5 }        // 0–260 m: teach (patterns 0–4)
         if diff < Tuning.midEarlyDiff { return 9 }         // 260–576 m: + zigzag/mixed/pickup/double bar
         if diff < Tuning.midDiff { return 11 }             // 576–1440 m: + rings & overdrive runways
         if diff < Tuning.movingWallMinDiff { return 13 }   // 1440–1920 m: + gauntlet & split bars
-        return Patterns.count                              // 1920 m+: full catalogue incl. moving walls
+        if diff < Tuning.chasmDiff { return 14 }           // 1920–2560 m: + moving walls (v1.7's full set)
+        return Patterns.count                              // 2560 m+: + THE CHASM (tier six, v1.8)
     }
 
     // Act two shifts the *mix*, never the catalogue. Every pattern stays reachable at every depth —
@@ -62,14 +68,37 @@ struct Spawner {
     // (talls → bar → triple low, the only pattern demanding all three verbs) carry the escalation;
     // 2/3/6/8/12 are the medium rows.
     //
-    // Computed against the catalogue's lengths at the speed cap (and against the anti-repeat reroll,
-    // which damps heavy weights by ~2% because a frequent pattern is more often one of the last
-    // two), the three waves put obstacle density at +14% / +21% / +28% over act one's saturated
-    // plateau of 5.99 per 100 m, and cut the share of track belonging to a zero-obstacle pattern
-    // from 13.7% to 9.9% / 7.8% / 6.1%.
+    // 14 = THE CHASM (v1.8) is up-weighted in waves 2 and 3 but deliberately NOT in wave 1, and the
+    // reason is worth writing down because it looks like an omission.
+    //
+    // The chasm pattern is SPARSE by design — one obstacle across ~34 m, where the catalogue
+    // averages about six per 100 m. So every slot it gains costs obstacle density. Measured across
+    // 64 seeds: giving it a wave-1 slot moved act two's opening band from 6.33 to 5.95 obst/100 m,
+    // *below* the act-one band before it, and pushed rest share from 18.6% to 25.1%. Pairing it with
+    // an extra pattern 5 to compensate recovered the opening band (6.19) but dragged the deepest
+    // band down instead (7.36 → 6.87). Both variants failed
+    // `testSecondActEscalatesPastTheSpeedCap`, which is PR-0400's regression guard and the property
+    // the whole endgame rests on. Density escalation wins; chasm-frequency smoothness does not.
+    //
+    // The residual, stated plainly: the chasm is 1-in-15 (1.84/km) the moment tier six opens, dips
+    // to 1.06/km when act two's larger tables dilute it at 3,200 m, then climbs to 2.20/km by wave 3.
+    // A dip at the seam is the price of keeping act two's primary axis honest.
+    //
+    // Note also what the instrument CANNOT see: it counts input EDGES, not input precision. A chasm
+    // costs one jump, exactly like a low — but with a ±0.25 s window instead of the low's ±0.64 s.
+    // Every number here therefore *undervalues* the chasm, which is a further reason not to chase
+    // them by stuffing the tables.
+    //
+    // It is already in the base `Array(0..<count)`, so act two never has to unlock it — the ladder
+    // did that at 2,560 m.
+    //
+    // The density figures the v1.7 comment quoted here (+14/21/28% over 5.99 per 100 m) were
+    // computed against a 14-pattern catalogue and no longer describe these tables; the measured
+    // replacements live in `DifficultyCurveTests`, which reports them per band from 64 seeded runs
+    // rather than from a closed form. Trust the instrument, not a comment.
     private static let poolWave1: [Int] = Array(0..<Patterns.count) + [5, 11, 2, 6, 3, 8]
-    private static let poolWave2: [Int] = poolWave1 + [5, 11, 2, 6, 12, 8]
-    private static let poolWave3: [Int] = poolWave2 + [5, 11, 5, 11, 2, 3, 6, 8]
+    private static let poolWave2: [Int] = poolWave1 + [5, 11, 2, 6, 12, 8, 14]
+    private static let poolWave3: [Int] = poolWave2 + [5, 11, 5, 11, 2, 3, 6, 8, 14]
 
     /// The draw table at `dist`, or `nil` in act one — where the spawner draws uniformly from
     /// `0..<maxIndex` exactly as v1.6 did. Static tables, so selection allocates nothing.
@@ -142,6 +171,11 @@ struct Spawner {
     /// A lane that's laterally SAFE to enter `base` at (no tall / moving wall / split-bar cover in the
     /// entry zone — lows/bars are jumped or slid, so they don't block a lane sideways). Prefers
     /// the centre; falls back to centre if (rarely) all three read blocked. Pure → deterministic.
+    ///
+    /// The `chasm` is deliberately NOT listed below, for the same reason `low` and `bar` are not: it
+    /// is full-width, so it closes no lane laterally — it is cleared with the jump verb, and every
+    /// lane is equally safe (or equally fatal) at it. Its absence here is a decision, not an
+    /// oversight; the same goes for `greedLane`, which is why pattern 14 never grows a greed line.
     ///
     /// The zone is 12 u, not v1.6's 8.5. Pattern 13 puts its first moving wall at `base + 9`, just
     /// outside the old window, so the "safe" breadcrumb was routed into the centre lane that wall
@@ -221,7 +255,7 @@ struct Spawner {
         // If the two squeeze the line below `riskGemsMin` it simply isn't placed.
         let floor = previous
             .filter { isObstacle($0) }
-            .map { spawnDistance($0) + Tuning.riskGemClearance }
+            .map { spawnDistance($0) + halfExtent($0) + Tuning.riskGemClearance }
             .max() ?? -.infinity
         let from = Swift.max(start, floor)
 
@@ -230,7 +264,7 @@ struct Spawner {
             let d = last - Double(i) * Tuning.riskGemSpacing
             guard d >= from else { break }
             let occupied = (spawns + previous).contains { cmd in
-                guard abs(spawnDistance(cmd) - d) < Tuning.riskGemClearance else { return false }
+                guard abs(spawnDistance(cmd) - d) < Tuning.riskGemClearance + halfExtent(cmd) else { return false }
                 if isObstacle(cmd) { return true }
                 if case let .gem(_, lane, _) = cmd { return lane == greed.lane }
                 return false
@@ -242,9 +276,18 @@ struct Spawner {
     }
 
 
+    /// How far a spawn reaches either side of its `d`. Every obstacle in the catalogue is a plane
+    /// (0) except the chasm, which owns `±chasmHalfLength` of track. Without this the greed line's
+    /// clearance would be measured against the chasm's CENTRE and could drop gems 2.5 u inside the
+    /// void — placed, rendered, and uncollectable.
+    private static func halfExtent(_ cmd: SpawnCmd) -> Double {
+        if case .chasm = cmd { return Tuning.chasmHalfLength }
+        return 0
+    }
+
     private static func isObstacle(_ cmd: SpawnCmd) -> Bool {
         switch cmd {
-        case .low, .tall, .movingTall, .bar, .splitBar: return true
+        case .low, .tall, .movingTall, .bar, .splitBar, .chasm: return true
         default: return false
         }
     }
@@ -254,7 +297,7 @@ struct Spawner {
         case let .low(d, _), let .tall(d, _), let .bar(d), let .gem(d, _, _),
              let .shield(d, _), let .magnet(d, _), let .doubler(d, _), let .chrono(d, _),
              let .superSneakers(d, _), let .ring(d, _, _), let .boostPad(d, _),
-             let .splitBar(d, _), let .movingTall(d, _):
+             let .splitBar(d, _), let .movingTall(d, _), let .chasm(d):
             return d
         }
     }

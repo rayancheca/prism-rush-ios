@@ -53,6 +53,20 @@ enum Collisions {
         return false
     }
 
+    /// Chasm (v1.8): a full-width gap in the deck. Unlike every other obstacle this one occupies a
+    /// RANGE of track — `z` is measured from its centre and it is lethal across `±chasmHalfLength` —
+    /// and it is the only predicate that reads the player's height off the ground rather than the
+    /// bounds of their body: you are over the gap or you are in it, and crouching does not help.
+    ///
+    /// It is therefore the catalogue's first TWO-SIDED timing window. Every other jump in the game
+    /// is one-sided (clear a plane; jumping early is free), so nothing until now punished going too
+    /// soon. Here, launching too early lands you inside the gap.
+    ///
+    /// Full-span, so there is no `x` term — the whole deck is missing.
+    static func chasmHit(playerY: Double, z: Double) -> Bool {
+        abs(z) < Tuning.chasmHalfLength && playerY < Tuning.chasmClearance
+    }
+
     /// Gem pickup window (uses the gem's *base* Y, before cosmetic bob).
     static func gemPickup(playerCenterY pcy: Double, playerX: Double, gemX: Double, gemBaseY: Double, z: Double) -> Bool {
         abs(z) < Tuning.gemPickup.dz

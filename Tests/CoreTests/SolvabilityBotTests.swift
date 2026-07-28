@@ -26,6 +26,41 @@ final class SolvabilityBotTests: XCTestCase {
         botSoak(seedCount: 64, targetDistance: 12_000, seedSalt: 0xDEE9_5EED)
     }
 
+    /// A solvability proof that never meets the hazard is not a proof.
+    ///
+    /// The tier-six chasm is the only obstacle the bot must JUMP with a window on both sides, and it
+    /// only unlocks at 2,560 m — well inside the 6,000 m sweep, but nothing above actually checks
+    /// that. This test closes that hole: it replays the same seeds the soak uses and counts the
+    /// chasms the bot is actually driven across, so a future change that quietly stops spawning them
+    /// (a tier gate moved, a pool table edited, a cap set to 0) turns the green soak red here instead
+    /// of leaving it green and meaningless.
+    func testTheSoakActuallyDrivesTheBotAcrossChasms() async {
+        var crossed = 0
+        var seedsWithAChasm = 0
+        for s in 0..<24 {
+            let seed = UInt64(s) &* 0x9E37_79B9_7F4A_7C15 &+ 0x1234_5678
+            let core = GameCore(seed: 1)
+            core.startRun(seed: seed)
+            var seen = Set<Int>()
+            var ticks = 0
+            while core.mode == .play && core.distance < 6_000 && ticks < 400_000 {
+                Autopilot.drive(core)
+                core.tick(Tuning.tickDt)
+                ticks += 1
+                // Count a chasm once its far rim is behind the player — i.e. actually survived.
+                for o in core.activeObstacles where o.kind == .chasm {
+                    if core.distance > o.d + Tuning.chasmHalfLength { seen.insert(o.id) }
+                }
+            }
+            XCTAssertEqual(core.mode, .play, "seed \(seed) died — the soak should have caught this")
+            if !seen.isEmpty { seedsWithAChasm += 1 }
+            crossed += seen.count
+        }
+        XCTAssertEqual(seedsWithAChasm, 24, "every 6,000 m run must meet the tier-six pattern")
+        XCTAssertGreaterThan(crossed, 24 * 3,
+                             "the chasm should be a recurring beat past 2,560 m, not a rarity")
+    }
+
     /// v1.3 containment invariant (geometric, no sim): the overdrive runway emits ZERO obstacles,
     /// and even the LATEST possible pad trigger followed by a full boost at the hard speed cap
     /// dies inside the pattern (5.1 + 1.0 × 36 = 41.1 < 48). This is why the boost can never

@@ -84,7 +84,7 @@ final class DifficultyTests: XCTestCase {
         }
     }
 
-    /// Pattern-availability gates open at the documented distances (v1.3 five-tier ladder).
+    /// Pattern-availability gates open at the documented distances (v1.8 six-tier ladder).
     func testPatternGating() async {
         XCTAssertEqual(Spawner.maxIndex(forDistance: 0), 5)
         XCTAssertEqual(Spawner.maxIndex(forDistance: 259), 5)
@@ -94,15 +94,19 @@ final class DifficultyTests: XCTestCase {
         XCTAssertEqual(Spawner.maxIndex(forDistance: 1439), 11)      // diff just under 0.45
         XCTAssertEqual(Spawner.maxIndex(forDistance: 1440), 13)      // diff = 0.45 → gauntlet + split bars (no moving walls)
         XCTAssertEqual(Spawner.maxIndex(forDistance: 1919), 13)      // diff just under 0.6
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 1920), Patterns.count) // diff = 0.6 → moving walls unlock
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 1920), 14)       // diff = 0.6 → moving walls unlock
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 2559), 14)       // diff just under 0.8
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 2560), Patterns.count) // diff = 0.8 → the chasm unlocks
         XCTAssertEqual(Spawner.maxIndex(forDistance: 6000), Patterns.count)
     }
 
     /// Fairness: World 2 (800–1600 m) must never spawn moving walls — players are still acclimating.
+    /// Pinned against the literal index 13, not `Patterns.count`: once tier six existed,
+    /// `< Patterns.count` only excluded the chasm and stopped proving anything about moving walls.
     func testWorld2HasNoMovingWalls() async {
         for d in stride(from: 800.0, through: 1599.0, by: 50) {
-            XCTAssertLessThan(Spawner.maxIndex(forDistance: d), Patterns.count,
-                              "moving walls should not be selectable at d=\(d) (World 2)")
+            XCTAssertLessThanOrEqual(Spawner.maxIndex(forDistance: d), 13,
+                                     "moving walls should not be selectable at d=\(d) (World 2)")
         }
     }
 

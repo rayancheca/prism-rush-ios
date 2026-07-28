@@ -25,13 +25,16 @@ enum EntityKind: Sendable, Equatable {
     case superSneakers // winged-boot pickup: jumps launch higher for a few seconds — never lethal
     case ring       // prism ring at jump-apex height: thread it for score/coins — never lethal
     case boostPad   // floor chevron strip: grounded contact triggers the overdrive boost
+    case chasm      // full-width gap in the deck: be AIRBORNE across its whole span or fall (v1.8)
 }
 
 /// One pooled entity's render state for a single frame.
 /// `z` is distance-relative to the player: negative = ahead of the player, positive = behind.
-/// `lane` is -1 for full-span entities (bars); for a `splitBar` it is the OPEN (safe) lane.
-/// `y` is authoritative for every obstacle kind (bar centre 1.3, low 0.425, tall 1.6) — renderers
-/// must place from `y`, never hardcode heights.
+/// `lane` is -1 for full-span entities (bars, chasms); for a `splitBar` it is the OPEN (safe) lane.
+/// `y` is authoritative for every obstacle kind (bar centre 1.3, low 0.425, tall 1.6, chasm 0 — the
+/// deck plane it replaces) — renderers must place from `y`, never hardcode heights.
+/// `z` is the CENTRE for every kind, including the `chasm`, whose mesh is `2 × Tuning.chasmHalfLength`
+/// long: collision anchor and render anchor are the same point on purpose.
 struct EntityState: Sendable, Identifiable, Equatable {
     var id: Int
     var kind: EntityKind

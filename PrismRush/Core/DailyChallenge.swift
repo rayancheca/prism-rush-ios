@@ -27,7 +27,13 @@ enum DailyChallenge {
     /// 5 → 4, moving walls swing off centre, and a second gem cluster is hung in a lane each
     /// pattern closes. Act one's *selection* is byte-identical to v7; the shared track still
     /// reshuffles, because a layout version is a promise about the whole run.
-    static func seed(year: Int, month: Int, day: Int, layoutVersion: UInt64 = 8) -> UInt64 {
+    /// layoutVersion 9 = v1.8 — THE CHASM (PR-0450). The catalogue grows to 15 and a SIXTH tier
+    /// opens at 2,560 m, so `Spawner.maxIndex` returns 15 rather than 14 past that point and every
+    /// draw from there on differs. The act-two pool tables also grow (21/28/37 slots), which shifts
+    /// `rng.int(0, slots − 1)` for every seed past 3,200 m. Below 2,560 m the ladder still returns
+    /// 5 / 9 / 11 / 13 / 14, so act one's *selection* is byte-identical again — and the shared track
+    /// still reshuffles, for the same reason as v8.
+    static func seed(year: Int, month: Int, day: Int, layoutVersion: UInt64 = 9) -> UInt64 {
         let folded = UInt64(year * 10_000 + month * 100 + day)
         var mix = SplitMix64(seed: folded ^ tag ^ (layoutVersion << 48))
         return mix.next()

@@ -320,9 +320,14 @@ final class GameCore {
     private func freeLaneNear(_ d: Double) -> Int? {
         for lane in [1, 0, 2] {
             var blocked = false
-            for o in activeObstacles where abs(o.d - d) <= Tuning.cadenceClearance {
+            for o in activeObstacles {
+                // The chasm is the one obstacle with an extent, so its clearance is measured from
+                // its rim rather than its centre — a cadence pickup dropped inside the void would
+                // hang at y 1.0 over nothing and be uncollectable.
+                let margin = Tuning.cadenceClearance + (o.kind == .chasm ? Tuning.chasmHalfLength : 0)
+                guard abs(o.d - d) <= margin else { continue }
                 switch o.kind {
-                case .bar, .splitBar, .movingTall: blocked = true
+                case .bar, .splitBar, .movingTall, .chasm: blocked = true
                 case .tall, .low: if o.lane == lane { blocked = true }
                 default: break
                 }
@@ -371,7 +376,7 @@ final class GameCore {
 
     private func obstacleX(_ e: CoreEntity) -> Double {
         switch e.kind {
-        case .bar, .splitBar: return 0
+        case .bar, .splitBar, .chasm: return 0   // full-span: `lane` is -1, so never index `laneX`
         case .movingTall: return sin((distance - e.d) * Tuning.movingWallFreq + e.phase) * Tuning.movingWallAmplitude
         default: return Tuning.laneX[e.lane]
         }
@@ -390,10 +395,15 @@ final class GameCore {
             }
             let ox = obstacleX(e)
 
-            if mode == .play && invulnT <= 0 && abs(z) < Tuning.obstacleZHalf {
+            // Every obstacle but the chasm is a plane, lethal within `obstacleZHalf`. The chasm owns
+            // a RANGE of track, so the outer gate widens for it — otherwise the gate would veto the
+            // predicate and an 8 u hole would only be fatal in its middle 1.9 u.
+            let zHalf = e.kind == .chasm ? Tuning.chasmHalfLength : Tuning.obstacleZHalf
+            if mode == .play && invulnT <= 0 && abs(z) < zHalf {
                 let hit: Bool
                 switch e.kind {
                 case .bar: hit = Collisions.barHit(playerTop: pb.top, playerBottom: pb.bottom, z: z)
+                case .chasm: hit = Collisions.chasmHit(playerY: jumpY, z: z)
                 case .splitBar: hit = Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: px, openLane: e.lane, z: z)
                 case .low: hit = Collisions.lowHit(playerBottom: pb.bottom, playerX: px, obstacleX: ox, z: z)
                 case .tall, .movingTall: hit = Collisions.tallHit(playerX: px, obstacleX: ox, z: z,
@@ -687,6 +697,11 @@ final class GameCore {
         case let .boostPad(d, lane):
             guard pickupCount(.boostPad) < Tuning.capBoostPad else { return }
             activePickups.append(CoreEntity(id: takeId(), kind: .boostPad, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 0.05, phase: 0, passed: false, fading: false))
+        case let .chasm(d):
+            // Full-span like a bar, so `lane: -1` and `x: 0` (see `obstacleX`). `baseY: 0` is the
+            // deck plane it replaces — the renderer sinks the shaft below it from there.
+            guard obstacleCount(where: { $0 == .chasm }) < Tuning.capChasm else { return }
+            activeObstacles.append(CoreEntity(id: takeId(), kind: .chasm, lane: -1, d: d, x: 0, baseY: 0, phase: 0, passed: false, fading: false))
         }
     }
 
