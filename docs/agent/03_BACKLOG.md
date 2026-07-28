@@ -761,6 +761,7 @@ end to end. Same confidence caveat as everything above.
 - Verification: A merge test asserting both timestamps survive as the later of the two.
 
 ## PR-0254 · SEV2 · Revived runs are fully leaderboard-eligible, so continues are purchasable rank
+- **DECIDED (D-007, S-003 — Rayan delegated the call).** A revived run **counts fully for missions and XP** and is **not** leaderboard-eligible — the same rule `usedCheckpoint` runs already follow. Rationale: today it is *partly* counted (score reaches Game Center, progression stops), which is the worst of both answers. Implementation touches `recordRunResults` — keep the per-death delta shape (invariant 5). Resolves the PR-0307 half too. **No longer blocked.**
 - Area:        UI/GameView, Services/GameCenterService, product
 - Found by:    S-001 (trace: run-lifecycle)
 - Status:      OPEN
@@ -1382,7 +1383,7 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
                fires on finger lift. `SolvabilityBotTests` proves **fairness** (iron rule 3) and it
                does so correctly.
 
-## PR-0414 · SEV2 · REVERSAL REQUEST — the coin trail is painted on the provably safe lane
+## PR-0414 · SEV2 · Price some gems in risk (was: reversal request — now unblocked)
 - Area:        Core/Spawner · Core/Patterns
 - Found by:    AUDIT-002
 - Status:      OPEN
@@ -1397,9 +1398,14 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
                or a breadcrumb that leaves you badly placed for the NEXT pattern (routing debt).
 - Blast radius: `Core/Spawner.swift`, `Core/Patterns.swift` — iron rule 3 (bot + layoutVersion).
 - Verification: Bot green + layoutVersion bumped + `PatternOrderTests` repinned.
-- **Why this is a reversal request:** `Spawner.swift:49-52` documents this as a deliberate v1.6
-  change — *"Subway-style… following the coins is always a takeable route"* — echoed at
-  `Patterns.swift:128` and `:163` ("coins are the path"). **Needs Rayan's sign-off, not a fix.**
+- **UNBLOCKED 2026-07-28 (D-006).** Rayan revoked "coins are the path": *"coins are not the path
+  anymore — i just said that because coins were spread randomly before so i wanted them
+  structured."* His intent was **structure, not safety**, and those are separable. Gems may now be
+  priced in risk as long as they stay in deliberate, readable formations.
+- **Carries invariant 2** (spawn-path change): `SolvabilityBotTests` green (200×6,000 m + the
+  12,000 m soak) **and** `DailyChallenge.layoutVersion` bumped with `DailyChallengeTests` goldens
+  repinned. Session 003 deliberately did not start this on low context. Specced in `HANDOFF.md`.
+- Stale comments to fix in the same change: `Spawner.swift:49-52`, `Patterns.swift:128`, `:163`.
 
 ## PR-0415 · SEV2 · The economy pays ~7% for the activity the game is named for
 - Area:        UI/GameView:696-711 · Meta/XPCurve
@@ -1457,7 +1463,7 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
 ## PR-0411 · SEV1 · "Earn 2× coins, forever" under-delivers on a paid product
 - Area:        Meta/ProfileStore · IAP
 - Found by:    AUDIT-002 (raised SEV0, cut to SEV1 in verification)
-- Status:      OPEN
+- Status:      **DONE(S-003)** — copy fixed. See "Resolution" below.
 - Symptom:     The advertised permanent 2× coin multiplier does not deliver 2× by the app's own
                accounting.
 - Why:         Full accounting in `docs/agent/audits/scratch/economy.md` §F1 and
@@ -1469,7 +1475,29 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
 - Blast radius: `Meta/ProfileStore.swift`, `UI/GameView.swift:696-711`, IAP copy, `EconomyTests`.
 - Verification: A test asserting a `doubleCoins` profile earns exactly 2× a baseline profile on an
                identical `RunSummary`.
-- **Flagged to Rayan in the session-003 report.**
+- **Resolution (S-003, on Rayan's instruction "do pr 0411").** Fixed by making the *claim* true
+  rather than by rebalancing the economy. The honest wording already existed in the codebase —
+  `ShopView.swift:160` said "Every run pays double. Forever." Four other sites overclaimed and now
+  match it:
+    - `PrismRush/IAP/IAPCatalog.swift:31` blurb → "Every run pays 2× coins. Forever." (+ comment)
+    - `PrismRush/UI/ShopView.swift:437` perk row → same (+ comment)
+    - `PrismRush/UI/ShopView.swift:461-462` accessibility label → "Every run pays two times coins"
+    - `PrismRush/UI/GameOverView.swift:232` → "RUNS PAY ×2 WITH DOUBLE COINS →"
+    - `Products.storekit:43` description → "Every run pays 2x coins. Forever."
+  Verified: `./Tools/build.sh` BUILD OK · `swift test -c release` 178 tests, 0 failures.
+- **Why copy and not code.** Multiplying the five un-multiplied faucets (daily reward, chest, level
+  grant, mission claim, challenge tier) would roughly double the non-run faucet for payers — a real
+  economy rebalance that invalidates the time-to-collection math in `05_GAME_DESIGN.md §5` and
+  touches watermarked one-time grants (invariant 5). The copy fix is precise, honest, reversible,
+  and leaves the balance work as a separate decision. **If Rayan would rather the product deliver
+  a true 2× on everything, that is a live option and a better deal for buyers — say so and it gets
+  filed as its own item.**
+- ⚠️ **RAYAN ACTION REQUIRED:** `Products.storekit` is only the *local* StoreKit config for
+  simulator testing. **The real product description lives in App Store Connect and still reads
+  "Earn 2x coins, forever."** It must be updated there before submission or the shipped metadata is
+  still false.
+- Test gap (honest): `IAPCatalog.swift` is **not** in `Package.swift`, so no `swift test` can pin
+  these strings. A future XCUITest could assert the shop row's text.
 
 ## PR-0412 · SEV1 · Buying a world silently disqualifies the run and credits zero reach
 - Area:        Meta/ProfileStore · UI/WorldsView
@@ -1500,7 +1528,7 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
 - Blast radius: `UI/GameView.swift`.
 - Verification: Replay the hint logic against the real spawn stream over N seeds; mismatch rate 0.
 
-## PR-0445 · SEV2 · The attract track cuts through hub text and the bottom card row
+## PR-0445 · SEV2 · The attract track cuts through hub text and the bottom card row  ·  **DECIDED (D-008)**
 - Area:        UI/MenuView
 - Found by:    AUDIT-002 (measured, clean launch) — closes the open question in PR-0296
 - Status:      OPEN
@@ -1514,4 +1542,7 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
 - Fix sketch:  Push the attract track behind the card layer, or fade it under the lower third.
 - Blast radius: `UI/MenuView.swift` z-ordering.
 - Verification: Clean-launch screenshot with no grid line crossing a glyph.
-- Blocked by:  Needs Rayan's yes/no — it is possible this is the intended neon look (open question 4).
+- **Decided (D-008, S-003 — Rayan delegated):** push the attract track behind the card layer, or
+  fade it under the lower third. It fails decree 6 because the lines cross glyphs; the neon look
+  survives fine behind the cards. Not implemented in S-003 — needs a clean-launch screenshot to
+  verify, and a diff alone does not prove it. **No longer blocked.**

@@ -76,6 +76,19 @@ with a decree, the doc is wrong — amend the doc, never "ship the doc". Current
 6. **Clarity beats spectacle.** Every input (jump/slide/lane) must be readable in a single
    frame; UI stays calm (role-based color, one gradient family per screen).
 
+> **Rule status (session 003, D-005).** The nine "iron rules" below are real invariants — each one
+> prevents damage you would not notice for weeks. Everything *else* in this repo that reads like a
+> rule is a default: use your judgment. Rayan's standing instruction is *"never be limited by
+> arbitrary rules — work however you think is best."* If one of these nine is in your way, say so
+> and change it deliberately; don't route around it silently.
+
+## Revoked / amended decrees
+
+- **"Coins are the path" — REVOKED (D-006, 2026-07-28).** `Spawner.swift:49-52` and
+  `Patterns.swift:128,:163` still describe a guaranteed-safe gem breadcrumb. Rayan's intent was
+  *structure* (gems in deliberate formations rather than scattered randomly), **not** *safety*.
+  Gems may now be priced in risk. The code comments are stale until PR-0414 lands.
+
 ## Iron rules
 
 1. **Core/ never imports a renderer or UIKit.** It meets the outside world only through

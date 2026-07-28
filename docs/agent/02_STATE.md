@@ -5,9 +5,19 @@
 > which are the project's human-facing history, not the agent's source of truth.
 
 - **Last written by:** session 003 (2026-07-28) — AUDIT-002, The Game Designer
-- **Program phase:** Phase B (adversarial audits), **2 of 7 done**. Sessions 004–008 remain.
-- **Next session:** 004 — AUDIT-003, The App Review Rejector
-- **Code changed by the program so far:** none. Sessions 001–009 are read-only by design.
+- **Program phase:** audits 2 of 7 done, and the phase gate is gone (D-005) — audits and fixes now
+  interleave.
+- **Next session:** 004 — PR-0400 + PR-0414, the two spawn-path changes, in one `layoutVersion` bump. See `HANDOFF.md`.
+- **Code changed by the program so far:** PR-0411 only (S-003, copy fix, verified).
+- **The read-only phase is over (D-005).** Sessions may now fix code as they go. The audit sequence
+  continues because it is producing real findings, not because a rule requires it.
+- **Rayan's standing instruction (2026-07-28):** *"never be limited by arbitrary rules — just work
+  however you think is best."* `01_RULES.md` was cut from ~290 lines of ceremony to ~180, split into
+  judgment (advisory) and nine invariants (damage prevention). Read D-005 before reinstating any
+  process.
+- **Direction:** submission IS the goal, timing is open. **Polish first, publish at the end.** So
+  design/feel work (`05_GAME_DESIGN.md`) outranks the compliance pass in priority; AUDIT-003 still
+  runs, but its findings are a pre-submission checklist, not the next thing to fix.
 
 ---
 

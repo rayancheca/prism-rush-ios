@@ -28,7 +28,11 @@ enum IAPCatalog {
         IAPProduct(id: "com.rayancheca.prismrush.coins.small",  title: "Pouch of Coins",  blurb: "1,200 coins",  fallbackPrice: "$0.99", fallbackValue: 0.99, kind: .coins(1_200)),
         IAPProduct(id: "com.rayancheca.prismrush.coins.medium", title: "Bag of Coins",    blurb: "7,000 coins",  fallbackPrice: "$4.99", fallbackValue: 4.99, kind: .coins(7_000)),
         IAPProduct(id: "com.rayancheca.prismrush.coins.large",  title: "Vault of Coins",  blurb: "16,000 coins", fallbackPrice: "$9.99", fallbackValue: 9.99, kind: .coins(16_000)),
-        IAPProduct(id: "com.rayancheca.prismrush.doublecoins",  title: "Double Coins",    blurb: "Earn 2× coins, forever", fallbackPrice: "$2.99", fallbackValue: 2.99, kind: .doubleCoins),
+        // Blurb states RUN payout deliberately (PR-0411): `Profile.coinMultiplier` is consumed at
+        // exactly one site (GameView.swift:696), so the daily reward, chest, level grant, mission
+        // claim and challenge tier are NOT doubled. "2× coins, forever" was false by the app's own
+        // `totalCoinsEarned` bookkeeping. Keep this wording in sync with App Store Connect.
+        IAPProduct(id: "com.rayancheca.prismrush.doublecoins",  title: "Double Coins",    blurb: "Every run pays 2× coins. Forever.", fallbackPrice: "$2.99", fallbackValue: 2.99, kind: .doubleCoins),
         IAPProduct(id: "com.rayancheca.prismrush.skin.aurora",  title: "Aurora Skin",     blurb: "Exclusive character", fallbackPrice: "$1.99", fallbackValue: 1.99, kind: .skin("aurora")),
         // — v1.4.1 additions —
         IAPProduct(id: starterID,                               title: "Starter Bundle",  blurb: "3,000 coins",  fallbackPrice: "$1.99", fallbackValue: 1.99, kind: .coins(3_000)),

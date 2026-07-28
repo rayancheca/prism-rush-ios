@@ -40,7 +40,7 @@
       "familyShareable" : false,
       "internalID" : "1004",
       "localizations" : [
-        { "description" : "Earn 2x coins, forever", "displayName" : "Double Coins", "locale" : "en_US" }
+        { "description" : "Every run pays 2x coins. Forever.", "displayName" : "Double Coins", "locale" : "en_US" }
       ],
       "productID" : "com.rayancheca.prismrush.doublecoins",
       "referenceName" : "Double Coins",

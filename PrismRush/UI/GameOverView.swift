@@ -229,7 +229,7 @@ struct GameOverView: View {
             if !doubled, ProfileStore.shared.profile.totalRuns >= 3, let onGetCoins {
                 // The ×2 state taps through to the shop's Double Coins row when not owned.
                 Button(action: onGetCoins) {
-                    Text("EARN ×2 WITH DOUBLE COINS →")
+                    Text("RUNS PAY ×2 WITH DOUBLE COINS →")
                         .font(.system(size: 10, weight: .heavy, design: .rounded))
                         .tracking(1)
                         .foregroundStyle(Theme.Role.reward.opacity(0.9))

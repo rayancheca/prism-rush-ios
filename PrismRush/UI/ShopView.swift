@@ -434,7 +434,10 @@ struct ShopView: View {
                     Text("Double Coins")
                         .typeScale(.heading)
                         .foregroundStyle(Theme.Role.textPrimary)
-                    Text("Earn 2× coins, forever")
+                    // Copy must say RUN payout, not all coins: `coinMultiplier` is consumed at
+                    // exactly one site (GameView.swift:696), so daily rewards, the chest, level
+                    // grants, mission claims and challenge tiers are NOT doubled (PR-0411).
+                    Text("Every run pays 2× coins. Forever.")
                         .typeScale(.body)
                         .foregroundStyle(Theme.Role.textSecondary)
                 }
@@ -458,8 +461,8 @@ struct ShopView: View {
             .neonCard()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(owned
-                                ? "Double Coins. Earn two times coins, forever. Owned."
-                                : "Double Coins. Earn two times coins, forever. Buy for \(iap.displayPrice(Self.doublerID)).")
+                                ? "Double Coins. Every run pays two times coins, forever. Owned."
+                                : "Double Coins. Every run pays two times coins, forever. Buy for \(iap.displayPrice(Self.doublerID)).")
             .accessibilityAddTraits(owned ? [] : .isButton)
             .accessibilityAction { if !owned, busy == nil { buy(Self.doublerID) } }
         }
