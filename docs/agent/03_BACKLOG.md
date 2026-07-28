@@ -1224,7 +1224,7 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
 ## PR-0400 · SEV1 · The difficulty curve ends at 3,200 m and never changes again
 - Area:        Core/Tuning · Core/Spawner
 - Found by:    AUDIT-002 (Game Designer) — reached independently by 4 of 10 lenses
-- Status:      OPEN
+- Status:      **DONE(S-004)** — act two shipped at layoutVersion 8. See "Resolution" below.
 - Symptom:     A 4,000 m run and a 40,000 m run are the same run at the same difficulty with the
                same 14 patterns. The game's entire endgame is a patience test.
 - Repro:       `SIMCTL_CHILD_PR_AUTOPLAY=1` launch; screenshot the HUD every 10 s. Measured: five
@@ -1242,6 +1242,23 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
 - Verification: `SolvabilityBotTests` green (200×6,000 m + 12,000 m soak) AND
                `DailyChallenge.layoutVersion` bumped with `DailyChallengeTests` goldens repinned
                (iron rule 3). Re-run the autoplay HUD capture and show a non-flat tail.
+- **Resolution (S-004).** A second escalation axis over the SAME speed, keyed off
+  `Spawner.intensity` (0 at 3,200 m → 1 at 9,600 m), on four zero-RNG mechanisms: a weighted
+  pattern draw in three front-loaded waves (breathers get rarer, nothing is ever removed from the
+  catalogue), the gap continuing 5 → 4, moving walls swinging off phase 0, and risk-priced gems
+  (PR-0414, landed in the same bump). Full write-up in `05_GAME_DESIGN.md §3`.
+- **Speed was deliberately NOT raised.** The readable lead is capped at ~65 m by the backdrop plane
+  (1.97 s at the cap) and pushing it back was tried and reverted in v1.6 — see the constraint note
+  in `audits/scratch/verify-difficulty.md §12`. Faster would be unreactable, not harder.
+- Measured (`DifficultyCurveTests`, 64 seeds, bands snapped to pattern boundaries), act one's
+  2,400–3,200 m plateau → the deepest wave: obstacles/100 m **6.02 → 7.63 (+27%)**, Autopilot
+  inputs/100 m **3.93 → 4.44 (+13%)**, obstacle-free track **27.1% → 12.4% (−54%)**. v1.6 measured
+  5.7 / 3.4 / ~32% flat across all of 3,000–8,000 m with no trend in any column.
+- Verified: `swift test -c release` → **187 tests, 0 failures**, incl. the bot at 200×6,000 m and
+  the 64×12,000 m soak · `./Tools/build.sh` → BUILD OK · autoplay HUD capture re-run on device.
+- **Residual, deliberately not fixed:** the catalogue is still 14 patterns. Act two shifts the mix;
+  it does not add a 15th. `05_GAME_DESIGN.md §4` point 1 still stands and is the live argument for
+  new content. Filed as **PR-0450**.
 
 ## PR-0401 · SEV1 · The meta loop is a decoration loop — zero of 83,500 coins buy a new way to play
 - Area:        Meta/SkinCatalog · Meta/XPCurve · UI
@@ -1386,7 +1403,7 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
 ## PR-0414 · SEV2 · Price some gems in risk (was: reversal request — now unblocked)
 - Area:        Core/Spawner · Core/Patterns
 - Found by:    AUDIT-002
-- Status:      OPEN
+- Status:      **DONE(S-004)** — the greed line ships at layoutVersion 8. See "Resolution".
 - Symptom:     Greed and survival are the same input, so there is no routing decision in a game
                whose currency is a collectible.
 - Why:         `Spawner.swift:53-58` emits a gem breadcrumb into `safeEntryLane` before EVERY
@@ -1406,6 +1423,24 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
   12,000 m soak) **and** `DailyChallenge.layoutVersion` bumped with `DailyChallengeTests` goldens
   repinned. Session 003 deliberately did not start this on low context. Specced in `HANDOFF.md`.
 - Stale comments to fix in the same change: `Spawner.swift:49-52`, `Patterns.swift:128`, `:163`.
+- **Resolution (S-004).** Past `Tuning.riskGemsFrom` (1,440 m — `midDiff × diffFullAt`, the tier
+  that opens the gauntlet and split bar) the spawner hangs a SECOND gem line in a lane the pattern
+  *closes*, ending `riskExitSeconds` (0.30 s) of travel short of the wall. Constant in time, so the
+  commitment is identical at 17 m/s and at the speed cap. The safe breadcrumb is untouched and
+  still takeable — structure was always the owner's intent (D-006), safety was not. All three stale
+  comments rewritten.
+- Measured: gems priced in risk go **0.7% before the gate → 13–15% after it** (`DifficultyCurveTests`).
+- **The solvability bot cannot certify this and does not claim to.** `Autopilot` reads only
+  `activeObstacles` and has never collected a gem, so it walks the safe line every time and would
+  stay green even if the greed line were lethal. `testEveryGreedGemLeavesATakeableExit` is the
+  separate fairness proof: it walks every gem the spawner can emit across 16 seeds × 12,000 m and
+  asserts the lane stays open for at least the exit window.
+- **Two defects that test caught,** both of which would have shipped silently:
+  (a) the greed line could place a gem *inside the previous pattern's tall* — `riskLineReach` was
+  justified against a 9 u minimum trailing clearance, but that counted bars, which close no lane;
+  pattern 5's last tall is 7 u from its end. The spawner now carries the previous pattern's spawns.
+  (b) `safeEntryLane`'s zone was 8.5 u while pattern 13's first moving wall sits at 9 u, so the
+  **safe** breadcrumb was routed into the lane that wall crosses. Zone widened to 12 u.
 
 ## PR-0415 · SEV2 · The economy pays ~7% for the activity the game is named for
 - Area:        UI/GameView:696-711 · Meta/XPCurve
@@ -1557,3 +1592,37 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
   fade it under the lower third. It fails decree 6 because the lines cross glyphs; the neon look
   survives fine behind the cards. Not implemented in S-003 — needs a clean-launch screenshot to
   verify, and a diff alone does not prove it. **No longer blocked.**
+
+## PR-0450 · SEV2 · Act two shifts the mix; the catalogue is still 14 patterns
+- Area:        Core/Patterns
+- Found by:    S-004, as the acknowledged residual of PR-0400
+- Status:      OPEN
+- Symptom:     Past 1,920 m the player has seen every pattern the game will ever show them. v1.7's
+               second act makes the demanding ones arrive more often and the breathers less often,
+               and swings the moving walls — but it introduces no new *kind* of moment.
+- Why:         `Patterns.count` is 14. `Spawner.pool` reweights within that catalogue by design, so
+               that the prefix-gating invariant (iron rule 4) and the solvability bot both hold
+               without re-proving the whole catalogue.
+- Impact:      `05_GAME_DESIGN.md §4` point 1 — the mastery ceiling argument — survives v1.7 intact.
+               Density is not novelty; a player who has read all 14 patterns has still read them all.
+- Fix sketch:  One genuinely new entity or verb, gated into a sixth tier. This is the expensive
+               option PR-0400 deliberately did not take (new mesh, new collision predicate, new bot
+               policy, and a re-proof of solvability). It is now the highest-value content work.
+- Blast radius: `Core/Patterns.swift`, `Core/Models.swift`, `Core/Collisions.swift`,
+               `Core/Autopilot.swift`, `Render/Reality/*` — and invariant 2 in full.
+- Verification: Bot green + `layoutVersion` bump + goldens; `DifficultyCurveTests` should show the
+               new tier arriving as a step, not just a slope.
+
+## PR-0451 · SEV3 · `Tuning`'s pool-cap comment claims a renderer coupling that does not exist
+- Area:        Core/Tuning
+- Found by:    S-004 (while raising `capGem`)
+- Status:      **DONE(S-004)** — comment corrected in the same commit.
+- Symptom:     `capLow/capTall/capBar/capGem/...` were documented as "renderer pools mirror these".
+- Why:         Verified by repo-wide grep: `capGem` appears only in `Tuning.swift`, `GameCore.swift`
+               (reserve + the drop guard) and the new test. `Render/` never reads any of them — the
+               RealityKit renderer pools entities on demand.
+- Impact:      The stale comment made a Core-only constant look like a cross-layer change, which is
+               exactly the kind of thing that stops a future session from fixing a real defect.
+               It did: `capGem` 72 was silently dropping gems in v1.6 and nobody touched it.
+- Note:        The *measured* defect (peak demand 94 vs cap 72) is recorded on PR-0400's resolution
+               and pinned by `DifficultyCurveTests.testLiveGemCountStaysUnderThePoolCap`.
