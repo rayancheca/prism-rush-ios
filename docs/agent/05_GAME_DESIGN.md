@@ -164,16 +164,60 @@ tier.**
 ### The flow channel
 
 Held well from 0 to ~2,000 m: content arrives every few hundred metres, speed climbs steadily.
-This part is good design and should not be touched.
+This part is good design and should not be touched — and v1.7 does not touch it (act two's
+intensity is exactly zero below 3,200 m, pinned by `testActOneIsUnchangedByTheSecondAct`).
 
-Then the game runs out. **From 3,200 m to infinity, speed, density and pattern set are all
-constant.** A 4,000 m run and a 40,000 m run are the same run. The player does not exit the flow
-channel upward into anxiety; they exit downward into boredom, at roughly the two-minute mark of a
-good run.
+Then the game ran out. **From 3,200 m to infinity, speed, density and pattern set were all
+constant.** A 4,000 m run and a 40,000 m run were the same run. The player did not exit the flow
+channel upward into anxiety; they exited downward into boredom, at roughly the two-minute mark of
+a good run.
 
 **Reaction budget** is deliberately left open: it requires the renderer's true draw distance, not
 `spawnHorizon` 115 m, and reading `Render/` was out of this audit's budget. Named in §11 as the
 one number this bible still owes.
+
+### Act two — what v1.7 (S-004) changed [C, verified M]
+
+**Speed does NOT rise past the cap, deliberately.** The readable lead is hard-capped at ~65 m by
+the opaque backdrop plane (`RealityRenderer.swift:756`) — 1.97 s at 33 m/s — and pushing it back
+was tried and reverted in v1.6. Faster would be unreactable, which is a worse game, not a harder
+one. Act two is therefore a **second escalation axis over the same speed**, on four mechanisms,
+all zero-RNG and all keyed off `Spawner.intensity` (0 at 3,200 m → 1 at 9,600 m):
+
+| Mechanism | Act one | Act two |
+|---|---|---|
+| Pattern mix | uniform over all 14 | weighted table, 3 waves; breathers get rarer, nothing is ever removed |
+| Inter-pattern gap | 11 → 5 by 3,200 m, then flat | 5 → 4 by 9,600 m |
+| Moving walls (pattern 13) | phase 0 — parked at centre, both outer lanes safe forever | phase swings to ±0.75·intensity; past ~6,800 m exactly one lane is open |
+| Gem lines | one safe breadcrumb | + a greed line in a lane the pattern closes (§7) |
+
+Waves are **front-loaded** (intensity 1/6 and 1/2, i.e. 4,267 m and 6,400 m) because a good run is
+about two minutes ≈ 3,300 m: an escalation whose first real step lands at 5,300 m is one almost
+nobody meets.
+
+**Measured [M]** — `DifficultyCurveTests`, mean of 64 seeds, bands snapped to pattern boundaries
+(a fixed band grid aliases against the ~451 m cycle and manufactures a fake trend):
+
+```
+  band(m)      obst/100m  inputs/100m  gems/100m  priced%  rest%   phase
+      0- 1200       5.28         3.01       41.2     0.7%  35.9%   act 1
+   1200- 2400       5.61         3.68       42.2    10.5%  28.4%   act 1
+   2400- 3200       6.02         3.93       42.2    13.3%  27.1%   act 1  ← the old plateau
+   3200- 4267       6.40         4.42       39.5    11.4%  19.4%   act 2 w1
+   4267- 6400       7.49         4.80       38.6    13.8%  12.6%   act 2 w2
+   6400- 9600       7.63         4.44       40.4    14.6%  12.4%   act 2 w3
+```
+
+Against the plateau: **obstacles +27%, Autopilot inputs +13%, obstacle-free track −54%.**
+For comparison, v1.6 measured 5.7 obst/100 m, 3.4 inputs/100 m and ~32% rest flat across the
+entire 3,000–8,000 m stretch, with no trend in any column.
+
+`obst/100m` for act one reproduces independently: a closed-form sum over the catalogue's lengths
+at the cap gives 5.99 against the instrument's 6.02.
+
+**What is still flat, honestly:** speed, score-per-metre, and the world cosmetics' rate of change.
+Act two buys *density and decisions*, not pace. Whether that is enough to hold a player past five
+minutes is not something a headless instrument can answer — it needs playtesting.
 
 ---
 
@@ -186,15 +230,18 @@ The persona's own test: *if the answer is "nothing after run 20", that is why th
 | Lane change / jump / slide | run 1–2 (taught explicitly) |
 | Reading the 14 patterns | run 10–20 — finite catalogue, fully unlocked at 1,920 m |
 | Slide timing (SLICK) | run 5–15 — the only continuous-timing skill |
-| Gem routing | run 5 — `Spawner.safeEntryLane` guarantees the breadcrumb is takeable |
+| Gem routing | ~~run 5~~ → **open-ended since v1.7**: past 1,440 m the greed line and the safe line diverge, so routing is a live risk/reward call rather than a guarantee |
 | Ring aiming | run 10 |
 | Near-miss courting | run 20 |
 | Power-up timing | run 5 |
+| Reading a swung moving wall | **new in v1.7** — past ~6,800 m the safe lane must be read, not remembered |
 
-**After run ~20 the game has nothing left to teach.** The evidence is structural:
+**After run ~20 the game has nothing left to teach.** The evidence was structural:
 
 1. The pattern catalogue is 14 entries, fully unlocked at 1,920 m (`Spawner.maxIndex`).
-2. Difficulty is flat past 3,200 m (`Tuning.diffFullAt`) — confirmed measured [M].
+   **Still true** — v1.7 shifts the mix, it does not add a 15th pattern.
+2. ~~Difficulty is flat past 3,200 m (`Tuning.diffFullAt`)~~ — **addressed in v1.7 (S-004)**: see
+   §3's act-two table. Obstacle density, input load and rest share all move to 9,600 m now.
 3. **The survival layer requires zero reward-layer reasoning.** `Core/Autopilot.swift` reads only
    `c.activeObstacles` — grepping the file for `activeGems`, `activePickups`, `gemCount`, `score`
    and `bonus` returns **zero occurrences**. A fixed greedy policy with a 30-unit horizon
@@ -202,7 +249,15 @@ The persona's own test: *if the answer is "nothing after run 20", that is why th
    (`SolvabilityBotTests.swift:17-26`). No routing decision, no resource decision, no risk/reward
    trade is required to survive anything the game can generate.
 
-Points 1–2 carry the SEV1. → **PR-0400 (SEV1)**.
+   **Still true of the SURVIVAL layer after v1.7, and deliberately so** — the bot must stay green,
+   that is iron rule 2. What changed is that surviving is no longer the same as *scoring*: the
+   greed line pays roughly 2× the safe breadcrumb and costs a timed lane exit, so the bot's
+   permanently-safe policy is now a permanently *poor* one. That is a real risk/reward trade for a
+   human, and it is invisible to the bot — which is also why `SolvabilityBotTests` cannot certify
+   it, and why `testEveryGreedGemLeavesATakeableExit` exists as a separate fairness proof.
+
+~~Points 1–2 carry the SEV1.~~ → **PR-0400: point 2 fixed in S-004 (v1.7)**; point 1 stands (the
+catalogue is still 14) and is now the residual argument for a 15th pattern, filed separately.
 
 **Correction, recorded so it is not overstated later.** "A bot beats it, therefore there is no
 skill ceiling" is a *category error* and this bible does not make that claim. The bot has perfect
@@ -348,7 +403,8 @@ the guard the code comment claims is real. **This is a pass. Do not re-file it.*
 
 | Reward | Schedule | Note |
 |---|---|---|
-| Gems | fixed-ratio | 1 coin each, always |
+| Gems (safe breadcrumb) | fixed-ratio | 1 coin each, always |
+| **Gems (greed line, v1.7)** | **fixed-ratio, player-gated** | 1 coin each, but only if you take the risk — see below |
 | CLOSE / SLICK | fixed-ratio | deterministic on geometry |
 | Flow surge | **fixed-ratio, every 3rd** | `flowPerSurge` 3 — a metronome, not a schedule |
 | Multiplier | fixed, capped | below |
@@ -361,6 +417,22 @@ deterministic function of geometry and state. That is admirable honesty (decree 
 why the run loop has no pull: there is no "one more run, it might be the good one" — the good run
 is fully determined by how well you play, and past run 20 you know how well you play. The single
 variable-ratio hook is a 300-coin gacha two menu taps away; it reinforces *menu visits*, not play.
+
+**v1.7 amendment (S-004, PR-0414).** This still holds — nothing in the run loop became random, and
+deliberately so (invariant 1 and decree 5 both push the other way). But the sentence "the good run
+is fully determined by how well you play" now means something better than it did. Before v1.7 the
+coin line was routed into `safeEntryLane` before every pattern, so **no gem in the catalogue
+required entering an unsafe lane**: greed and survival were the same input, and "how well you
+play" collapsed to execution alone. Since v1.7, past `riskGemsFrom` (1,440 m) a second gem line is
+hung in a lane the pattern *closes*, ending one planned swerve short of the wall
+(`riskExitSeconds` 0.30 s, constant in time so the commitment is identical at 17 m/s and at the
+cap). The safe breadcrumb is still there and still takeable — the player chooses. Measured: 0.7%
+of gems are priced in risk before the gate, 13–15% after it.
+
+That is a *decision*, not a variable-ratio hook, and it is the honest version of one. The
+open question this bible cannot answer is whether a deterministic decision generates the same
+"one more run" pull that a variable-ratio schedule does. It probably does not, fully — but decree
+5 rules out the alternative, and a real choice beats no choice.
 
 ### The multiplier is not a system — it is a loading bar
 

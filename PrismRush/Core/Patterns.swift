@@ -66,6 +66,26 @@ enum Patterns {
 
     private static func otherLanes(_ l: Int) -> [Int] { [0, 1, 2].filter { $0 != l } }
 
+    /// Phase for moving wall `index` of pattern 13 at base distance `b` (v1.7, PR-0400).
+    ///
+    /// Act one returns 0 for both walls: each parks dead centre on its collision plane, leaving BOTH
+    /// outer lanes permanently safe. That was deliberate for readability, and it made the game's
+    /// exclusive tier-5 unlock its *easiest* late pattern — one input, two right answers, forever.
+    /// Act two swings the walls to opposite sides in proportion to `Spawner.intensity`, so exactly
+    /// one lane stays open past ~6,800 m and the player has to read which. Ramped, not switched:
+    /// at 3,200 m the swing is zero and the pattern is byte-identical to v1.6.
+    ///
+    /// Pure f(b) — consumes ZERO RNG, so pattern 13's pinned call count of 0 (`PatternOrderTests`)
+    /// is unchanged and the seeded obstacle stream is untouched.
+    static func wallPhase(at b: Double, index: Int) -> Double {
+        let i = Spawner.intensity(forDistance: b)
+        guard i > 0 else { return 0 }
+        // Opposite sides so the pair reads as a weave. Wall 0 swings positive (closing lane 2, and
+        // its breadcrumb is already in lane 0); wall 1 swings negative (closing lane 0, breadcrumb
+        // in lane 2). sin(0.75)·1.6 = 1.09 at full swing, so the open lane keeps ≥ 3.0 u of clearance.
+        return (index == 0 ? 1 : -1) * i * Tuning.wallPhaseSwingActTwo
+    }
+
     // MARK: dispatch
 
     /// Run pattern `idx` (0-based) at `base`, returning its length. Per-pattern RNG call counts
@@ -125,8 +145,10 @@ enum Patterns {
             return 18
 
         case 8:  // double bar 9 apart — a CONTINUOUS centre coin trail traces the slide path through
-                 // both bars (v1.6: coins mark a takeable route THROUGH the obstacle, not just after).
-                 // Bars are full-width slides, so the centre lane is always safe. Zero RNG.
+                 // both bars, so the formation reads as one committed route rather than gems either
+                 // side of an obstacle. Bars are full-width slides: they close no LANE, so this
+                 // pattern prices nothing and offers no greed line (D-006 — structure was always the
+                 // intent; safety is only guaranteed where the geometry guarantees it). Zero RNG.
             out.append(.bar(d: b + 6)); out.append(.bar(d: b + 15))
             gemLine(b + 1, 1, 3, &out)      // run-up into the first bar
             gemLine(b + 10, 1, 2, &out)     // between the bars
@@ -160,7 +182,9 @@ enum Patterns {
                  // catalogue's one human-unfair adjacency. Widened to 27u (≥0.8s at the cap) by pushing
                  // the triple low + its arc telegraph later; the bar stays put and the arc's gem 0 stays
                  // 4u ahead of the low (the cued jump telegraph). A free-lane coin trail marks the safe
-                 // lane through the talls (coins are the path). All ZERO-RNG (only the lane draw) — the
+                 // lane through the talls; past `riskGemsFrom` the spawner also hangs a greed line in
+                 // one of the CLOSED lanes, so this is the pattern where the two routes diverge most
+                 // (D-006 — coins are structure, not a safety guarantee). All ZERO-RNG (only the lane draw) — the
                  // obstacle RNG is byte-identical; the moved/added entities ride DailyChallenge v5→6.
             let free = rng.int(0, 2); let o = otherLanes(free)
             out.append(.tall(d: b + 6, lane: o[0])); out.append(.tall(d: b + 6, lane: o[1]))
@@ -179,11 +203,15 @@ enum Patterns {
             if rng.chance(0.35) { out.append(.chrono(d: b + 17, lane: open)) }
             return 22
 
-        case 13: // moving walls x2 — phase 0 puts each wall at CENTER on its collision plane, so the
-                 // gem-lined outer lanes (0 and 2) are always the safe, readable escape. The wall still
-                 // oscillates visually on approach; amplitude 1.6 guarantees a clear lane. LAST (rule 4).
-            out.append(.movingTall(d: b + 9, phase: 0)); gemLine(b + 1, 0, 3, &out)
-            out.append(.movingTall(d: b + 22, phase: 0)); gemLine(b + 14, 2, 3, &out); return 32
+        case 13: // moving walls x2. In ACT ONE phase 0 puts each wall at CENTER on its collision
+                 // plane, so the gem-lined outer lanes (0 and 2) are always the safe, readable
+                 // escape. In ACT TWO the phase swings apart (v1.7 — see `wallPhase`), closing one
+                 // outer lane and making the safe side something to read rather than remember; the
+                 // existing breadcrumbs already sit on the correct side of each swing. The wall
+                 // still oscillates visually on approach; amplitude 1.6 guarantees a clear lane.
+                 // LAST in the catalogue (rule 4).
+            out.append(.movingTall(d: b + 9, phase: wallPhase(at: b, index: 0))); gemLine(b + 1, 0, 3, &out)
+            out.append(.movingTall(d: b + 22, phase: wallPhase(at: b, index: 1))); gemLine(b + 14, 2, 3, &out); return 32
 
         default:
             return 14

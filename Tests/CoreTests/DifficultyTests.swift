@@ -4,18 +4,84 @@ import XCTest
 @MainActor
 final class DifficultyTests: XCTestCase {
 
-    /// The inter-pattern gap shrinks monotonically from 11 → 5 as distance grows.
+    /// The inter-pattern gap shrinks monotonically: 11 → 5 across act one, then 5 → 4 across act two
+    /// (v1.7 — before that it floored at `gapMin` and never moved again).
     func testGapMonotonicDown() async {
         var prev = Double.infinity
-        for d in stride(from: 0.0, through: 6400, by: 25) {
+        for d in stride(from: 0.0, through: 12_000, by: 25) {
             let g = Spawner.gap(forDistance: d)
             XCTAssertLessThanOrEqual(g, prev + 1e-9, "gap must not increase at d=\(d)")
-            XCTAssertGreaterThanOrEqual(g, Tuning.gapMin - 1e-9)
+            XCTAssertGreaterThanOrEqual(g, Tuning.gapFloorActTwo - 1e-9, "gap fell through its floor at d=\(d)")
             XCTAssertLessThanOrEqual(g, Tuning.gapMax + 1e-9)
             prev = g
         }
         XCTAssertEqual(Spawner.gap(forDistance: 0), Tuning.gapMax, accuracy: 1e-9)
+        // The two acts must meet exactly at the seam — no step, no kink.
         XCTAssertEqual(Spawner.gap(forDistance: Tuning.diffFullAt), Tuning.gapMin, accuracy: 1e-9)
+        XCTAssertEqual(Spawner.gap(forDistance: Tuning.actTwoAt), Tuning.gapMin, accuracy: 1e-9)
+        XCTAssertEqual(Spawner.gap(forDistance: Tuning.actTwoFullAt), Tuning.gapFloorActTwo, accuracy: 1e-9)
+        // …and the floor holds forever after.
+        XCTAssertEqual(Spawner.gap(forDistance: 100_000), Tuning.gapFloorActTwo, accuracy: 1e-9)
+    }
+
+    /// Act one must be untouched by v1.7: the second axis is exactly zero before `actTwoAt`, so the
+    /// flow channel the design bible calls "good design and should not be touched" is bit-identical.
+    func testActOneIsUnchangedByTheSecondAct() async {
+        for d in stride(from: 0.0, through: Tuning.actTwoAt, by: 25) {
+            XCTAssertEqual(Spawner.intensity(forDistance: d), 0, accuracy: 1e-12,
+                           "act two must not start before \(Tuning.actTwoAt) (d=\(d))")
+            XCTAssertNil(Spawner.pool(forDistance: d), "act one draws uniformly, with no table (d=\(d))")
+            XCTAssertEqual(Patterns.wallPhase(at: d, index: 0), 0, accuracy: 1e-12)
+            XCTAssertEqual(Patterns.wallPhase(at: d, index: 1), 0, accuracy: 1e-12)
+        }
+    }
+
+    /// Act two's intensity is monotone, bounded, and actually reaches full.
+    func testSecondActIntensityRamp() async {
+        var prev = -Double.infinity
+        for d in stride(from: 0.0, through: 20_000, by: 25) {
+            let i = Spawner.intensity(forDistance: d)
+            XCTAssertGreaterThanOrEqual(i, prev - 1e-9, "intensity must not fall at d=\(d)")
+            XCTAssertGreaterThanOrEqual(i, 0)
+            XCTAssertLessThanOrEqual(i, 1)
+            prev = i
+        }
+        XCTAssertEqual(Spawner.intensity(forDistance: Tuning.actTwoFullAt), 1, accuracy: 1e-9)
+    }
+
+    /// Every wave keeps the WHOLE catalogue reachable — act two shifts the mix, it never deletes a
+    /// pattern. The breather beats (0, 10) and the reward beats (9's ring, 10's runway) must survive
+    /// to any depth, or a shipped feature silently stops existing in long runs.
+    func testEveryWaveKeepsTheFullCatalogueReachable() async {
+        for d in [3_300.0, 5_000, 6_500, 9_600, 25_000] {
+            guard let pool = Spawner.pool(forDistance: d) else {
+                return XCTFail("expected an act-two pool at d=\(d)")
+            }
+            for idx in 0..<Patterns.count {
+                XCTAssertTrue(pool.contains(idx),
+                              "pattern \(idx) fell out of the draw table at d=\(d)")
+            }
+            XCTAssertTrue(pool.allSatisfy { $0 >= 0 && $0 < Spawner.maxIndex(forDistance: d) },
+                          "the pool must stay inside the unlocked prefix at d=\(d)")
+        }
+    }
+
+    /// A moving wall must always leave at least one lane genuinely open, at every phase act two can
+    /// produce and everywhere across its sweep through the kill band. This is the fairness floor the
+    /// whole swung-phase idea rests on.
+    func testSwungMovingWallsAlwaysLeaveALaneOpen() async {
+        for d in stride(from: Tuning.actTwoAt, through: 40_000, by: 100) {
+            for index in 0...1 {
+                let phase = Patterns.wallPhase(at: d, index: index)
+                // Sweep the kill band: the wall travels ±(movingWallFreq × obstacleZHalf × 2).
+                for step in -10...10 {
+                    let swept = phase + Double(step) / 10 * Tuning.movingWallFreq * Tuning.obstacleZHalf * 2
+                    let open = (0..<3).filter { !Spawner.movingWallLanes(swept).contains($0) }
+                    XCTAssertFalse(open.isEmpty,
+                                   "no open lane at d=\(d) wall=\(index) phase=\(swept)")
+                }
+            }
+        }
     }
 
     /// Pattern-availability gates open at the documented distances (v1.3 five-tier ladder).

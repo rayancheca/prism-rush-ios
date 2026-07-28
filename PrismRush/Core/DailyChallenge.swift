@@ -20,7 +20,14 @@ enum DailyChallenge {
     /// a free-lane coin trail; zero RNG, but moved/added entities reshuffle the shared track).
     /// layoutVersion 7 = v1.6 (anti-repeat widened to the last TWO patterns — varies the seeded
     /// selection stream — plus a continuous coin trail through pattern 8's double bars).
-    static func seed(year: Int, month: Int, day: Int, layoutVersion: UInt64 = 7) -> UInt64 {
+    /// layoutVersion 8 = v1.7 — THE SECOND ACT (PR-0400) + RISK-PRICED GEMS (PR-0414), landed
+    /// together in one bump because both touch the spawn path and two bumps would buy nothing.
+    /// Past 3,200 m the pattern draw moves to a weighted table (the same single `rng.int` call, but
+    /// the slot resolves through a mix that sheds breather beats with depth), the gap continues
+    /// 5 → 4, moving walls swing off centre, and a second gem cluster is hung in a lane each
+    /// pattern closes. Act one's *selection* is byte-identical to v7; the shared track still
+    /// reshuffles, because a layout version is a promise about the whole run.
+    static func seed(year: Int, month: Int, day: Int, layoutVersion: UInt64 = 8) -> UInt64 {
         let folded = UInt64(year * 10_000 + month * 100 + day)
         var mix = SplitMix64(seed: folded ^ tag ^ (layoutVersion << 48))
         return mix.next()

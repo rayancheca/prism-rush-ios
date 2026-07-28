@@ -80,8 +80,13 @@ enum Tuning {
     static let bankRate: Double = 0.32, bankLerp: Double = 10, slideLerp: Double = 20
     static let landSquashY: Double = 0.68, airStretchY: Double = 1.18, airHoldY: Double = 1.12
 
-    // Pool caps — bound the live entity count (renderer pools mirror these).
-    static let capLow = 18, capTall = 14, capBar = 6, capGem = 72, capShield = 4, capMagnet = 4
+    // Pool caps — bound the live entity count. (`capGem` is Core-only: the RealityKit renderer pools
+    // gems on demand and never reads this, so raising it costs nothing but a few more unlit
+    // octahedra.) v1.7: 72 → 112. Measured peak concurrent demand inside the 115 m spawn horizon is
+    // 94, so 72 was silently dropping up to 22 gems per frame at `GameCore.apply` — a defect that
+    // predates v1.7 (v1.6 also pegged the cap) and that would have punched holes in the new greed
+    // line. Pinned by `DifficultyCurveTests.testLiveGemCountStaysUnderThePoolCap`.
+    static let capLow = 18, capTall = 14, capBar = 6, capGem = 112, capShield = 4, capMagnet = 4
     static let capDoubler = 2, capChrono = 2, capSplitBar = 6, capSuperSneakers = 2
 
     // MARK: v1.3 mechanics
@@ -122,4 +127,56 @@ enum Tuning {
     static let fountainGems: Int = 10
     static let fountainLead: Double = 26
     static let fountainSpacing: Double = 1.7
+
+    // MARK: v1.7 — the second act (PR-0400)
+
+    // Act one saturates and then stops: `speedCap` is reached at 3,077 m, `maxIndex` opens the last
+    // pattern at 1,920 m, and the gap floors at `diffFullAt`. Before v1.7 a 4,000 m run and a
+    // 40,000 m run were the same run (measured on device, session 003). Act two is a SECOND
+    // escalation axis over the same speed: the pattern mix sheds its breather beats, the gap keeps
+    // closing on a shallow curve, and the moving walls stop parking in the centre.
+    //
+    // Speed deliberately does NOT rise. The readable lead is hard-capped at ~65 m by the backdrop
+    // plane (RealityRenderer.swift:756) — 1.97 s at the cap — and pushing it back was tried and
+    // reverted in v1.6. Faster would be unreactable, which is a worse game, not a harder one.
+    static let actTwoAt: Double = diffFullAt          // 3,200 m — exactly where act one stops moving
+    static let actTwoFullAt: Double = 9_600           // world 12, where the palette cycle evolves
+    /// Act two's gap floor: act one lerps 11 → 5 by `diffFullAt`, act two continues 5 → 4.
+    /// Deliberately shallow. The catalogue's tightest cross-pattern adjacency is pattern 8's
+    /// trailing clearance (9 u) + gap + pattern 5's leading obstacle (5 u); at gap 4 that is still
+    /// 18 u ≈ 0.55 s at the cap — looser than adjacencies act one already ships *inside* a pattern
+    /// (pattern 5's talls are 9 u apart). Density comes from the mix, not from crowding the seams.
+    static let gapFloorActTwo: Double = 4
+    /// Moving walls (pattern 13) spawn at phase 0 in act one, which parks them dead centre on their
+    /// collision plane and leaves BOTH outer lanes permanently safe — verified the easiest late
+    /// pattern in the catalogue despite being the exclusive tier-5 unlock. In act two the phase
+    /// swings out to ±this (scaled by intensity) so the safe lane has to be read, not memorised.
+    /// Bounded: sin(0.75)·1.6 = 1.09, so one outer lane always keeps ≥ 3.0 u of clearance.
+    static let wallPhaseSwingActTwo: Double = 0.75
+
+    // MARK: v1.7 — risk-priced gems (PR-0414 / D-006)
+
+    /// Gems stay entirely safe until here — `midDiff × diffFullAt`, the tier that opens the gauntlet
+    /// and the split bar, by which point every verb has been taught. D-006's revisit clause asks for
+    /// risk to be gated behind a distance threshold rather than shipping a punishing early game.
+    static let riskGemsFrom: Double = 1_440
+    /// The greed line stops this many SECONDS of travel short of the lane it occupies closing.
+    /// Constant in time, so the exit is the same commitment at 17 m/s and at the cap (a planned
+    /// swerve, never a reaction — clearing a lane takes ~0.06 s of lane lerp).
+    static let riskExitSeconds: Double = 0.30
+    static let riskExitMinLead: Double = 7
+    /// Bounds on the greed line so it stays a legible detour, not a second economy. At most 6 gems
+    /// against the safe breadcrumb's 2–3: roughly a 2× price for the risk.
+    static let riskGemsMin = 3, riskGemsMax = 6
+    static let riskGemSpacing: Double = 1.7
+    /// How far the greed line may run BACK past the start of the inter-pattern gap, into the empty
+    /// tail of the pattern before it. Most patterns close a lane within ~7 u of their start, and the
+    /// gap is only 4–5 u, so without this the line has nowhere to live and almost never appears.
+    /// 8.5 u is `(riskGemsMax − 1) × riskGemSpacing` — the exact length of a full line — and stays
+    /// inside the catalogue's smallest trailing clearance (9 u, pattern 8), so it can never reach
+    /// back into the previous pattern's obstacles.
+    static let riskLineReach: Double = 8.5
+    /// A greed gem this close to an obstacle is dropped — the line simply breaks around a low you
+    /// have to jump, rather than rendering a gem inside it.
+    static let riskGemClearance: Double = 1.5
 }

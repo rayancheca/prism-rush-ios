@@ -189,9 +189,11 @@ final class MissionsTests: XCTestCase {
 
     func testTodaysChallengeSeedMatchesUTCGoldens() async {
         let store = ProfileStore(testing: Profile())
-        // Goldens pinned in DailyChallengeTests (layoutVersion 7 as of v1.6 — anti-repeat-2 + coins).
-        XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 10)), 0xA7A5_9815_BF47_186A)
-        XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 11)), 0xF0F4_337E_40DF_9E9F)
+        // Goldens pinned in DailyChallengeTests (layoutVersion 8 as of v1.7 — the second act +
+        // risk-priced gems). These must track that file: the daily leaderboard is only meaningful
+        // if every player on a date gets the same track from the same layout version.
+        XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 10)), 0x2FC8_A9EA_C0B9_E30F)
+        XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 11)), 0xBFF2_6A8C_F071_4E3A)
         // 23:59 and 00:01 straddle UTC midnight → different tracks.
         XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 10, 23, 59)),
                        store.todaysChallengeSeed(now: utc(2026, 6, 10, 0, 1)))

@@ -19,8 +19,6 @@ enum Autopilot {
     static let reach: Double = 30
 
     static func decide(_ c: GameCore) -> Decision {
-        let laneX = Tuning.laneX
-
         // 1) Lane choice: score each lane by the distance to the nearest *blocking* obstacle
         //    (a tall in that lane, or a moving wall predicted to arrive over it). Higher = safer.
         var laneScore = [Double](repeating: .infinity, count: 3)   // distance to nearest upcoming tall
@@ -36,10 +34,11 @@ enum Autopilot {
                 // slide-commit below remains the fallback when the gap can't be reached in time.
                 lanes = [0, 1, 2].filter { $0 != o.lane }
             case .movingTall:
-                // At the collision plane (dist ≈ d) the wall sits at sin(phase)*amplitude; widen the
-                // blocked band to cover its sweep across the ~1.9-unit kill depth.
-                let ax = sin(o.phase) * Tuning.movingWallAmplitude
-                lanes = (0..<3).filter { abs(laneX[$0] - ax) < Tuning.laneHitHalfWidth + 0.7 }
+                // At the collision plane (dist ≈ d) the wall sits at sin(phase)*amplitude; the
+                // blocked band is widened to cover its sweep across the ~1.9-unit kill depth.
+                // Shared with the spawner so the bot and the coin lines can never disagree about
+                // which lanes a swung act-two wall closes.
+                lanes = Spawner.movingWallLanes(o.phase)
             default:
                 continue
             }
