@@ -214,7 +214,7 @@ locked skin render owned-bright. Spend coins without a preview first.
 | `UI/HowToPlayView.swift` | 289 | Five-card swipeable tutorial. Dual mode: info-only, or the pre-first-run gate whose final button commits the deferred run. |
 | `UI/ProfileView.swift` | 285 | Progression home: level card + settings gear, Sign in with Apple card, three stats states, Game Center row. |
 | `UI/HUDView.swift` | 272 | Non-interactive in-run readout: meters/score, ghost-chase chip, gem·mult pill, power-up chips, flow pips, live XP bar. |
-| `UI/RewardsBar.swift` | 255 | Hub 3-cell rail (Daily Rush / Rewards / Missions) + the 280 pt rewards mini-sheet. |
+| `UI/ClaimRibbon.swift` | 295 | **Replaced `RewardsBar.swift` in S-005 (PR-0452).** The hub's claim ribbon (`railRewards`: full-width gold bar when the daily bonus or free chest is claimable, slim tertiary strip when not) + `DailyRushLauncher` (`railDaily`, sits beside PLAY) + the 280 pt rewards mini-sheet. Missions moved out entirely — it is a nav-rail exit on `MenuView` now. |
 | `UI/SettingsView.swift` | 242 | Three volume sliders, haptics + reduce-flash toggles, Power-Ups / How to Play / Restore Purchases rows, tappable version row. |
 | `UI/MysteryBoxView.swift` | 198 | Gacha reveal overlay: honest odds table → OPEN (spend) → wobble/burst → reward. |
 | `UI/EffectsOverlay.swift` | 186 | Screen-space juice: rising popups, world banner, white flash, shield-break glass crack. |
@@ -973,7 +973,7 @@ is currently unused, but a discarded one makes removal permanently impossible.
 
 | Singleton | Declared | Who mutates it | From which domain | Risk |
 |---|---|---|---|---|
-| `ProfileStore.shared` | `Meta/ProfileStore.swift:10` | `mutate(_:)` (`:90-93`) is the **single write funnel** — every persistence side effect in the app originates there. Callers: `GameModel` (run start / death / deploy / mute / skin), `IAPCatalog.apply`/`restore` (`IAP/IAPCatalog.swift:47,66`), `SettingsView`, `ShopView`, `MysteryBoxView`, `LevelSelectView`, `MissionsView`, `CharacterSelectView`, and `mergeFromCloud()` (`:697`) | MainActor only | **Both a test blocker and a re-entrancy hazard.** Every `mutate` synchronously runs `JSONEncoder().encode` → `UserDefaults.standard.set` → `cloud.set` → `cloud.synchronize()` (`:620-627`), with no debounce. And it is called **from inside SwiftUI view bodies**: `RewardsBar.swift:23` → `unclaimedCount(now:)` (`:558-564`) → `refreshDailyMissions` (`:385`) / `refreshWeeklyMissions` (`:408`), each of which can `mutate`; same shape at `MissionsView.swift:41,43`. Converges today only because `refreshDailyMissions` early-returns once the stored UTC day matches (`:387`) |
+| `ProfileStore.shared` | `Meta/ProfileStore.swift:10` | `mutate(_:)` (`:90-93`) is the **single write funnel** — every persistence side effect in the app originates there. Callers: `GameModel` (run start / death / deploy / mute / skin), `IAPCatalog.apply`/`restore` (`IAP/IAPCatalog.swift:47,66`), `SettingsView`, `ShopView`, `MysteryBoxView`, `LevelSelectView`, `MissionsView`, `CharacterSelectView`, and `mergeFromCloud()` (`:697`) | MainActor only | **Both a test blocker and a re-entrancy hazard.** Every `mutate` synchronously runs `JSONEncoder().encode` → `UserDefaults.standard.set` → `cloud.set` → `cloud.synchronize()` (`:620-627`), with no debounce. And it is called **from inside SwiftUI view bodies**: `MenuView.swift` navRail → `unclaimedCount(now:)` (`:558-564`) → `refreshDailyMissions` (`:385`) / `refreshWeeklyMissions` (`:408`), each of which can `mutate`; same shape at `MissionsView.swift:41,43`. **S-005 moved the `RewardsBar` call site — it is now `MenuView`'s `navRail`, inside a 60 s `TimelineView`; the hazard moved, it did not go away**. Converges today only because `refreshDailyMissions` early-returns once the stored UTC day matches (`:387`) |
 | `IAPManager.shared` | `IAP/IAPManager.swift:26` | its own async methods; the `Transaction.updates` loop (`:201-212`) | MainActor | Medium — network-dependent state, StoreKit-driven, not deterministic |
 | `GameCenterService.shared` | `Services/GameCenterService.swift:9` | `authenticated` written at `:22` — **from inside an instance method, via the singleton rather than `self`**. Harmless while `.shared` is the only instance; a second instance could never observe its own auth state (trace-findings #9, SEV3) | MainActor (assumed — the UNPROVEN row) | Low |
 | `AccountService.shared` | `Services/AccountService.swift:8` | `handle(_:)` (`:60`), `signOut()` (`:82`), the credential-state hop (`:42-52`) | MainActor via an explicit `Task { @MainActor }` | Low |
@@ -1111,7 +1111,7 @@ between `SplashView.body:20` and `GameView.swift:157`/`:199` — see §6.7.
 | Entrance | Call | file:line |
 |---|---|---|
 | MenuView PLAY | `model.startRun()` | `GameView.swift:1099` |
-| Rewards rail → DAILY RUSH | `model.startDailyChallenge()` | `GameView.swift:433-439` (wired through `RewardsBar`) |
+| Hub → DAILY (beside PLAY) | `model.startDailyChallenge()` | `GameView.swift:433-439` (wired through `MenuView`'s `onDailyRush` closure into `DailyRushLauncher`; was the rail's cell in `RewardsBar`) |
 | Worlds → PLAY FROM HERE / world card | `model.startRun(fromWorld:)` | wired through `LevelSelectView` |
 | Game-over RUN AGAIN | `model.startRun()` — always `fromWorld: 0` | `GameView.swift:1116` (PR-0259, PR-0011) |
 
@@ -1580,7 +1580,7 @@ The minimum for a first death with no rollovers, no level-up, no challenge and n
 **2** (`recordRun` + the `applyRunSummary` body); the maximum is **7**. A post-revive death produces
 exactly **1** (`GameView.swift:728`).
 
-**Reading can also write.** `RewardsBar.swift:23` calls `store.unclaimedCount(now:)` from inside a
+**Reading can also write.** `MenuView`'s `navRail` (was `RewardsBar.swift:23`) calls `store.unclaimedCount(now:)` from inside a
 `TimelineView` body; `unclaimedCount` (`ProfileStore.swift:558`) reaches `refreshDailyMissions` /
 `refreshWeeklyMissions`, both of which `mutate` on a rollover. Same shape at `MissionsView.swift:41,43`.
 This is a state mutation during view evaluation of the observed object (PR-0006). It converges today
@@ -2411,7 +2411,7 @@ spacing shrinks, two milestone popups render on the identical shared anchor (`wo
 
 - **INV-67 (UI/observation, iron rule 5 "G3")** — no surface `@State`s a shared `@Observable`, and no
 `body` snapshots `store.profile` into a `let` at the top. Reads are either scalars at point of use or
-the *store reference* itself (`MissionsView.swift:31`, `RewardsBar.swift:20` are the reference form and
+the *store reference* itself (`MissionsView.swift:31`, and `ClaimRibbon`/`MenuView` since S-005, are the reference form and
 are safe).
 *Breaks if:* a session hoists `let p = ProfileStore.shared.profile` to the top of a `body`, or writes
 `@State private var store = ProfileStore.shared` — observation stops tracking and the view silently
@@ -2978,7 +2978,7 @@ not here — they live in `03_BACKLOG.md`. Every line below was re-checked again
 - **The hub is not a `NavigationStack` and meta screens are not `.sheet`s** — they are ZStack layers
   switched by `model.activeSheet` (`GameView.swift:1145`), which is why Profile → Settings works by
   swapping the enum. The only real system sheet in the meta layer is `RewardsMiniSheet`
-  (`UI/RewardsBar.swift:38`). Meta sheets also render over the death panel, deliberately.
+  (`UI/ClaimRibbon.swift`, the rewards mini-sheet). Meta sheets also render over the death panel, deliberately.
 - **The reward toast and tutorial hint are animated at the ZStack root**
   (`GameView.swift:1218-1219`), so those two value changes apply an implicit animation to *every*
   sibling — the `RealityView` container included.
@@ -3012,7 +3012,7 @@ not here — they live in `03_BACKLOG.md`. Every line below was re-checked again
 - **Reading the missions UI writes to disk.** `dailyMissions`, `weeklyMissions`, `unclaimedCount`,
   `claimMission` and `openFreeChest` all call `refreshDailyMissions`/`refreshWeeklyMissions`, which
   `mutate` → `save()` → `UserDefaults.set` + `cloud.set` + `cloud.synchronize()` on a day/week
-  rollover. `RewardsBar.swift:23` calls `unclaimedCount(now:)` **from inside `body`**.
+  rollover. `MenuView`'s `navRail` calls `unclaimedCount(now:)` **from inside `body`** (was `RewardsBar.swift:23`).
 - **`ProfileStore.load` prefers iCloud over local with no merge** (`Meta/ProfileStore.swift:700-708`).
   `merged()` (`:657-689`) is only ever reached from the external-change notification, never at launch.
 - **`merged()` keeps the local value for every field it does not name** (`var merged = local`,

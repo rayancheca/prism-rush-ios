@@ -101,15 +101,15 @@ format before work starts.** Filed as `PR-0001`.
 - Verification: Test: stale cloud + newer local → merged result keeps the local progress.
 
 ## PR-0006 · SEV1 · Reading the rewards bar mutates and saves the profile from inside `body`
-- Area:        Meta/ProfileStore, UI/RewardsBar
+- Area:        Meta/ProfileStore, UI/MenuView (was UI/RewardsBar, deleted in S-005)
 - Found by:    S-001 (survey: meta-iap)
 - Status:      OPEN
 - Symptom:     Potential "modifying state during view update" behaviour, and an unpredictable extra disk + iCloud write on a UTC rollover while the hub is on screen.
 - Repro:       Be on the hub across a UTC midnight with the rewards bar visible.
-- Why:         `RewardsBar.swift:23` calls `ProfileStore.unclaimedCount(now:)`; that path (`ProfileStore.swift:558`) can reach `refreshDailyMissions` → `mutate` → `save()` + `cloud.synchronize()`. A `body` evaluation writes an `@Observable`.
+- Why:         `MenuView.swift` navRail calls `ProfileStore.unclaimedCount(now:)` (was `RewardsBar.swift:23`); that path (`ProfileStore.swift:558`) can reach `refreshDailyMissions` → `mutate` → `save()` + `cloud.synchronize()`. A `body` evaluation writes an `@Observable`.
 - Impact:      Classic SwiftUI reentrancy hazard; the repo has shipped three bugs from this family already (CLAUDE.md rule 5).
 - Fix sketch:  Split the query into a pure read used by `body` and an explicit refresh driven by `.task`/`.onAppear`/a timer. Never let a `body`-reachable call mutate.
-- Blast radius: `UI/RewardsBar.swift`, `Meta/ProfileStore.swift`.
+- Blast radius: `UI/MenuView.swift`, `Meta/ProfileStore.swift`.
 - Verification: Grep every `body`-reachable `ProfileStore` call for a `mutate` path; add a comment marking the read-only entry points.
 
 ## PR-0007 · SEV1 · `ProcessInfo.systemUptime` is a required-reason API and is not declared in the privacy manifest
@@ -617,7 +617,7 @@ Compact format (see the note at the top). Expand to the full block before workin
 | PR-0131 | `timeSurvived` is accumulated every frame, plumbed to `GameOverView`, and never displayed | `GameView.swift:267, 1120`, `GameOverView.swift:27` | Show it or remove the plumbing |
 | PR-0132 | `@State private var model = GameModel()` allocates a throwaway `GameModel` on every `GameView` struct init | `GameView.swift:915` | Construct lazily or hoist ownership |
 | PR-0133 | The autoplay bootstrap bypasses `beginRun`, skipping watermark and stats initialisation | `GameView.swift:212-217` | Route autoplay through `beginRun` |
-| PR-0134 | `rewards:` is still an `AnyView`, the exact shape that severed `@Observable` tracking and shipped a "Head Start does nothing" bug | `GameView.swift:1105`, cf. `MenuView.swift:20-23` | Make it a concrete generic like `loadout` was |
+| PR-0134 | `rewards:` is still an `AnyView`, the exact shape that severed `@Observable` tracking and shipped a "Head Start does nothing" bug | `GameView.swift:1105`, cf. `MenuView.swift:20-23` | Make it a concrete generic like `loadout` was | **DONE(S-005)** — the AnyView is deleted outright: the hub renders its own claim ribbon and takes closures. Absorbed by PR-0452.
 | PR-0135 | `restartCountdown` can only ever be 1, so the panel reads "READY IN 1…" for the whole delay | `GameView.swift:286-289`, `GameOverView.swift:472-475` | Fix the arithmetic or drop the countdown |
 | PR-0136 | `uiClock` advances during pause but `ageEffects` does not run, so effects jump on resume | `GameView.swift:259, 262-265, 802-816` | Freeze `uiClock` with the sim |
 | PR-0137 | Declaration order and `zIndex` disagree across eight overlay layers | `GameView.swift:1146-1214` | Make `zIndex` explicit and consistent |
@@ -629,11 +629,11 @@ Compact format (see the note at the top). Expand to the full block before workin
 | PR-0143 | `GameOverView` (476 lines) and `HUDView` use zero Dynamic Type — every string is a fixed `.system(size:)` | both files | Adopt the existing `typeScale` system |
 | PR-0144 | Three entire meta screens bypass Dynamic Type: Settings, MysteryBox, PowerUps | those files | Adopt `typeScale` |
 | PR-0145 | Hardcoded 8–11 pt fonts in character/level select ignore Dynamic Type | `CharacterSelectView.swift:162, 428-434, 570-576, 529-534, 582`, `LevelSelectView.swift:223` | Adopt `typeScale` |
-| PR-0146 | Rail-cell text can shrink to ~5 pt on a 320–375 pt screen | `RewardsBar.swift:111-114` | Raise the minimum scale factor or shorten the copy |
+| PR-0146 | Rail-cell text can shrink to ~5 pt on a 320–375 pt screen | `ClaimRibbon.swift` (was `RewardsBar.swift:111-114`) | **Largely OBE (S-005)**: the 3 narrow cells are gone — the ribbon is full-width and the launcher is one word. Re-measure before working it |
 | PR-0147 | The meta-screen header has no overflow protection between a 40 pt back button and a variable coin badge | `MetaScreenScaffold.swift:29-38` | Add `lineLimit` + `minimumScaleFactor` |
 | PR-0148 | How-to-Play cards can clip vertically — fixed `VStack`, 48 pt of padding, no `ScrollView` | `HowToPlayView.swift:233-248, 213` | Wrap in a `ScrollView` |
-| PR-0149 | The hero stage forces a 140 pt floor inside a flexible slot, which can overflow small screens | `MenuView.swift:144-147` | Let it shrink |
-| PR-0150 | The BEST/FIRST RUN chip is ~25 pt tall with no 44 pt minimum, unlike every sibling on the hub | `MenuView.swift:228-247` | Add `.frame(minHeight: 44)` |
+| PR-0149 | The hero stage forces a 140 pt floor inside a flexible slot, which can overflow small screens | `MenuView.swift:144-147` | Let it shrink | **DONE(S-005)** — the stage now takes its slot exactly, no floor and no cap. Absorbed by PR-0452.
+| PR-0150 | The BEST/FIRST RUN chip is ~25 pt tall with no 44 pt minimum, unlike every sibling on the hub | `MenuView.swift:228-247` | Add `.frame(minHeight: 44)` | **DONE(S-005)** — the chip moved into the masthead identity cluster with a 44 pt target. Absorbed by PR-0452.
 | PR-0151 | The Mystery Box idle-phase escape is an unpadded `Button("CLOSE")` with a ~13×45 pt hit area, and the scrim tap is gated to `.revealed` | `MysteryBoxView.swift:99-101, 26` | Pad the button and ungate the scrim |
 | PR-0152 | Several other tap targets across the meta layer fall below 44 pt | see `ui-meta.md` §Suspicious #25 for the measured list | Add minimum heights |
 | PR-0153 | Meta sheets are not marked `.isModal` for VoiceOver, so `GameOverView` stays reachable behind them | `GameView.swift:1145-1147`, `MetaScreenScaffold.swift:16` | Add the trait |
@@ -1644,9 +1644,7 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
 - Area:        UI/MenuView · UI/GameView (hub composition)
 - Found by:    **Rayan, directly, S-004**: *"i want a redesign of the ui ux of the main screen. it
                just doesn't feel right."*
-- Status:      OPEN — **next session's headline goal.** Not started in S-004: a redesign is design
-               work, not a patch, and S-004 was spending its remaining context on the spawn-path
-               verification and handoff. Starting it on fumes would have produced a worse hub.
+- Status:      **DONE(S-005).** See the resolution block at the end of this item.
 - Symptom:     The hub reads as a settings screen with a PLAY button on it, not as the front door
                of a neon arcade runner.
 - Evidence:    Clean-launch screenshot, S-004 (`docs/agent/scratch/s004/hub_after.png`). Concretely,
@@ -1691,3 +1689,75 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
                still an `AnyView`), PR-0155 (WORLDS tile and menu chip disagree). Fix them inside
                the redesign rather than separately. PR-0445 (attract-track scrim) is DONE and is a
                prerequisite, not a duplicate.
+
+- **Resolution (S-005).** Direction picked before any code: **editorial/arcade**, executed as
+  *three species of surface* rather than one card grid.
+  1. **Gradient = the verb.** PLAY (78 pt, ~65% width, 28 pt black type, a 1 px top light edge for
+     depth) and nothing else. A lit claim ribbon is the only other filled surface and it is gold —
+     the money role, never the action gradient.
+  2. **Cards = objects you act on.** The claim ribbon, the Daily Rush launcher, the loadout chips.
+     They appear, change size and disappear with your state.
+  3. **Bare rail = exits.** Characters / Shop / Worlds / Missions under a hairline at the bottom
+     edge with **no card chrome at all**. This is the single change that stops rewards and
+     navigation reading as the same class of object. Each keeps the neon hue it owned as a tile
+     (the owner's "so light gray I'd have to click each"); the hue now rides the glyph alone.
+- **The structural insight.** The old rail put three *different kinds of thing* in three identical
+  cells. Daily Rush is a way to START A RUN -> it now stands beside PLAY, narrower and unfilled.
+  Rewards is COINS WAITING -> a full-width gold bar with a real CTA pill when claimable, a slim
+  40 pt tertiary strip when not (a different height, so the hub visibly relaxes once you have
+  taken everything). Missions is a BOARD YOU VISIT -> a nav exit with a gold count badge. They
+  shared a row because they were three leftover buttons, not because they are one class.
+- **The centre axis is broken by an editorial masthead**: wordmark hard left, world dateline hard
+  right (two right-aligned micro lines, magazine-style), a rule under both; tier one is two
+  balanced clusters — identity (level ring + BEST) left, resources (coins + gear) right, which
+  fixes the lone-ring-versus-two-pills imbalance. Only the hero and PLAY stay centred, which is
+  what makes them read as the two focal objects instead of two more rows in a stack.
+- **What the evidence actually showed, beyond the filed critique.** Captured at three profile
+  states before touching code (`docs/agent/scratch/s005/before_{fresh,mid,deep}.png`): a player
+  **214 runs in, 24,500 coins, world 15 with the evolved palette live, got a pixel-identical
+  layout to first launch.** Only the numerals differed. That is a stronger indictment than any of
+  the seven filed points — the hub had no sense of a journey at all.
+- Absorbed as promised: **PR-0134** (the `rewards:` AnyView is *deleted*, not genericised — the hub
+  owns its rendering and takes closures), **PR-0149** (the stage takes its slot exactly: no floor,
+  which is what could overflow, and no cap, which left a dead band), **PR-0150** (44 pt target).
+  **PR-0155 is NOT absorbed** — it is a `ProfileView` defect; the hub and `LevelSelectView` already
+  agree (both read `highestStartableWorld`). It stays OPEN.
+- Also fixed in passing, hub instance only: **PR-0453** (the character glow was clipped into a
+  faint box).
+- Verification: `./Tools/build.sh` BUILD OK; **194 Xcode tests + 11 XCUITest green**; **187 SPM
+  green**; clean-launch screenshots (uninstall -> install -> launch) at fresh / rewards-claimable /
+  world-15, **opened and read**, in `docs/agent/scratch/s005/after_*.png`. A new `PR_HUBDEEP=1`
+  launch hook pins the late-game state so that third capture is repeatable by later sessions.
+- **Trap discovered, and it cost two suite runs.** `.accessibilityElement(children: .ignore)`
+  placement is load-bearing and cuts BOTH ways:
+  - on the **rail elements** (`railRewards`, `railDaily`) it must land **BEFORE** the identifier
+    and label, or the label is silently dropped — the element still exists and still taps, so only
+    a label assertion catches it;
+  - on the **nav exits** it must **not be applied at all**, because it stops them surfacing as
+    `.button` and `InteractionUITests` looks every one of them up as `app.buttons[...]`.
+  `InteractionUITests.swift:21-23` documents the first half. Neither is discoverable by reading.
+
+## PR-0453 · SEV2 · The character body glow is clipped into a rectangle on grid and shop cards
+- Area:        UI/CharacterSwatch
+- Found by:    S-005, while enlarging the hub hero stage for PR-0452
+- Status:      **PARTIAL — DONE(S-005) for the hub hero stage; OPEN for every other call site.**
+- Symptom:     A faint vertical band with hard edges either side of the figure, most visible where
+               the swatch sits over something non-flat. On the characters screen the grid cards
+               show it plainly (Ember's orange and Bolt's blue glows are visibly cut square).
+- Why:         `draw` fills the body glow as an ellipse `bodyR * 3.2` across — 1.6 x `size` at unit
+               skin scale — but the canvas frame was `size` wide, so the glow's outer 30% is
+               hard-clipped by the canvas bounds. It has always been there; it only became obvious
+               when the hub stage grew and the live 3D scene showed through the cut.
+- Ruled out:   Not the mirrored reflection layer (disabled it, band survived) and not the `Canvas`
+               colour mode (`.nonLinear`, band survived). Confirmed a UI overlay rather than the 3D
+               backdrop by capturing two frames 5 s apart: the skyline scrolled, the band's edges
+               held at identical x.
+- Fix applied: `AnimatedCharacterSwatch.widthScale`, defaulting to **1.0 so every existing call site
+               is byte-identical**; `CharacterHeroStage` passes 1.6 (kept just under the pedestal
+               disc's 1.7 so the ZStack width, and therefore the stage's clip, is unchanged).
+- What's left: the 24-card grid, the shop rows, the NEXT UNLOCK strip and the Mystery Box still
+               pass the default. Not done in S-005 deliberately: those slots are sized to the
+               swatch, so widening the canvas 1.6x is a four-screen layout change and a much bigger
+               review than the hub redesign it would have ridden in on.
+- Verification: crop the hero region of a clean-launch hub screenshot and look for vertical edges.
+               On the grid, compare a card's glow against a circle.

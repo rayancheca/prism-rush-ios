@@ -4,12 +4,19 @@
 > wins** and the other file gets fixed. That includes `state.md` and `README.md` at the repo root,
 > which are the project's human-facing history, not the agent's source of truth.
 
-- **Last written by:** session 004 (2026-07-28) — the second act + risk-priced gems
+- **Last written by:** session 005 (2026-07-28) — the hub redesign
 - **Program phase:** audits 2 of 7 done, and the phase gate is gone (D-005) — audits and fixes now
-  interleave. S-004 was a pure fix session; no audit ran.
-- **Next session:** 005 — **PR-0452, the hub redesign. Rayan asked for it directly.** See `HANDOFF.md`.
+  interleave. S-004 and S-005 were both pure fix/design sessions; no audit ran.
+- **Next session:** 006 — see `HANDOFF.md`. The owner's two direct requests (act two, the hub) are
+  both now delivered, so 006 picks up the highest-value remaining work rather than a standing ask.
 - **Code changed by the program so far:** PR-0411 (S-003 + S-004 residue), **PR-0400, PR-0414,
-  PR-0445, PR-0451 (S-004)**. The game's simulation has now been changed, not just its copy.
+  PR-0445, PR-0451 (S-004)**, **PR-0452, PR-0134, PR-0149, PR-0150, PR-0453-partial (S-005)**.
+  The simulation and now the front door have both been changed, not just the copy.
+- **The hub was redesigned in S-005** at Rayan's direct request. Three species of surface —
+  gradient (PLAY alone), cards (claim ribbon, Daily Rush, loadout), bare rail (the four exits) —
+  under an editorial masthead. `RewardsBar.swift` is gone; `ClaimRibbon.swift` replaces it and
+  Missions became a nav exit. Before/after screenshots at three profile states live in
+  `docs/agent/scratch/s005/`.
 - **`DailyChallenge.layoutVersion` is 8** as of S-004. Every daily track changed; that is expected
   and is what a layout bump means.
 - **The read-only phase is over (D-005).** Sessions may now fix code as they go. The audit sequence
@@ -26,8 +33,8 @@
 
 ## Where the project actually is
 
-Prism Rush is a **v1.6, feature-complete, technically strong iPhone game that has never been
-submitted to the App Store.** 95 Swift files, ~22,300 lines, zero third-party dependencies, zero
+Prism Rush is a **v1.7, feature-complete, technically strong iPhone game that has never been
+submitted to the App Store.** ~95 Swift files, ~22,800 lines, zero third-party dependencies, zero
 binary assets except the generated app icon.
 
 What is genuinely solid, and session 002 did not dent it:
@@ -99,8 +106,9 @@ that alters play** (PR-0401); that half of S-003's verdict stands untouched.
 | **Total** | **181 (+5 addendum = 186)** | **24** | **46** | **256** |
 
 Session 004 added three (`PR-0450` SEV2, `PR-0451` SEV3, `PR-0452` SEV2) and closed five
-(`PR-0400`, `PR-0414`, `PR-0445`, `PR-0451`, and the `PR-0411` repo-side residue) → **259 items,
-6 DONE.**
+(`PR-0400`, `PR-0414`, `PR-0445`, `PR-0451`, and the `PR-0411` repo-side residue) → 259 items,
+6 DONE. Session 005 added one (`PR-0453` SEV2, partial) and closed four (`PR-0452` plus the three
+hub nits it absorbed: `PR-0134`, `PR-0149`, `PR-0150`) → **260 items, 10 DONE.**
 
 Session 003's 46 items are `PR-0400 … PR-0445`. **124 findings were raised, 92 survived an
 independent hostile verifier, 32 were killed, and 34 severities were downgraded in review** — the
@@ -243,8 +251,11 @@ Carried forward every session until done.
   is the 3,200 m step noticeable? Do the swung moving walls past ~6,800 m read, or do they feel
   cheap? Is the greed line legible at speed — can you *see* the two coin lines diverge in time to
   choose? Is the choice worth making, or is the safe line obviously correct?
-- **PR-0452 — the hub redesign he asked for in S-004.** Direction is a taste call and his to make;
-  the item lists candidate directions but does not pick one.
+- **PR-0452 — the hub redesign is BUILT (S-005).** He asked for it in S-004 without naming a
+  direction, and an autonomous session cannot ask, so one was picked and documented: editorial /
+  arcade, three species of surface. **This now needs his eyes, not his instructions** — the whole
+  point of the change is how it feels. Screenshots at three profile states are in
+  `docs/agent/scratch/s005/after_*.png`, but a hub is a thing you tap, not a picture.
 - ~~PR-0296 / PR-0445 — attract-track bleed-through~~ — **DONE (S-004).** Ruled on in D-008,
   implemented as a lower-third scrim, verified by clean-launch before/after screenshots kept in
   `docs/agent/scratch/s004/`. Worth 10 seconds of his eyes to confirm the taste call was right.
@@ -296,8 +307,10 @@ Carried in `HANDOFF.md` until answered. **Question 5 was resolved by session 001
   hand (`cp -R`, since git will not move gitignored files) — **the next session must do the same or
   the whole chain's working detail is lost.**
 - Recovery tags: `pre-s001`, `pre-s002`, `pre-s003` exist locally.
-- This worktree is `.claude/worktrees/prism-rush-design-audit-562d27` on branch
-  `claude/prism-rush-design-audit-562d27`. It was created from `main` and **reset onto session
-  002's tip `e7f7841`** at session start. `main` still does not contain `docs/agent/` at all —
-  **session 004 must branch from session 003's tip, never from `main`**, and must copy both scratch
-  directories across if it works in a new worktree.
+- **Session 005 worked directly in the primary checkout on `main`**, which by then already carried
+  the whole program's history (S-004's tip `45e3b0d`). The old "never branch from `main`" warning
+  is obsolete and is retired here: `main` now contains `docs/agent/` in full. Recovery tags
+  `pre-s001` … `pre-s005` exist locally.
+- Scratch is ~8 MB across five sessions now (`docs/agent/scratch/` 6.9 MB + `audits/scratch/`
+  1.2 MB) and still gitignored. S-005 recovered it from three stale worktrees with the `cp -Rn`
+  loop the handoff carries; keep that loop in every handoff until someone decides to commit it.

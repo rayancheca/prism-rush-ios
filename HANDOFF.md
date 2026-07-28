@@ -1,14 +1,14 @@
-# HANDOFF → Session 005
+# HANDOFF → Session 006
 
 ## Paste this to start the next session
 
 ```
-You are session 005 of a long-running program to finish and ship Prism Rush, a neon three-lane
+You are session 006 of a long-running program to finish and ship Prism Rush, a neon three-lane
 endless runner for iPhone (Swift 6, SwiftUI, RealityKit, zero dependencies, zero binary assets).
 
 Read docs/agent/01_RULES.md, then docs/agent/02_STATE.md, then this file. For your goal you will
-also want docs/agent/03_BACKLOG.md PR-0452 (written as a brief, not a one-liner) and
-docs/agent/05_GAME_DESIGN.md §1 — the hub is the meta loop's only surface.
+also want docs/agent/03_BACKLOG.md PR-0450 and docs/agent/05_GAME_DESIGN.md §§3-4 (the mastery
+ceiling argument, which is the reason PR-0450 exists).
 
 You may and should change code. 01_RULES.md is split into judgment (advisory) and nine invariants
 (damage prevention). Rayan's standing instruction is "never be limited by arbitrary rules, just
@@ -18,37 +18,37 @@ you can verify.
 Direction: App Store submission IS the goal, timing is open, and Rayan wants the app POLISHED
 before publishing. Design and feel outrank compliance right now.
 
-Your goal is PR-0452: redesign the hub. Rayan asked for this directly in session 004 — "i want a
-redesign of the ui ux of the main screen. it just doesn't feel right." Session 004 filed it with a
-concrete critique and deliberately did not start it; a redesign is design work, not a patch.
+Your goal is PR-0450: the pattern catalogue is still 14. Session 004 built an act two that changes
+how OFTEN you meet things; nothing new has been added to meet. A player who has read all 14
+patterns has read them all, and every endgame structure in this game rests on distance staying an
+axis of challenge. One genuinely new entity or verb, gated into a sixth tier, is the highest-value
+work left.
 
-Pick a visual direction BEFORE writing code. The current hub is six identical tiles in two rows of
-three plus nine centre-aligned stacked rows — literally the "default card grid, no hierarchy"
-pattern Rayan's own design rules ban. Do not ship another centred stack with nicer padding.
+This is the most invariant-heavy task in the program. Invariant 2 binds IN FULL and is the one that
+looks like bureaucracy and isn't: the 200-seed solvability bot must stay green, DailyChallenge
+.layoutVersion must go 8 -> 9, and the goldens must be repinned in TWO places (DailyChallengeTests
+AND MissionsTests.testTodaysChallengeSeedMatchesUTCGoldens, which is easy to miss). Derive the
+goldens in Python from the SplitMix64 formula — never read them off the code they pin. A v9 pin is
+already pre-armed in DailyChallengeTests.
 
-Verify with clean-launch screenshots at three profile states (fresh / rewards-claimable / world
-12+) and OPEN them. A diff does not prove a redesign. PR_FIRSTRUN does not reset the profile —
-only simctl uninstall does.
-
-Build and RUN the app before you claim anything works. That rule is four for four at catching
-things static reading missed, and your goal this session lives entirely in the half of the codebase
-`swift test` does not compile.
+Build and RUN the app before you claim anything works. That rule is five for five at catching
+things static reading missed. `swift test` green is NOT the app working — it compiles Core/, seven
+Meta/ files and Audio/Synth.swift, and none of UI/, Render/, IAP/, StoreKit or GameKit.
 
 FIRST COMMAND, before anything else. docs/agent/scratch/ and docs/agent/audits/scratch/ are
-gitignored and hold ~2 MB of working detail from four sessions, including the before/after hub
-screenshots PR-0452's critique is built on. Git does NOT move them between worktrees, so if you are
-anywhere other than the session-004 worktree they are missing and the brief loses its evidence.
-This copies them from wherever they still exist into your checkout, and is a no-op if you already
-have them:
+gitignored and hold ~8 MB of working detail from five sessions, including every hub screenshot
+PR-0452 was argued and verified with. Git does NOT move them between worktrees. This copies them
+from wherever they still exist and is a no-op if you already have them:
 
-  for w in prism-rush-spawn-path-c7d88a prism-rush-design-audit-562d27 prism-rush-audit-91c7ba; do
-    s="/Users/rayankarimcheca/Desktop/ClaudeProjects/projects/prism-rush-ios/.claude/worktrees/$w/docs/agent"
+  for w in "" .claude/worktrees/prism-rush-spawn-path-c7d88a \
+           .claude/worktrees/prism-rush-design-audit-562d27 \
+           .claude/worktrees/prism-rush-audit-91c7ba; do
+    s="/Users/rayankarimcheca/Desktop/ClaudeProjects/projects/prism-rush-ios/$w/docs/agent"
     [ -d "$s/scratch" ] && mkdir -p docs/agent/scratch && cp -Rn "$s/scratch/." docs/agent/scratch/ 2>/dev/null
     [ -d "$s/audits/scratch" ] && mkdir -p docs/agent/audits/scratch && cp -Rn "$s/audits/scratch/." docs/agent/audits/scratch/ 2>/dev/null
   done; du -sh docs/agent/scratch docs/agent/audits/scratch
 
-Expect ~772K and ~1.2M. If both are empty, say so in your report rather than working blind — the
-audit scratch is where the arithmetic behind most of the backlog lives.
+Expect ~6.9M and ~1.2M. If both are empty, say so in your report rather than working blind.
 
 Report back in three lines.
 This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/projects/prism-rush-ios/HANDOFF.md
@@ -56,124 +56,124 @@ This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/project
 
 ---
 
-# Goal — PR-0452: redesign the hub
+# Goal — PR-0450: the catalogue is still 14 patterns
 
-**Rayan asked for this directly, in session 004:** *"i want a redesign of the ui ux of the main
-screen. it just doesn't feel right."* He added that if it was already in the notes it could wait,
-and if not, to write it down. It was not, so S-004 wrote it down and did not start it — a redesign
-is design work, not a patch, and S-004's remaining budget belonged to verifying a spawn-path change.
-**It is now the top item.**
+**This is now the top item because both of Rayan's direct requests are delivered.** He asked for an
+act two (S-004 built it) and a hub redesign (S-005 built it). Nothing is queued behind a standing
+ask any more, so the backlog's own highest-value entry wins.
 
-This is the first screen every player sees and the one they return to between every run.
+`docs/agent/03_BACKLOG.md` **PR-0450** carries the brief. The argument in one line, from
+`05_GAME_DESIGN.md §4`:
 
-## What is actually wrong
+> Past 1,920 m the player has seen every pattern the game will ever show them. v1.7 makes the
+> demanding ones arrive more often and the breathers less often, and swings the moving walls — but
+> **density is not novelty.**
 
-`docs/agent/03_BACKLOG.md` **PR-0452** carries the full critique and names the screenshot it came
-from: `docs/agent/scratch/s004/hub_after.png` (gitignored — **look at it**). Short version, scored
-against Rayan's own `~/.claude/rules/web/design-quality.md` banned-patterns list:
+S-004 filed this as the acknowledged residual of its own work and was right to. The whole endgame —
+the infinite world ladder, the 13,400-coin deep rungs, the leaderboard, the 12,000 m soak — rests on
+distance being an axis of *challenge*. Act two bought roughly 6,400 m more of that. It did not buy a
+new *kind* of moment.
 
-- **Six tiles, two rows of three, identical size / radius / spacing.** Literally the banned "default
-  card grid with uniform spacing and no hierarchy".
-- **Rewards and navigation read as the same class of object.** Nothing says the top row is *things
-  that changed since you left* and the bottom row is *places to go*. The only hierarchy cue in the
-  entire lower half is that REWARDS happens to be filled.
-- **Nine centre-aligned stacked rows**, uniform rhythm, everything symmetric about one axis.
-- **Two competing secondary chips sandwich PLAY** — "FURTHEST 01 · PULSE CITY ›" above and
-  "FIRST RUN ›" below — so the primary action is framed by two equally-tappable-looking things.
-- Dead second line: "MISSIONS / **BOARD**".
-- Unbalanced top corners; the wordmark collides with the city backdrop.
+## What "one new thing" has to survive
 
-**Pick a direction before writing code.** Rayan's rules list worthwhile ones; bento composition and
-editorial/arcade both suit a neon runner.
+The expensive part is not the idea, it is the proof. Budget for all of it:
 
-## What binds you
+- **New mesh** in `Render/Reality/` — procedural `MeshDescriptor`, `UnlitMaterial` only, pooled.
+  Zero binary assets (invariant / decree).
+- **New collision predicate** in `Core/Collisions.swift`, pure and testable.
+- **New Autopilot policy** in `Core/Autopilot.swift`. The bot is greedy and reads only
+  `activeObstacles`; if it cannot solve your entity, `SolvabilityBotTests` fails and it is telling
+  you the truth — 200 seeds × 6,000 m plus the 12,000 m soak, zero deaths.
+- **Pattern order is load-bearing** (iron rule 4): the spawner gates by prefix index and **moving
+  walls stay LAST**. A sixth tier goes in at the right index or every gate shifts.
+- **`layoutVersion` 8 → 9** and the goldens repinned in both homes (see the prompt above).
+  Consuming one extra `rng.unit()` anywhere in the spawn path silently changes every seeded run for
+  every player.
+- **`DifficultyCurveTests` should show the new tier arriving as a step, not a slope.** That is the
+  difference between "we added something" and "you can feel where it starts."
 
-- **Decree 2 — previews never lie.** The hero stage must show the skin the run actually plays. Use
-  the resolver at `MenuView.swift:157` (`SkinCatalog.skin(ProfileStore.shared.equippedSkinID)`),
-  never raw `selectedSkin`. This has been broken before.
-- **Decree 4 — everything on screen leads somewhere.** No decorative tiles.
-- **Decree 6 — clarity beats spectacle.** PR-0445 (S-004) just fixed the attract track cutting
-  through the hub's glyphs, via a lower-third scrim in `GameView.swift`. Keep that true; if your
-  layout moves content upward, move the scrim with it.
-- **Invariant 6 (G3) — this one has shipped three bugs.** Never `@State` a shared `@Observable`;
-  never snapshot `store.profile` into a `let` at the top of `body`. Reference `ProfileStore.shared`
-  and `IAPManager.shared` directly in `body`. Keep `loadout` a **concrete typed child** — wrapping
-  it in `AnyView` severed observation and shipped the "Head Start does nothing" bug.
+## Things S-004 paid for that you get free
 
-## Absorb these rather than leaving them scattered
-
-PR-0149 (hero stage forces a 140 pt floor inside a flexible slot — can overflow small screens) ·
-PR-0150 (the BEST/FIRST RUN chip is ~25 pt with no 44 pt minimum, unlike every sibling) ·
-PR-0134 (`rewards:` is still an `AnyView`, the exact shape that severed observation once) ·
-PR-0155 (the WORLDS tile and the menu chip compute the world number differently).
-
-## How to verify
-
-```bash
-./Tools/build.sh
-xcrun simctl uninstall 10C15FE0-3D9A-40D5-9E45-C0702E906DF3 com.rayancheca.prismrush
-xcrun simctl install 10C15FE0-3D9A-40D5-9E45-C0702E906DF3 .dd/Build/Products/Debug-iphonesimulator/PrismRush.app
-SIMCTL_CHILD_PR_SKIP_SPLASH=1 xcrun simctl launch 10C15FE0-3D9A-40D5-9E45-C0702E906DF3 com.rayancheca.prismrush
-sleep 10 && xcrun simctl io 10C15FE0-3D9A-40D5-9E45-C0702E906DF3 screenshot after.png
-```
-
-Three profile states — fresh (coins 0, FIRST RUN), rewards-claimable, and deep (world 12+, evolved
-palette live). The hub renders differently in each; a layout that only works at one is not done.
+- **Do not raise `speedCap`.** The readable lead is capped at ~65 m by the backdrop plane — 1.97 s
+  at the cap. Pushing it back was tried and reverted in v1.6. Faster is unreactable, not harder.
+  Receipt: `docs/agent/audits/scratch/verify-difficulty.md §12`.
+- **Fixed-width measurement bands lie.** The mean pattern cycle is ~451 m; a 500 m band grid beats
+  against it with a ~4.6 km period and manufactures a fake trend. The bands in
+  `DifficultyCurveTests` are snapped to real pattern boundaries. Do not "simplify" that away.
+- **The bot cannot certify anything involving gems** — it has never collected one.
+  `testEveryGreedGemLeavesATakeableExit` is the separate proof and must stay green if you touch gem
+  placement.
 
 ---
 
-# If you finish, or if the redesign stalls waiting on taste
+# If PR-0450 is too big for the session you have, or it stalls
+
+All three are clean and nothing blocks them.
 
 **PR-0254 + PR-0307 (decided in D-007, ~1 hour, fully specified).** A revived run counts fully for
 missions and XP and is **not** leaderboard-eligible — the rule `usedCheckpoint` runs already follow.
 Touches `recordRunResults` (`UI/GameView.swift:~680-792`). **Invariant 5 binds: keep the per-death
-delta shape (`max(0, cumulative − awarded)`); do not reintroduce cumulative re-pays.** Clean,
-self-contained, nothing blocks it.
+delta shape (`max(0, cumulative − awarded)`); do not reintroduce cumulative re-pays.** This was
+S-005's named fallback and went unused.
 
-**PR-0450 (big — the honest residual of S-004).** Act two changes how *often* you meet things; the
-catalogue is still 14 patterns, so a player who has read all 14 has still read them all. One
-genuinely new entity or verb in a sixth tier is the highest-value content work left, and the most
-expensive: new mesh, new collision predicate, new bot policy, invariant 2 in full. Do not start it
-in the same session as the redesign.
+**PR-0453, the rest of it (S-005 filed it, half-fixed it, and said so).** The character body glow is
+drawn 1.6 × the canvas width and is therefore **hard-clipped into a faint rectangle**. S-005 fixed
+the hub hero stage via `AnimatedCharacterSwatch.widthScale` (default 1.0 → every other call site
+byte-identical). The 24-card grid, shop rows, NEXT UNLOCK strip and Mystery Box still carry it and
+it is plainly visible on the characters screen — look at Ember's orange glow in
+`docs/agent/scratch/s005/v3_characters.png`. Left open because those slots are sized to the swatch,
+so widening the canvas is a four-screen layout change that had no business riding inside a hub diff.
+
+**The Phase 3 failure-state sweep** is the other big coherent job (`02_STATE.md` worry #1): every
+failure state in the app fails identically — raw, silent, or misleading. The good news is that the
+correct pattern already exists in the codebase (the Worlds `UnlockPanel` and the revive offer both
+show `NEED N MORE` plus a route to coins). Most of it is "use the pattern you already wrote."
 
 ---
 
-# What changed in session 004 — read before touching the spawner
+# What changed in session 005 — read before touching the hub
 
-**`DailyChallenge.layoutVersion` is now 8.** PR-0400 and PR-0414 landed together in one bump
-because both touch the spawn path and two bumps would have bought nothing.
+**The hub was redesigned (PR-0452).** `RewardsBar.swift` is **deleted**; `ClaimRibbon.swift`
+replaces it. The governing rule is *three species of surface*, and anything you add to the hub has
+to pick one:
 
-`Core/Spawner.swift` grew a second difficulty axis, `Spawner.intensity` (0 at 3,200 m → 1 at
-9,600 m). Past 3,200 m: the pattern draw resolves through a **weighted table** in three front-loaded
-waves, the gap continues 5 → 4, moving walls swing off phase 0, and a **greed line** of gems is hung
-in a lane each pattern closes. All four are pure functions of distance consuming **zero RNG** —
-`PatternOrderTests`' pinned per-pattern call counts are untouched and act one's selection is
-byte-identical to v1.6.
+| Species | Means | Is |
+|---|---|---|
+| **Gradient** | the verb | PLAY, alone |
+| **Cards** | objects you act on | claim ribbon, Daily Rush launcher, loadout chips |
+| **Bare rail** | exits | Characters / Shop / Worlds / Missions — **no card chrome** |
 
-Measured (`DifficultyCurveTests`, 64 seeds), act one's plateau → deepest wave: obstacles/100 m
-6.02 → 7.63, Autopilot inputs/100 m 3.93 → 4.44, obstacle-free track 27.1% → 12.4%, gems priced in
-risk 0.7% → 14.6%. v1.6 was flat in all four across 3,000–8,000 m.
+The old 3-cell rail is gone because it mixed three different kinds of thing: **Daily Rush** is a way
+to start a run (now beside PLAY), **Rewards** is coins waiting (now a full-width gold bar when
+claimable, a slim strip when not), **Missions** is a board you visit (now a nav exit with a gold
+count badge). The centre axis breaks on an editorial masthead — wordmark hard left, world dateline
+hard right, identity and resources as two balanced clusters. Only the hero and PLAY stay centred.
 
-**Things you would otherwise have to rediscover the hard way:**
+Absorbed and closed: **PR-0134** (the `rewards:` AnyView is deleted, not genericised), **PR-0149**
+(the stage takes its slot exactly — no floor, no cap), **PR-0150** (44 pt chip). **PR-0155 was
+listed as absorbed but is not** — it is a `ProfileView` defect; the hub and `LevelSelectView` always
+agreed.
 
-- **Do not raise `speedCap`.** The readable lead is capped at ~65 m by the backdrop plane — 1.97 s
-  at the cap — and pushing it back was tried and reverted in v1.6. Faster is unreactable, not
-  harder. Receipt: `docs/agent/audits/scratch/verify-difficulty.md §12`.
-- **`SolvabilityBotTests` cannot certify the greed line and does not claim to.** `Autopilot` reads
-  only `activeObstacles` and has never collected a gem, so it walks the safe line every time and
-  would stay green even if the greed line were lethal.
-  `DifficultyCurveTests.testEveryGreedGemLeavesATakeableExit` is the separate proof. If you add
-  gems anywhere, that is the test that must stay green.
-- **Fixed-width measurement bands lie.** The mean pattern cycle is ~451 m; a 500 m band grid beats
-  against it with a ~4.6 km period and manufactures a fake difficulty trend. Bands in
-  `DifficultyCurveTests` are snapped to real pattern boundaries. Do not "simplify" that away.
-- **Golden seeds are derived independently** (Python, from the SplitMix64 formula), never read off
-  the code they pin. A **v9 pin is pre-armed** in `DailyChallengeTests`. Note that
-  `MissionsTests.testTodaysChallengeSeedMatchesUTCGoldens` pins the *same* seeds from the meta layer
-  and must be repinned in the same edit — easy to miss.
-- `capGem` went 72 → 112. Measured peak demand is 94; v1.6 was silently dropping gems at
-  `GameCore.apply`. `capGem` is **Core-only** — the renderer pools on demand and never reads it,
-  despite what the old comment claimed (PR-0451).
+**New launch hook: `PR_HUBDEEP=1`** pins a late-game profile (24,500 coins, best 128,400, 214 runs,
+level 23, world 15 evolved, all claimables taken). Use it — a hub verified only at first launch is
+not verified, and that is exactly how the old one survived so long. The before-shots proved it: a
+player 214 runs in got a **pixel-identical** layout to first launch.
+
+**Things you would otherwise rediscover the hard way:**
+
+- **`.accessibilityElement(children: .ignore)` placement is load-bearing and cuts BOTH ways.**
+  On the rail elements (`railRewards`, `railDaily`) it must land **BEFORE** the identifier and
+  label, or the label is silently dropped — the element still exists and still taps, so **only a
+  label assertion catches it**. On the nav exits it must **not be applied at all**, or they stop
+  surfacing as `.button` and every `app.buttons["worldsButton"]` lookup fails.
+  `InteractionUITests.swift:21-23` documents half of this. S-005 lost two suite runs to it.
+- **Prism, the default character, shimmers through hues on its own 8 s clock** (`isPrismatic`). It
+  is yellow in one screenshot and pink in the next **from the same build**. That is its fixed
+  identity, explicitly annotated in `CharacterSwatch.swift` as *not* world-tracking, so it is not a
+  decree-1 violation. Do not read it as a change between captures.
+- **`unclaimedCount(now:)` is still called from inside a view `body`** — the hazard moved from
+  `RewardsBar.swift:23` to `MenuView`'s `navRail` (inside a 60 s `TimelineView`). It did not go
+  away. `07_ARCHITECTURE.md` was repointed.
 
 ---
 
@@ -181,75 +181,73 @@ risk 0.7% → 14.6%. v1.6 was flat in all four across 3,000–8,000 m.
 
 - **`swift test` green ≠ the app works.** It compiles `Core/`, seven `Meta/` files and
   `Audio/Synth.swift`. **Not** `UI/`, `Render/`, `IAP/`, `SynthEngine`, StoreKit or GameKit. Only
-  `./Tools/build.sh` proves those. Your goal lives entirely in the half SPM does not compile.
-- **Test counts elsewhere in this repo are stale.** `CLAUDE.md` says 95, `Tools/ci.sh` says 174.
-  Measured truth at `9766e7d` is **187**. Trust `08_TESTING.md`.
+  `./Tools/build.sh` proves those.
+- **Test counts elsewhere in this repo are stale.** Measured at S-005: **194 Xcode unit + 11
+  XCUITest = 205**, and **187 SPM**. Trust `08_TESTING.md`.
 - **`rm -f dir/*.png` aborts a zsh `&&` chain when nothing matches.** It silently killed S-004's
-  first screenshot loop — the loop never ran and the failure looked like "0 files captured". Do not
-  suppress stderr on capture commands.
+  first screenshot loop and the failure looked like "0 files captured". Do not suppress stderr on
+  capture commands. S-005's capture script has no `|| true` anywhere, deliberately.
 - **`PR_FIRSTRUN` does not reset the profile.** Only `simctl uninstall` gives a true first launch.
 - **The splash never auto-dismisses.** Tap it, or launch with `PR_SKIP_SPLASH=1`.
 - **`Tools/qa.sh` and `Tools/screenshots.sh` hardcode this machine's UDIDs and fail silently via
   `|| true`** (PR-0050). A green run may mean nothing ran.
 - **Never drive the simulator while `xcodebuild test` runs on it** — concurrent installs crash the
   test host and report a false TEST FAILED.
+- **SourceKit in this checkout resolves against macOS, not iOS**, so the editor shows a wall of
+  "Cannot find 'Theme' in scope" / "only available in macOS 15.0" on files that compile fine.
+  Ignore the diagnostics; believe `./Tools/build.sh`.
 - `state.md` (58 KB) and `README.md` (35 KB) at the repo root are history, not truth. Where they
   disagree with `02_STATE.md`, `02_STATE.md` wins.
-- `docs/agent/scratch/` and `docs/agent/audits/scratch/` are **gitignored** and hold ~2 MB from four
-  sessions, including S-004's before/after hub screenshots. Git will not move them between
-  checkouts. **The prompt at the top of this file opens with a command that recovers them — run it.**
-  They currently exist in the `prism-rush-spawn-path-c7d88a`, `prism-rush-design-audit-562d27` and
-  `prism-rush-audit-91c7ba` worktrees; deleting all three without copying first destroys them.
+- `docs/agent/scratch/` and `docs/agent/audits/scratch/` are **gitignored**, ~8 MB, five sessions
+  deep. **The prompt at the top of this file opens with a command that recovers them — run it.**
 - Don't put `./Tools/build.sh` (~2 min) inside a fan-out. Build once, up front, in the background.
 
 ---
 
 # Current state in one paragraph
 
-Prism Rush is a v1.7, feature-complete, technically strong iPhone game that has never been
-submitted to the App Store: ~95 Swift files, ~22,600 lines, zero dependencies, zero binary assets
-but a generated icon, **187 SPM tests green**, and a genuinely deterministic core behind a clean
-`RendererPort` seam. Session 001 built the agent memory system and filed 186 items from static
-reading. Session 002 produced the Completeness Ledger: 50 of 59 user-facing features are fully
-implemented and exactly one — account deletion — is outright absent, but only 13 of 59 clear the
-owner's six decrees. Session 003 wrote the design bible and found the structural problem — the game
-ran out of design at 3,200 m, verified in source and measured on device — then fixed PR-0411 and
-cut the program's process rules to nine real invariants. **Session 004 fixed the structural
-problem**: there is now an act two out to 9,600 m, gems can cost something, and the hub no longer
-has neon lines through its text. Backlog is 259 items, 6 DONE. Five audits remain unrun; the phase
-gate is gone, so fixes and audits interleave, and polish outranks compliance until Rayan says
-otherwise.
+Prism Rush is a v1.7, feature-complete, technically strong iPhone game that has never been submitted
+to the App Store: ~95 Swift files, ~22,800 lines, zero dependencies, zero binary assets but a
+generated icon, **205 Xcode tests and 187 SPM tests green**, and a genuinely deterministic core
+behind a clean `RendererPort` seam. Session 001 built the agent memory system and filed 186 items
+from static reading. Session 002 produced the Completeness Ledger: 50 of 59 user-facing features are
+fully implemented and exactly one — account deletion — is outright absent, but only 13 of 59 clear
+the owner's six decrees. Session 003 wrote the design bible and found the structural problem — the
+game ran out of design at 3,200 m — then cut the program's process rules to nine real invariants.
+Session 004 fixed that structural problem: there is now an act two out to 9,600 m and gems can cost
+something. **Session 005 rebuilt the front door**: the hub is no longer six identical tiles under a
+centred stack, and it no longer renders identically for a player 214 runs in and one who has never
+pressed PLAY. Backlog is 260 items, 10 DONE. Five audits remain unrun; the phase gate is gone, so
+fixes and audits interleave, and polish outranks compliance until Rayan says otherwise.
 
 # Rayan action items (surface them; do not try to do them)
 
-1. **App Store Connect still says "Earn 2x coins, forever."** Session 004 fixed the last two repo
-   files that are the copy-paste source (`docs/APP_STORE_SETUP.md:128`,
-   `docs/SHIP_CHECKLIST.md:43`), so what he pastes is now correct — but **the live product
-   description in ASC is still false and only he can change it.** Residue of PR-0411; it blocks
-   honest submission.
-2. **Does act two feel right?** It is verified deterministic, fair and measurably escalating, but
-   "measurably escalating" and "fun" are different claims and only a human makes the second. Ask
-   specifically: is the 3,200 m step noticeable? Do the swung moving walls past ~6,800 m read, or
-   feel cheap? Can you *see* the two coin lines diverge in time to choose, at speed? Is the safe
-   line obviously correct, or is the choice real?
-3. **Which visual direction for the hub?** PR-0452 lists candidates and deliberately does not pick.
+1. **App Store Connect still says "Earn 2x coins, forever."** The repo-side copy-paste sources were
+   fixed in S-004, so what he pastes is now correct — but **the live product description in ASC is
+   still false and only he can change it.** It blocks honest submission.
+2. **Does the new hub feel right?** He asked for the redesign without naming a direction, and an
+   autonomous session cannot ask, so one was picked and documented (editorial/arcade, three species
+   of surface). Screenshots at three profile states are in `docs/agent/scratch/s005/after_*.png` —
+   but a hub is a thing you tap, not a picture. Specifically: does PLAY dominate enough? Does Daily
+   Rush beside it read as "the other way to start", or as clutter? Does the bare nav rail read as
+   navigation, or does it look unfinished next to the carded ribbon above it?
+3. **Does act two feel right?** Verified deterministic, fair and measurably escalating, but
+   "measurably escalating" and "fun" are different claims. Is the 3,200 m step noticeable? Do the
+   swung moving walls past ~6,800 m read, or feel cheap? Can you *see* the two coin lines diverge in
+   time to choose, at speed?
 4. Optional, still open from S-003: PR-0411 was fixed by making the *claim* true. The alternative —
-   making the *product* true by multiplying the five un-multiplied faucets (daily reward, chest,
-   level grant, mission claim, challenge tier) — is a better deal for buyers and a real economy
-   rebalance. His call.
+   making the *product* true by multiplying the five un-multiplied faucets — is a better deal for
+   buyers and a real economy rebalance. His call.
 
-# Open questions for Rayan (carried until answered; none block session 005)
+# Open questions for Rayan (carried until answered; none block session 006)
 
 - **PR-0040** — the music is a 1.82 s loop for the whole session, pinned to world 0 by his own
-  decree (`SynthEngine.swift:133`). Long-form structure inside that constraint needs sign-off. The
-  other 11 beds exist and are intentionally unreachable.
+  decree (`SynthEngine.swift:133`). Long-form structure inside that constraint needs sign-off.
 - **PR-0052** — is the Daily Challenge a layout guarantee or an identical-experience guarantee?
 - **PR-0010** — `Store/metadata.md` sells a three-world game; the binary ships twelve families plus
-  an infinite evolved cycle. Needs a ledger-checked rewrite before submission (out of scope until
-  the compliance pass).
+  an infinite evolved cycle. Needs a ledger-checked rewrite before submission.
 
-# Resolved in session 004
+# Resolved in session 005
 
-PR-0400 (act two) · PR-0414 (risk-priced gems) · PR-0445 (attract-track scrim) · PR-0451 (stale
-pool-cap comment + `capGem` 72→112) · PR-0411 repo-side residue. Filed: PR-0450, PR-0452.
-No new decisions — D-005 … D-008 all held up in practice and none needed amending.
+PR-0452 (the hub redesign) · PR-0134 · PR-0149 · PR-0150 · PR-0453 (hub instance only).
+Filed: PR-0453. No new decisions — D-005 … D-008 all held up in practice.
