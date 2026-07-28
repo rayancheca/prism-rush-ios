@@ -205,3 +205,54 @@ time re-deriving why. Do not write one for routine implementation choices.
                a diff alone does not prove it.
 - Revisit if:  Rayan looks at it and prefers the bleed-through. He has seen this app far more than
                I have and it is a taste call; I am making it only because he asked me to.
+
+## D-009 · A character's identity is fixed in TIME as well as in space
+
+**Session 006. Owner decision, verbatim:** *"why does the character change colours as it runs.
+that defeats the whole purpose of having different characters."*
+
+Decree 1 has always said a character never changes identity with the world. Prism, the default
+runner, cycled cyan → magenta → amber on an 8 s wall clock (`isPrismatic`, added in v1.4.2 as part
+of the fix that stopped skins tracking the world palette). Because that cycle is world-*blind*,
+S-005 recorded it in the handoff as compliant.
+
+**That reading was too literal and is overturned here.** The purpose of decree 1 is that a roster
+means something. A default runner that recolours as it runs defeats that exactly as thoroughly as
+one that follows the world. Decree 1 now reads: **a character's identity is fixed in space AND in
+time.**
+
+Prism is its authored cyan `0x00F5FF` with the magenta antenna — which is what Reduce Motion users
+already saw, so the still look was already designed. The shimmer machinery is deleted, not disabled:
+inert machinery is how a future session reintroduces this by accident.
+
+**Note for the record, since the owner's message said "reverted":** nothing was reverted. No
+character code was touched in S-006 before this, and 23 of the 24 skins have always been fixed. The
+shimmer was long-standing default-character behaviour, not a regression.
+
+## D-010 · Tier six opens at 2,560 m, and the chasm is NOT up-weighted in act two's first wave
+
+**Session 006, PR-0450.** Two placement decisions that look arbitrary and are not.
+
+**Why 2,560 m (diff 0.8).** Two constraints pin it from both sides. Above: a good run is ~3,300 m
+(§3 of the bible), so a tier that opens later is one most players never meet — and the whole point
+of PR-0450 was that the last new thing arrived at 1,920 m. Below: act two draws from
+`Spawner.pool`, a slot table that **bypasses `maxIndex` entirely**, so any gate later than
+`actTwoAt` (3,200 m) would let the table spawn a pattern the ladder had not unlocked.
+`DifficultyTests.testEveryWaveKeepsTheFullCatalogueReachable` probes d = 3,300 and pins exactly
+this. 2,560 m is the one band that satisfies both.
+
+**Why no wave-1 slot.** The chasm pattern is deliberately sparse — one obstacle across ~34 m
+against a catalogue average near six per 100 m — so every slot it gains costs obstacle density.
+Measured over 64 seeds: a wave-1 slot dropped act two's opening band to 5.95 obst/100 m, *below*
+the act-one band before it, and pushed rest share 18.6% → 25.1%. Compensating with an extra
+pattern 5 recovered the opening band (6.19) but dragged the deepest one down (7.36 → 6.87). Both
+variants failed `testSecondActEscalatesPastTheSpeedCap`, PR-0400's regression guard.
+
+**Density escalation wins.** It is load-bearing for the whole endgame; chasm-frequency smoothness
+is not. The residual is accepted and documented on `Spawner.poolWave1`: the chasm runs 1.84/km when
+tier six opens, dips to 1.06/km as act two's larger tables dilute it, then climbs to 2.20/km by
+wave 3.
+
+**What the instrument cannot see, recorded so nobody chases these numbers.** `DifficultyCurveTests`
+counts input EDGES, not input precision. A chasm costs one jump, exactly like a low — but with a
+±0.25 s window against the low's ±0.64 s. Every figure above therefore *undervalues* the chasm.

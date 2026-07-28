@@ -4,21 +4,29 @@
 > wins** and the other file gets fixed. That includes `state.md` and `README.md` at the repo root,
 > which are the project's human-facing history, not the agent's source of truth.
 
-- **Last written by:** session 005 (2026-07-28) — the hub redesign
+- **Last written by:** session 006 (2026-07-28) — the chasm (tier six), the slide SFX, Prism's identity
 - **Program phase:** audits 2 of 7 done, and the phase gate is gone (D-005) — audits and fixes now
   interleave. S-004 and S-005 were both pure fix/design sessions; no audit ran.
-- **Next session:** 006 — see `HANDOFF.md`. The owner's two direct requests (act two, the hub) are
-  both now delivered, so 006 picks up the highest-value remaining work rather than a standing ask.
+- **Next session:** 007 — see `HANDOFF.md`. **Two owner items are open and need HIS input, not
+  code:** the retuned slide SFX (nobody in this program can hear it) and whether act two / the hub /
+  the chasm actually FEEL right.
 - **Code changed by the program so far:** PR-0411 (S-003 + S-004 residue), **PR-0400, PR-0414,
-  PR-0445, PR-0451 (S-004)**, **PR-0452, PR-0134, PR-0149, PR-0150, PR-0453-partial (S-005)**.
-  The simulation and now the front door have both been changed, not just the copy.
+  PR-0445, PR-0451 (S-004)**, **PR-0452, PR-0134, PR-0149, PR-0150, PR-0453-partial (S-005)**,
+  **PR-0450, PR-0320, PR-0454, PR-0455 (S-006)**. The simulation, the front door, the audio and the
+  character roster have all been changed, not just the copy.
 - **The hub was redesigned in S-005** at Rayan's direct request. Three species of surface —
   gradient (PLAY alone), cards (claim ribbon, Daily Rush, loadout), bare rail (the four exits) —
   under an editorial masthead. `RewardsBar.swift` is gone; `ClaimRibbon.swift` replaces it and
   Missions became a nav exit. Before/after screenshots at three profile states live in
   `docs/agent/scratch/s005/`.
-- **`DailyChallenge.layoutVersion` is 8** as of S-004. Every daily track changed; that is expected
-  and is what a layout bump means.
+- **`DailyChallenge.layoutVersion` is 9** as of S-006 (the chasm + tier six). Every daily track
+  changed; that is expected and is what a layout bump means. A v10 pin is pre-armed.
+- **The catalogue is 15 patterns and the ladder has SIX tiers** (S-006, PR-0450). Tier six opens at
+  2,560 m with THE CHASM — a full-width 8 u gap, the first obstacle with an extent and the first
+  two-sided timing window in the game. Iron rule 4's "moving walls stay LAST" shorthand is amended
+  in `CLAUDE.md`: moving walls are the last entry of tier FIVE (index 13), the chasm is index 14.
+- **Decree 1 now covers TIME as well as space (D-009).** Prism's 8 s hue shimmer is deleted on the
+  owner's direct call. No skin changes colour with the world OR as it runs.
 - **The read-only phase is over (D-005).** Sessions may now fix code as they go. The audit sequence
   continues because it is producing real findings, not because a rule requires it.
 - **Rayan's standing instruction (2026-07-28):** *"never be limited by arbitrary rules — just work
@@ -40,9 +48,9 @@ binary assets except the generated app icon.
 What is genuinely solid, and session 002 did not dent it:
 - The deterministic core is real. Fixed 1/120 s timestep, seeded SplitMix64, a 200-seed solvability
   bot plus a 12,000 m soak, golden-pinned daily-challenge seeds. `RendererPort` is clean.
-- **187 SPM tests pass in ~24 s, re-measured by session 004 at `9766e7d`, zero failures.** The
-  jump from 178 is S-004's `DifficultyCurveTests` (5) and four new gates in `DifficultyTests`. The
-  runtime grew because the difficulty instrument plays 64 seeded Autopilot runs to 9,600 m.
+- **191 SPM tests pass in ~29 s and 209 Xcode tests (198 unit + 11 XCUITest) pass, re-measured by
+  session 006, zero failures.** The 187 → 191 delta is S-006's two `PatternOrderTests` additions,
+  the bot's chasm-encounter guard, and the tier-six step gate.
 - Zero `TODO` / `FIXME` / `HACK` / `XXX` / `fatalError` in 95 files. Re-verified, still true.
 - All 12 world families render distinctly, verified on device. Character previews are internally
   truthful (hero and swatch move in exact lockstep).
@@ -66,9 +74,16 @@ is hung in a lane each pattern closes so greed and survival stop being the same 
 **3.93 → 4.44 (+13%)**, obstacle-free track **27.1% → 12.4%**, gems priced in risk **0.7% → 14.6%**.
 v1.6 was flat in every one of those columns across the whole 3,000–8,000 m range.
 
-**What S-004 did NOT fix, and said so:** the catalogue is still 14 patterns (**PR-0450**) — act two
-changes how often you meet things, not what things exist. And **the coin sink still buys nothing
-that alters play** (PR-0401); that half of S-003's verdict stands untouched.
+**Session 006 closed the catalogue half of that.** There is now a 15th pattern behind a sixth tier
+at 2,560 m — THE CHASM, the first genuinely new verb since v1.3 (a two-sided timing window; nothing
+before it punished jumping too EARLY). Measured as a step, not a slope: 0.00 chasm/km below the
+gate, 1.84/km above it, rising to 2.20/km at depth, with act two's own density escalation intact.
+**Still untouched: the coin sink buys nothing that alters play** (PR-0401) — that half of S-003's
+verdict stands.
+
+**Session 006 also took two direct owner requests mid-session:** the slide SFX was retuned
+(PR-0454 — it had no attack and a 6 dB/oct filter at 600 Hz; also fixed PR-0320, where `swell:` was
+declared and never applied) and Prism's 8 s colour shimmer was deleted (PR-0455 / D-009).
 
 ## The three things that should worry you most
 
@@ -83,7 +98,11 @@ that alters play** (PR-0401); that half of S-003's verdict stands untouched.
    `CharacterParityTests.swift` is `#if canImport(UIKit)`-gated and silently compiles to nothing
    there. The whole interactive surface is 6 XCUITests in one file. Every session-002 finding lives
    in exactly the region the suite cannot see — that is the mechanism, not a coincidence.
-3. **The game runs out of design at 3,200 m** (PR-0400, session 003). Last new pattern at 1,920 m,
+3. ~~**The game runs out of design at 3,200 m**~~ — **the structural half is now closed.** S-004
+   built act two (density/decisions to 9,600 m) and S-006 added tier six and a new verb, so distance
+   is an axis of challenge again. What remains of S-003's verdict is the ECONOMY half: the coin sink
+   still buys nothing that alters play (PR-0401). Original finding, kept for context:
+   (PR-0400, session 003). Last new pattern at 1,920 m,
    speed cap at 3,077 m, density cap at 3,200 m — verified in source and measured on device by four
    independent lenses. Every endgame structure (the infinite world ladder, 13,400-coin deep rungs,
    the leaderboard, the 12,000 m soak) rests on distance being an axis of challenge. Past 3,200 m it
@@ -108,7 +127,9 @@ that alters play** (PR-0401); that half of S-003's verdict stands untouched.
 Session 004 added three (`PR-0450` SEV2, `PR-0451` SEV3, `PR-0452` SEV2) and closed five
 (`PR-0400`, `PR-0414`, `PR-0445`, `PR-0451`, and the `PR-0411` repo-side residue) → 259 items,
 6 DONE. Session 005 added one (`PR-0453` SEV2, partial) and closed four (`PR-0452` plus the three
-hub nits it absorbed: `PR-0134`, `PR-0149`, `PR-0150`) → **260 items, 10 DONE.**
+hub nits it absorbed: `PR-0134`, `PR-0149`, `PR-0150`) → 260 items, 10 DONE. Session 006 added two
+(`PR-0454`, `PR-0455`, both SEV2, both owner-raised and both DONE the same session) and closed four
+(`PR-0450`, `PR-0320`, `PR-0454`, `PR-0455`) → **262 items, 14 DONE.**
 
 Session 003's 46 items are `PR-0400 … PR-0445`. **124 findings were raised, 92 survived an
 independent hostile verifier, 32 were killed, and 34 severities were downgraded in review** — the
@@ -144,7 +165,7 @@ Columns, defined so a future session scores identically:
 | **CORE RUN** |
 | 1 | Three-lane run: jump / slide / lane change | ✅ | ✅ | ✅ | ✅ | |
 | 2 | Deterministic fixed-timestep sim | ✅ | ✅ | ✅ | ✅ | |
-| 3 | Procedural track, 14-pattern catalogue | ✅ | ✅ | ✅ | ✅ | 200-seed bot + 12 km soak |
+| 3 | Procedural track, 15-pattern catalogue | ✅ | ✅ | ✅ | ✅ | 200-seed bot + 12 km soak; six tiers, THE CHASM at 2,560 m (S-006) |
 | 4 | Death + collision | ✅ | ✅ | ✅ | ⚠️ | legibility is AUDIT-004's |
 | 5 | CLOSE / SLICK near-miss bonuses | ✅ | ✅ | ✅ | ❌ | PR-0291: `+50` popups stack 5 deep, illegible |
 | 6 | Flow / multiplier | ✅ | ✅ | ✅ | ⚠️ | chip vanishes unexplained |
@@ -171,7 +192,7 @@ Columns, defined so a future session scores identically:
 | 25 | World unlock by coins | ✅ | ✅ | ✅ | ✅ | **the app's best shortfall state — copy this one** |
 | 26 | Ladder past 12 ("Pulse City II"…) | ✅ | ✅ | ⚠️ | ⚠️ | real art + evolved palette; whether to *label* a reskin as a new world is AUDIT-002's |
 | **CHARACTERS** |
-| 27 | 24 characters, distinct identities | ✅ | ✅ | ⚠️ | ⚠️ | `CharacterParityTests` does not run under `swift test` |
+| 27 | 24 characters, distinct identities | ✅ | ✅ | ⚠️ | ✅ | `CharacterParityTests` does not run under `swift test`; Prism's shimmer removed S-006 (D-009) so every skin is now one fixed identity |
 | 28 | Equip | ✅ | ✅ | ✅ | ✅ | |
 | 29 | Buy with coins | ✅ | ✅ | ✅ | ❌ | zero-coin case is a silent shake (cf. row 25) |
 | 30 | Buy with real money (Aurora) | ✅ | ⚠️ | ❌ | ❌ | PR-0160 — priced via a hardcoded `auroraID` |
@@ -204,7 +225,7 @@ Columns, defined so a future session scores identically:
 | 54 | Power-Ups reference catalog | ✅ | ✅ | ❌ | ⚠️ | PR-0317 — different icons than the hub |
 | 55 | Splash | ✅ | ✅ | ❌ | ✅ | does not auto-dismiss, by design |
 | 56 | Music | ✅ | ✅ | ✅ | ⚠️ | **pinned to world 0 by explicit owner decree — the other 11 beds are intentionally unreachable. The defect is that the README still sells them** |
-| 57 | SFX | ✅ | ✅ | ⚠️ | ⚠️ | PR-0320 — 4 "rising whoosh" SFX decay instead of swelling |
+| 57 | SFX | ✅ | ✅ | ⚠️ | ⚠️ | PR-0320 fixed S-006 (`swell:` was declared and never applied); slide retuned (PR-0454) — **timbre needs Rayan's ears** |
 | 58 | Haptics | ✅ | ✅ | ❌ | — | needs a device |
 | 59 | Pause | ✅ | ✅ | ⚠️ | ⚠️ | PR-0130 — session-summary block is dead code (HUD still visible behind the veil) |
 
@@ -251,6 +272,12 @@ Carried forward every session until done.
   is the 3,200 m step noticeable? Do the swung moving walls past ~6,800 m read, or do they feel
   cheap? Is the greed line legible at speed — can you *see* the two coin lines diverge in time to
   choose? Is the choice worth making, or is the safe line obviously correct?
+- **PR-0454 — the retuned slide SFX. THE most device-dependent item in the program:** no agent here
+  can hear audio, so the fix is DSP reasoning (no attack ramp; a 6 dB/oct filter at 600 Hz) plus
+  sanity tests. He asked for it directly; he has to confirm it directly.
+- **PR-0450 — does the chasm feel right?** Verified fair (bot green, symmetric ±0.25 s window) and
+  legible in screenshots, but "legible in a still" and "readable at 33 m/s" are different claims.
+  Does the gap read as a gap the first time, or as two bars? Is the arc's launch cue enough?
 - **PR-0452 — the hub redesign is BUILT (S-005).** He asked for it in S-004 without naming a
   direction, and an autonomous session cannot ask, so one was picked and documented: editorial /
   arcade, three species of surface. **This now needs his eyes, not his instructions** — the whole

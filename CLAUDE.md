@@ -17,7 +17,7 @@ context on the v1.2 overhaul; `docs/SHIP_CHECKLIST.md` for the App Store path.
 ## Architecture (the seams matter)
 
 ```
-Core/    pure deterministic sim — fixed 1/120 s tick, seeded SplitMix64 RNG, 12 spawn patterns,
+Core/    pure deterministic sim — fixed 1/120 s tick, seeded SplitMix64 RNG, 15 spawn patterns,
          pure collision predicates, greedy Autopilot bot, DailyChallenge seeds. NO UIKit/RealityKit.
 Render/  RealityKit renderer behind ONE protocol: RendererPort { sync(GameSnapshot); fire(FXEvent) }.
          Pooled entities, procedural meshes (MeshDescriptor), UnlitMaterial only.
@@ -41,13 +41,13 @@ why the whole sim is testable headless.
 ./Tools/ci.sh             # generate + build + full test suite
 xcodebuild test -project PrismRush.xcodeproj -scheme PrismRush \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' CODE_SIGNING_ALLOWED=NO
-# → 205 tests (194 unit + 11 XCUITest). Sim overrides: PR_SIM_NAME / PR_SIM_OS / PR_SIM_UDID.
+# → 209 tests (198 unit + 11 XCUITest). Sim overrides: PR_SIM_NAME / PR_SIM_OS / PR_SIM_UDID.
 # Autoplay demo: SIMCTL_CHILD_PR_AUTOPLAY=1 xcrun simctl launch booted com.rayancheca.prismrush
 ```
 
 **Linux / CI (deterministic layers only, via `Package.swift`):**
 ```bash
-swift test -c release     # 187 tests, ~25 s — Core + Meta + Synth DSP (incl. the 200-seed bot)
+swift test -c release     # 191 tests, ~25 s — Core + Meta + Synth DSP (incl. the 200-seed bot)
 ```
 Linux compiles ONLY what `Package.swift` lists (Core/, 7 Meta files, Audio/Synth.swift). Everything
 touching UIKit/RealityKit/SwiftUI/StoreKit/AVFoundation/GameKit is **not even type-checked** there —
@@ -62,10 +62,15 @@ installs crash the test host (false "TEST FAILED").
 The owner's stated intent outranks every `reports/design/*.md` decision. When a doc conflicts
 with a decree, the doc is wrong — amend the doc, never "ship the doc". Current decrees:
 
-1. **A character NEVER changes identity with the world — including the default.** The player's
-   pick (colors, shape, trail) is constant across all worlds. No `followsWorld` behavior on any
-   skin. (Origin: v1.2 + v1.4.1 feedback — "what's the point of characters if they change
-   colors every level?" The v1.3 'Prism the chameleon' R-decision violated this and was revoked.)
+1. **A character NEVER changes identity — in space OR in time.** The player's pick (colors, shape,
+   trail) is constant across all worlds AND constant as they run. No `followsWorld` behavior on any
+   skin, and no time-varying hue on any skin either. (Origin: v1.2 + v1.4.1 feedback — "what's the
+   point of characters if they change colors every level?" The v1.3 'Prism the chameleon'
+   R-decision violated this and was revoked. **Tightened in v1.8/S-006 (D-009)** after the owner
+   saw Prism's 8 s cyan→magenta→amber shimmer: *"why does the character change colours as it runs.
+   that defeats the whole purpose of having different characters."* The shimmer was world-blind, so
+   earlier sessions read it as compliant; that reading was too literal. Prism is now its authored
+   cyan, and the shimmer machinery is deleted rather than disabled.)
 2. **Previews never lie.** Menu hero, select swatches, shop cards and tease renders must match
    the in-game appearance (same colors, shape, eye style — same character).
 3. **No broken-looking states for expected situations.** Pre-launch/offline store, empty
@@ -104,8 +109,18 @@ with a decree, the doc is wrong — amend the doc, never "ship the doc". Current
    `DailyChallenge.layoutVersion`** (goldens pinned in `DailyChallengeTests` **and** in
    `MissionsTests.testTodaysChallengeSeedMatchesUTCGoldens`, which pins the same seeds from the meta
    layer and is easy to miss). Consuming one extra `rng.unit()` anywhere in the spawn path silently
-   changes every seeded run. **Currently at layoutVersion 8** (v1.7, S-004); a v9 pin is pre-armed.
-4. **Pattern order is load-bearing**: the spawner gates by prefix index. Moving walls stay LAST.
+   changes every seeded run. **Currently at layoutVersion 9** (v1.8, S-006 — the chasm + tier six); a v10 pin is pre-armed.
+   Derive goldens in Python from the SplitMix64 constants, never read them off the Swift they pin —
+   reproduce the existing pins first, then trust the new ones. A green bot proves nothing if it
+   never MET the hazard: `SolvabilityBotTests.testTheSoakActuallyDrivesTheBotAcrossChasms` is the
+   guard that keeps the 200-seed proof honest.
+4. **Pattern order is load-bearing**: the spawner gates by PREFIX index, so a pattern's index is
+   its unlock rank. *(Amended v1.8/S-006: the old shorthand was "moving walls stay LAST". Tier six
+   put the chasm behind them — moving walls are the last entry of tier FIVE at index 13, still
+   exclusive to it, and the chasm is index 14. `PatternOrderTests` now pins the literal indices.
+   Note `Spawner.maxIndex` returns a LITERAL 14 below `chasmDiff`, which is what `Patterns.count`
+   used to evaluate to — writing `Patterns.count` there would hand tier five the tier-six pattern
+   and silently reshuffle every seeded run under 2,560 m.)*
 5. **G3 — never `@State` a shared `@Observable`, never snapshot `store.profile` into a `let` at the
    top of `body`.** Reference singletons (`ProfileStore.shared`, `IAPManager.shared`, …) directly in
    `body` so observation tracks them. This exact anti-pattern shipped three v1.0 bugs.

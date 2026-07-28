@@ -1188,7 +1188,7 @@ items were not renumbered, merged, or deleted.
 | ID | Sev | Finding | Cite |
 |---|---|---|---|
 | PR-0319 | SEV3 | `startRun` folds the checkpoint world by `% 3` (pre-v1.5 modulus) while `stepWorld` uses `Tuning.worldFamilyCount` = 12. **[RUNTIME] Latent, not player-visible** — picked world 4, correctly got Orbital Drift, because the renderer derives the world from distance and never reads the field `startRun` corrupts. Fires the day anyone re-wires `GameCore.world`. | `Core/GameCore.swift:110` vs `:290` |
-| PR-0320 | SEV3 | `Synth.noise(swell:)` is never read — four "rising whoosh" SFX decay instead of swelling, and the test guarding it passes vacuously. | `Audio/Synth.swift` |
+| PR-0320 | SEV3 | **DONE(S-006).** `Synth.noise(swell:)` was declared and never applied — the body always used `(1 - frac)`, so all four callers asking for a whoosh that builds got one that dies. Implemented; `testDeathSweepNoiseSwells` now passes on the mechanism it was written for rather than on the saw layer under it. | `Audio/Synth.swift` |
 | PR-0321 | SEV3 | `Profile.ownedProducts` is written by all four IAP grant paths, persisted, decoded and cloud-merged — and read by nothing. | `Meta/Profile.swift:116` |
 | PR-0322 | SEV3 | [RUNTIME] Profile stacks `LEVEL 1` and a `LVL 3 · PEBBLE` chip in one card with no "NEXT" label; the Characters screen labels the identical fact correctly as `NEXT UNLOCK`. | `UI/ProfileView.swift` |
 | PR-0323 | SEV3 | The meta header's coin badge is a Shop link on four screens and inert on two — same pixels, different behaviour. | `UI/MetaScreenScaffold.swift` |
@@ -1609,7 +1609,7 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
 ## PR-0450 · SEV2 · Act two shifts the mix; the catalogue is still 14 patterns
 - Area:        Core/Patterns
 - Found by:    S-004, as the acknowledged residual of PR-0400
-- Status:      OPEN
+- Status:      **DONE(S-006).** See the resolution block at the end of this item.
 - Symptom:     Past 1,920 m the player has seen every pattern the game will ever show them. v1.7's
                second act makes the demanding ones arrive more often and the breathers less often,
                and swings the moving walls — but it introduces no new *kind* of moment.
@@ -1625,6 +1625,41 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
                `Core/Autopilot.swift`, `Render/Reality/*` — and invariant 2 in full.
 - Verification: Bot green + `layoutVersion` bump + goldens; `DifficultyCurveTests` should show the
                new tier arriving as a step, not just a slope.
+
+- **Resolution (S-006). THE CHASM — pattern 14, `EntityKind.chasm`, tier six at 2,560 m.**
+  A full-width 8 u gap in the deck: the catalogue's first obstacle with an EXTENT rather than a
+  plane, and its first TWO-SIDED timing window. Every other jump in the game is one-sided — clear a
+  plane, and going early is free — so nothing until now punished jumping too SOON. Go early here
+  and you land in the hole. Launch slack is ~±0.25 s at every speed, matched to `jumpBuffer`,
+  because the gap is centred on the APEX of the jump its gem arc cues.
+- **Taught with the device the catalogue already owns.** Pattern 1's contract is "the arc jump IS
+  the survival jump": a run-up line pulls the player into a lane on the same 1.7 spacing, arc gem 0
+  is the launch cue, and three of the seven arc gems hang over the void, so the reward is collected
+  mid-flight. This pattern prices TIMING, not routing — it grows no greed line by construction
+  (it closes no lane, so `greedLane` returns nil).
+- **Invariant 2 discharged in full.** 200-seed bot + 12,000 m soak green, `layoutVersion` 8 → 9,
+  goldens repinned in `DailyChallengeTests` AND `MissionsTests`, all derived in Python from the
+  SplitMix64 constants after reproducing the seven existing pins. v10 pre-armed. Iron rule 4's
+  "moving walls stay LAST" shorthand amended in `CLAUDE.md` rather than routed around.
+- **Measured step** (`DifficultyCurveTests`, 64 seeds): chasm/km is 0.00 through 2,400–2,560 and
+  1.84 at 2,560–3,200. Below the gate it is not rare, it is IMPOSSIBLE — the ladder cannot select
+  index 14 and the spawn cursor never runs behind the player. Pinned by
+  `testTheSixthTierArrivesAsAStep`. Act two's own escalation is intact: 6.06 → 6.33 → 6.96 → 7.36
+  obst/100 m, rest share 18.0% → 9.0%.
+- **New guard:** `testTheSoakActuallyDrivesTheBotAcrossChasms`. A 200-seed solvability proof that
+  never meets the hazard is not a proof; this asserts every 6,000 m run encounters the tier-six
+  pattern and the bot clears it.
+- **Two rejected variants recorded on `Spawner.poolWave1` and in D-010** — up-weighting the chasm
+  in act two's wave 1 (and a compensated version) both failed PR-0400's density gate, because the
+  chasm pattern is deliberately sparse. The residual dip (1.84 → 1.06 → 2.20/km) is accepted.
+- **The visual took two rounds on the simulator and neither failure was visible statically.** A
+  near-black well vanished against the black deck (it read as two gold stripes = "slide", the wrong
+  verb); then visible walls were still not enough, because a chase camera this low cannot see into a
+  hole until it is too late to react. What carries the read is an opaque LID at y 0.045 that
+  interrupts the deck's neon grid — the track visibly stops for 8 m, legible at the full 65 m of
+  backdrop lead. Before/after: `docs/agent/scratch/s006/chasm_11.png` vs `v5_3_crop.png`.
+- Also adds the `PR_CHASM=1` launch hook (same shape as `PR_SHIELD`) so the gap can be inspected
+  head-on without running 2,560 m.
 
 ## PR-0451 · SEV3 · `Tuning`'s pool-cap comment claims a renderer coupling that does not exist
 - Area:        Core/Tuning
@@ -1769,3 +1804,45 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
                review than the hub redesign it would have ridden in on.
 - Verification: crop the hero region of a clean-launch hub screenshot and look for vertical edges.
                On the grid, compare a card's glow against a circle.
+
+
+## PR-0454 · SEV2 · The slide SFX was harsh; retuned, and `.slid` was firing 120×/s under the bot
+- Area:        Audio/Synth · Core/GameCore
+- Found by:    **Rayan, directly, S-006**: *"i really dont like the sound the game makes whenever
+               you slide. its so harsh and horrible."*
+- Status:      **DONE(S-006)** — needs his ears to confirm; no agent in this program can hear it.
+- Why:         Two structural causes, not taste. (1) The noise burst reached FULL amplitude on its
+               first sample — an instantaneous broadband onset is a click, and noise cannot get away
+               with that the way the game's tonal cues do. (2) A one-pole (6 dB/oct) filter at
+               600 Hz still passes plenty of 2–5 kHz, the band the ear is most sensitive to: hiss,
+               not air.
+- Fix:         `Synth.noise` gains `attack` (ramp-in fraction) and `poles`, both defaulted so every
+               existing caller stays byte-identical. Slide is now a 35% ramped, two-pole 320 Hz
+               whoosh at vol 0.14 over a softer low anchor, 0.20 s so the ramp has room.
+- Second half: `.slid` is now EDGE-triggered in `GameCore.slide()`. The Autopilot re-arms the slide
+               every tick and `.slid` drives both the SFX and the `slidesThisRun` mission counter —
+               so autoplay/demo runs played 120 overlapping slide sounds a second and counted ticks
+               rather than slides. Human play (one swipe = one sound) is unaffected.
+- Verification: `SynthTests` sanity bounds updated for the new length; 191 SPM / 209 Xcode green.
+               **The timbre itself is unverified — flagged for Rayan.**
+
+## PR-0455 · SEV2 · Prism changed colour as it ran — decree 1 tightened to cover TIME
+- Area:        Meta/SkinCatalog · UI/CharacterSwatch · Render/RealityRenderer
+- Found by:    **Rayan, directly, S-006**: *"why does the character change colours as it runs. that
+               defeats the whole purpose of having different characters."*
+- Status:      **DONE(S-006).** Ruled in **D-009**.
+- Note:        His message said "you reverted my choice back several months". Nothing was reverted:
+               no character code was touched in S-006 before this, and 23 of 24 skins have always
+               been fixed. Prism's 8 s cyan→magenta→amber shimmer landed in v1.4.2 and has shipped
+               ever since. **S-005's handoff explicitly recorded it as decree-compliant** because it
+               is world-blind — a reading that was too literal, and is now overturned.
+- Fix:         Prism is its authored cyan `0x00F5FF` (exactly what Reduce Motion already showed).
+               `isPrismatic`, `prismaticColor/Period/Stops` and the renderer's shimmer clock are
+               DELETED, not disabled — inert machinery is how this comes back by accident. Prism
+               gains an explicit `trailHex`, so `nil` no longer means "ride the shimmer".
+- Decree 2:    Holds by construction — swatch and rig both resolved through the same function, so
+               both move to `bodyHex` in lockstep. Hero, 24-card grid, shop rows and in-run body
+               cannot disagree.
+- Verification: `testEverySkinHoldsOneFixedIdentity` replaces the old shimmer test. Solid-cyan Prism
+               visible in `docs/agent/scratch/s006/v5_*.png`; the earlier `chasm_*.png` from the
+               same build show it yellow, pink, gold and orange.
