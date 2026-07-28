@@ -271,6 +271,44 @@ enum ProceduralMesh {
         return build(p, idx, fallback: max(hw, hh))
     }
 
+    /// Every face here is emitted with BOTH windings. Nothing in this renderer sets `faceCulling`,
+    /// so a back face is silently dropped — and the chasm is seen from above, from behind on
+    /// approach, and from directly inside at the apex of a jump. That is exactly the situation
+    /// where guessing the winding gets you an invisible obstacle and no error to explain it. Ten
+    /// extra triangles buys the whole class of bug.
+    private static func doubleSidedQuad(_ a: UInt32, _ b: UInt32, _ c: UInt32, _ d: UInt32,
+                                        into idx: inout [UInt32]) {
+        idx.append(contentsOf: [a, b, c, a, c, d])                   // front
+        idx.append(contentsOf: [a, c, b, a, d, c])                   // back
+    }
+
+    /// The chasm's four walls (v1.8) — an open-topped, open-bottomed well sunk into the deck, so
+    /// the gap reads as real DEPTH rather than a dark decal painted on the floor. Geometry is what
+    /// sells the hole; see `RealityRenderer.chasmEntity` for why colour cannot be relied on.
+    /// The floor is a separate mesh so the two can take different materials.
+    static func chasmWalls(halfWidth w: Float, halfLength l: Float, depth d: Float) -> MeshResource {
+        let p: [SIMD3<Float>] = [
+            [-w, 0, -l], [w, 0, -l], [w, 0, l], [-w, 0, l],          // rim   0…3
+            [-w, -d, -l], [w, -d, -l], [w, -d, l], [-w, -d, l],      // base  4…7
+        ]
+        var idx: [UInt32] = []
+        idx.reserveCapacity(48)
+        doubleSidedQuad(0, 1, 5, 4, into: &idx)                      // far wall
+        doubleSidedQuad(1, 2, 6, 5, into: &idx)                      // right wall
+        doubleSidedQuad(2, 3, 7, 6, into: &idx)                      // near wall
+        doubleSidedQuad(3, 0, 4, 7, into: &idx)                      // left wall
+        return build(p, idx, fallback: w)
+    }
+
+    /// The chasm's floor, at `-depth`. Kept near-black so the well reads as receding into nothing
+    /// while the walls stay visible against the deck.
+    static func chasmFloor(halfWidth w: Float, halfLength l: Float, depth d: Float) -> MeshResource {
+        let p: [SIMD3<Float>] = [[-w, -d, -l], [w, -d, -l], [w, -d, l], [-w, -d, l]]
+        var idx: [UInt32] = []
+        doubleSidedQuad(0, 1, 2, 3, into: &idx)
+        return build(p, idx, fallback: w)
+    }
+
     private static func build(_ positions: [SIMD3<Float>], _ indices: [UInt32], fallback: Float) -> MeshResource {
         var d = MeshDescriptor(name: "procedural")
         d.positions = MeshBuffers.Positions(positions)

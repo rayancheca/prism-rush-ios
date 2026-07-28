@@ -215,6 +215,12 @@ final class GameModel {
         if let w = ProcessInfo.processInfo.environment["PR_WORLD"].flatMap(Int.init), w > 0 {
             beginRun(fromWorld: w, seed: 7)   // debug path — bypasses the first-run tutorial gate
         }
+        // Debug: drop a chasm dead ahead so the tier-six gap can be inspected head-on without
+        // running 2,560 m to meet one. Combine with PR_WORLD / PR_AUTOPLAY (which start the run).
+        // Placed at the spawn horizon so it fades in from the backdrop exactly as a real one does.
+        if ProcessInfo.processInfo.environment["PR_CHASM"] == "1" {
+            core.debugSpawn(.chasm(d: core.distance + Tuning.spawnHorizon))
+        }
         // Debug: drop a shield just ahead AND deploy one now (so the HUD chip + in-world dome show).
         if ProcessInfo.processInfo.environment["PR_SHIELD"] == "1" {
             core.debugSpawn(.shield(d: core.distance + 5, lane: 1))

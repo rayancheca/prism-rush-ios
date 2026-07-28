@@ -41,13 +41,15 @@ final class RealityRenderer: RendererPort {
     private let ringMesh: MeshResource      // prism-ring gate torus (hole faces the camera, +Z)
     private let padMesh: MeshResource       // overdrive-pad floor chevron strip (flat, XZ plane)
     private let sneakerArmMesh: MeshResource // one chevron arm (four per Super Sneakers boost glyph)
+    private let chasmShaftMesh: MeshResource // the void well's four walls, sunk into the deck (v1.8)
+    private let chasmFloorMesh: MeshResource // the well's floor (darker than the walls)
+    private let chasmLidMesh: MeshResource   // opaque panel that interrupts the deck grid
+    private let chasmRimMesh: MeshResource   // one lit rim bar (two per chasm: near and far edge)
 
     // Selected character skin — authored hexes only, NEVER world-driven (owner decree 1).
     // Defaults reproduce Prism's fixed prismatic identity for the pre-`applySkin` frame.
     private var skinBodyHex: UInt32 = 0x00F5FF
     private var skinAntennaHex: UInt32 = 0xFF2BD6
-    private var skinIsPrismatic = true              // Prism: body+trail ride the shared 8 s shimmer
-    private var shimmerStep = Int.min               // quantized shimmer clock (~30 Hz material swaps)
 
     // v1.3 skin rig (set by `applySkin(_ skin:)`). All visual-only — the hitbox
     // (Core's bodyRadius/groundedCenterY) never sees any of this.
@@ -164,6 +166,18 @@ final class RealityRenderer: RendererPort {
         ringMesh = ProceduralMesh.torus(major: 0.88, minor: 0.09, majorSeg: 28, minorSeg: 10)
         padMesh = ProceduralMesh.chevronStrip()
         sneakerArmMesh = .generateBox(width: 0.36, height: 0.11, depth: 0.11, cornerRadius: 0.035)
+        // Chasm: the shaft spans the full deck width (3.8 either side, matching the bar mesh) and
+        // the exact collision length, so what you see IS what kills you — the length comes from
+        // `Tuning.chasmHalfLength`, never a literal. 1.7 deep reads as a drop without the far floor
+        // vanishing under the backdrop.
+        chasmShaftMesh = ProceduralMesh.chasmWalls(halfWidth: 3.8,
+                                                   halfLength: Float(Tuning.chasmHalfLength),
+                                                   depth: 1.7)
+        chasmFloorMesh = ProceduralMesh.chasmFloor(halfWidth: 3.8,
+                                                   halfLength: Float(Tuning.chasmHalfLength),
+                                                   depth: 1.7)
+        chasmLidMesh = .generatePlane(width: 7.6, depth: Float(Tuning.chasmHalfLength) * 2)
+        chasmRimMesh = .generateBox(width: 7.6, height: 0.14, depth: 0.5, cornerRadius: 0.03)
         matGemGold = UnlitMaterial(color: UIColor(red: 1, green: 210/255.0, blue: 61/255.0, alpha: 1))
         matGemHot = UnlitMaterial(color: UIColor(red: 1, green: 0.95, blue: 0.75, alpha: 1))
         buildScene()
@@ -175,6 +189,7 @@ final class RealityRenderer: RendererPort {
         pools.prewarm(.ring, count: Tuning.capRing)
         pools.prewarm(.boostPad, count: Tuning.capBoostPad)
         pools.prewarm(.superSneakers, count: Tuning.capSuperSneakers)
+        pools.prewarm(.chasm, count: Tuning.capChasm)   // tier six: first spawn is ~2,560 m in
         decor = WorldDecor(root: root)
         particles = ParticleSystem(parent: root)
 
@@ -412,6 +427,15 @@ final class RealityRenderer: RendererPort {
                 let pulse = 1 + 0.07 * Float(sin(s.spin * 1.5))
                 entity.scale = SIMD3<Float>(pulse, 1, pulse)
                 (entity as? ModelEntity).map { $0.model?.materials = [mA] }
+            case .chasm:
+                // A parent Entity, so `entity as? ModelEntity` fails silently and the seed colour
+                // would stick forever — recolour by walking the children, as splitBar does. The
+                // walls and floor keep their fixed world-blind materials; the LAST TWO children are
+                // the rims and they take the live accent. `suffix(2)` rather than an index so
+                // adding another static part to the well can never silently recolour it.
+                for child in entity.children.suffix(2) {
+                    (child as? ModelEntity)?.model?.materials = [mA2]
+                }
             }
         }
 
@@ -577,23 +601,6 @@ final class RealityRenderer: RendererPort {
     func advanceVisuals(_ dt: Double) {
         elapsed += dt
         lastDt = Float(dt)
-        // Prism shimmer — body + trail hue ride the SHARED pure clock→color function
-        // (`SkinCatalog.prismaticColor`) on the reference-date wall clock, the same clock the
-        // SwiftUI previews sample, so the menu hero and the in-run body agree at any instant
-        // (decree 2). Time-based and world-blind (decree 1): a world crossfade cannot touch it.
-        // Quantized to ~30 Hz so the material swap costs at most one UnlitMaterial per step,
-        // Prism only. Reduce Motion holds phase 0 — the static authored cyan body (0x00F5FF).
-        if skinIsPrismatic {
-            let t = reduceMotion ? 0 : Date().timeIntervalSinceReferenceDate
-            let step = Int(t * 30)
-            if step != shimmerStep {
-                shimmerStep = step
-                let c = SkinCatalog.prismaticColor(at: t)
-                let shimmer = UIColor(red: c.r, green: c.g, blue: c.b, alpha: 1)
-                skinTrailColor = shimmer
-                playerBody.model?.materials = [UnlitMaterial(color: shimmer)]
-            }
-        }
         // Re-arm from the skin's OWN catalog range, not a global constant: Fang stares ~5–8 s,
         // Tempo blinks exactly on its 3 s beat — in-run, not just on the select stage (D2-2).
         // Renderer-side randomness is fine here: visual-only, never touches the Core sim.
@@ -695,13 +702,12 @@ final class RealityRenderer: RendererPort {
 
     /// v1.3 skin pipeline: colors + trail tint + rig geometry + idle sway/blink cadence from one
     /// `Skin` recipe. Rebuilds the character rig — called on equip/launch only, NEVER per frame.
-    /// Character colors are authored per skin and world-blind (decree 1): Prism (`isPrismatic`)
-    /// shimmers on the shared 8 s clock — fixed and identical in every world; its nil trail =
-    /// "ride the live shimmer hue". The eyes and antenna keep constant authored hexes everywhere.
+    /// Character colors are authored per skin, world-blind AND time-invariant (decree 1, tightened
+    /// in v1.8): a character is one identity everywhere and always. Prism's 8 s hue shimmer was
+    /// removed on the owner's call — a runner that recolours as it runs makes the roster pointless.
     func applySkin(_ skin: Skin) {
         skinBodyHex = skin.bodyHex
         skinAntennaHex = skin.antennaHex
-        skinIsPrismatic = skin.isPrismatic
         skinTrailColor = skin.trailHex.map { uiHex($0) } ?? uiHex(skin.bodyHex)
         skinBodyShape = skin.bodyShape
         skinScale = min(max(skin.scale, 0.85), 1.12)   // visual-only cap — never misrepresent the hitbox
@@ -719,7 +725,6 @@ final class RealityRenderer: RendererPort {
         skinBlinkMax = skin.idle.blinkMax
         rebuildCharacter()
         applyCharacterColors()
-        shimmerStep = .min   // prismatic body/trail re-derive on the next advanceVisuals tick
     }
 
     /// Paint the rig from the authored skin hexes — on equip/rig rebuild only, never per frame
@@ -1008,7 +1013,49 @@ final class RealityRenderer: RendererPort {
         // (same pattern as obstacles), so the creation-time material is just a safe seed.
         case .ring:       return ModelEntity(mesh: ringMesh, materials: [matAccent])
         case .boostPad:   return ModelEntity(mesh: padMesh, materials: [matAccent])
+        case .chasm:      return chasmEntity()
         }
+    }
+
+    /// The chasm: a sunken well plus two lit rim bars, under a shared parent.
+    ///
+    /// **The shaft is NOT black, and that is the whole design.** The first cut painted the interior
+    /// near-black (`0x03040A`) on the reasoning that a hole is the absence of light. On the
+    /// simulator it vanished: the deck is already black with neon grid lines, so a black well on a
+    /// black floor left only the two rim bars visible — and an 8 u gap read as two stripes lying on
+    /// the track, which a player would parse as a bar to SLIDE under. Exactly the wrong verb, and
+    /// exactly the kind of thing that only shows up by running the game.
+    ///
+    /// So the walls are a desaturated violet-grey, LIGHTER than the deck. It is the geometry, not
+    /// the colour, that has to carry it: four walls receding to a floor is unmistakably a hole,
+    /// while any hue would fight twelve different world palettes. Deliberately world-blind for the
+    /// same reason gems are fixed gold — the void should look identical everywhere, because the
+    /// verb it demands is identical everywhere.
+    ///
+    /// The rims DO take `accent2`, reassigned each frame by the place closure like every other
+    /// obstacle, so the hazard still belongs to its world.
+    private func chasmEntity() -> Entity {
+        let parent = Entity()
+        // The LID is what actually makes the gap read, and it took running the game to learn why.
+        // A chase camera this low cannot see into a hole until it is almost on top of it — that is
+        // just geometry — so depth cues arrive far too late to react to. What IS visible from 65 m
+        // is the deck's neon grid, and the one unmistakable statement available is to INTERRUPT it:
+        // an opaque panel sitting just above the grid plane, so the glowing track visibly stops for
+        // 8 m. Drawn at y 0.045, above the rungs and lane lines but below the 0.05 boost-pad decal,
+        // which is the only other thing living on the deck.
+        let lid = ModelEntity(mesh: chasmLidMesh, materials: [UnlitMaterial(color: uiHex(0x07060E))])
+        lid.position = SIMD3<Float>(0, 0.045, 0)
+        parent.addChild(lid)
+        parent.addChild(ModelEntity(mesh: chasmShaftMesh,
+                                    materials: [UnlitMaterial(color: uiHex(0x2A2340))]))
+        parent.addChild(ModelEntity(mesh: chasmFloorMesh,
+                                    materials: [UnlitMaterial(color: uiHex(0x08060F))]))
+        for side in [Float(-1), Float(1)] {
+            let rim = ModelEntity(mesh: chasmRimMesh, materials: [UnlitMaterial(color: .magenta)])
+            rim.position = SIMD3<Float>(0, 0.06, side * Float(Tuning.chasmHalfLength))
+            parent.addChild(rim)
+        }
+        return parent
     }
 
     /// Two one-lane bar segments under a shared parent. The segments' x offsets are repositioned
