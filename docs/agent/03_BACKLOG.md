@@ -1492,12 +1492,23 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
   and leaves the balance work as a separate decision. **If Rayan would rather the product deliver
   a true 2× on everything, that is a live option and a better deal for buyers — say so and it gets
   filed as its own item.**
-- ⚠️ **RAYAN ACTION REQUIRED:** `Products.storekit` is only the *local* StoreKit config for
-  simulator testing. **The real product description lives in App Store Connect and still reads
-  "Earn 2x coins, forever."** It must be updated there before submission or the shipped metadata is
-  still false.
-- Test gap (honest): `IAPCatalog.swift` is **not** in `Package.swift`, so no `swift test` can pin
-  these strings. A future XCUITest could assert the shop row's text.
+- **Residue fixed (S-004, on Rayan's instruction).** S-003 fixed the app copy but missed the two
+  repo files that are the *copy-paste source* for App Store Connect. Both now carry the shipped
+  wording:
+    - `docs/APP_STORE_SETUP.md:128` → `Every run pays 2× coins. Forever.`
+    - `docs/SHIP_CHECKLIST.md:43` → `Every run pays 2× coins. Forever.`
+  Repo-wide re-grep (`2x coins|2× coins|two times coins`, excluding `docs/agent/`) now returns only
+  correct copy: `Products.storekit:43`, `IAPCatalog.swift:35`, `ShopView.swift:440`, and the
+  VoiceOver label at `ShopView.swift:464-465` ("pays two times coins, forever" — a spoken rendering
+  of the same claim, left as-is). `Store/metadata.md:95` names the product but makes no claim.
+  `state.md:503` is history about the *Coin Doubler pickup*, a different feature.
+- Verification (honest): **grep only.** `.md` files are not compiled and `IAPCatalog.swift` is not
+  in `Package.swift`, so no `swift test` can pin any of these strings. There is no test coverage
+  for this fix and none is claimed. A future XCUITest could assert the shop row's text.
+- ⚠️ **RAYAN ACTION REQUIRED (still open):** `Products.storekit` and the two docs above are only
+  *staging* copy. **The real product description lives in App Store Connect and still reads
+  "Earn 2x coins, forever."** It must be updated there by hand before submission or the shipped
+  metadata is still false. The repo is now correct so that what gets pasted is correct.
 
 ## PR-0412 · SEV1 · Buying a world silently disqualifies the run and credits zero reach
 - Area:        Meta/ProfileStore · UI/WorldsView

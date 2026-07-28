@@ -125,7 +125,7 @@ For **each** IAP, ASC requires:
    | medium | `Bag of Coins` | `7,000 coins` |
    | large | `Vault of Coins` | `16,000 coins` |
    | mega | `Crate of Coins` | `40,000 coins` |
-   | doublecoins | `Double Coins` | `Earn 2× coins, forever` |
+   | doublecoins | `Double Coins` | `Every run pays 2× coins. Forever.` |
    | aurora | `Aurora Skin` | `Exclusive Aurora character` |
 4. **Review screenshot** (required): one screenshot of the in-app Shop screen. You'll generate
    these in Part 7.5; come back and attach one to each IAP. (Any clear Shop shot is fine.)

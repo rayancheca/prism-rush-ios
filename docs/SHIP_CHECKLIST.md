@@ -40,7 +40,7 @@ PENDING" footnote — that's expected, not a bug.
 | `com.rayancheca.prismrush.coins.medium` | Consumable | $4.99 (Tier 5) | Bag of Coins | 7,000 coins |
 | `com.rayancheca.prismrush.coins.large` | Consumable | $9.99 (Tier 10) | Vault of Coins | 16,000 coins |
 | `com.rayancheca.prismrush.coins.mega` **NEW v1.4.1** | Consumable | $19.99 (Tier 20) | Crate of Coins | 40,000 coins |
-| `com.rayancheca.prismrush.doublecoins` | **Non-Consumable** | $2.99 (Tier 3) | Double Coins | Earn 2x coins, forever |
+| `com.rayancheca.prismrush.doublecoins` | **Non-Consumable** | $2.99 (Tier 3) | Double Coins | Every run pays 2× coins. Forever. |
 | `com.rayancheca.prismrush.skin.aurora` | **Non-Consumable** | $1.99 (Tier 2) | Aurora Skin | Exclusive Aurora character |
 
 Notes on the two NEW ones: the Starter Bundle is the in-app first-purchase offer (the Shop only
