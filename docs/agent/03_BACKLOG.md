@@ -1577,7 +1577,7 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
 ## PR-0445 · SEV2 · The attract track cuts through hub text and the bottom card row  ·  **DECIDED (D-008)**
 - Area:        UI/MenuView
 - Found by:    AUDIT-002 (measured, clean launch) — closes the open question in PR-0296
-- Status:      OPEN
+- Status:      **DONE(S-004)** — lower-third scrim. See "Resolution" below.
 - Symptom:     On a clean launch the magenta attract grid crosses the "HEAD START ×1" glyphs, and a
                solid magenta band cuts horizontally across the CHARACTERS / SHOP / WORLDS row.
 - Repro:       Uninstall → install → launch → skip splash → observe the hub.
@@ -1592,6 +1592,19 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
   fade it under the lower third. It fails decree 6 because the lines cross glyphs; the neon look
   survives fine behind the cards. Not implemented in S-003 — needs a clean-launch screenshot to
   verify, and a diff alone does not prove it. **No longer blocked.**
+- **Resolution (S-004).** Took the "fade it under the lower third" option rather than reordering the
+  ZStack: the attract track is *already* behind `MenuView`: the problem was that the hub's lower
+  half is mostly transparent, so the grid showed through the glyphs rather than over them.
+  Reordering could not have fixed that. A `LinearGradient` scrim from clear at the top to the void
+  colour by 66% now sits between the `RealityView` and the hub content, menu-mode only,
+  `allowsHitTesting(false)` and `accessibilityHidden(true)` so it changes nothing but pixels
+  (`GameView.swift`, +1 shared `voidColor` constant so the fade resolves to exactly the backdrop).
+- Verified by clean launch (uninstall → install → launch), before and after screenshots compared:
+  the magenta band that ran through "HEAD START ×1" / "COIN SURGE ×1" and the diagonals across both
+  card rows are gone; the grid still reads around the hero and the wordmark, which is the part worth
+  keeping. `./Tools/build.sh` → BUILD OK.
+- **Superseded in spirit by PR-0452** (the owner's hub redesign request, same session). This fix is
+  a prerequisite for it, not a duplicate — whatever the hub becomes, the track must not cross it.
 
 ## PR-0450 · SEV2 · Act two shifts the mix; the catalogue is still 14 patterns
 - Area:        Core/Patterns
@@ -1626,3 +1639,55 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
                It did: `capGem` 72 was silently dropping gems in v1.6 and nobody touched it.
 - Note:        The *measured* defect (peak demand 94 vs cap 72) is recorded on PR-0400's resolution
                and pinned by `DifficultyCurveTests.testLiveGemCountStaysUnderThePoolCap`.
+
+## PR-0452 · SEV2 · The hub is a nine-row centred stack of near-identical cards — redesign it
+- Area:        UI/MenuView · UI/GameView (hub composition)
+- Found by:    **Rayan, directly, S-004**: *"i want a redesign of the ui ux of the main screen. it
+               just doesn't feel right."*
+- Status:      OPEN — **next session's headline goal.** Not started in S-004: a redesign is design
+               work, not a patch, and S-004 was spending its remaining context on the spawn-path
+               verification and handoff. Starting it on fumes would have produced a worse hub.
+- Symptom:     The hub reads as a settings screen with a PLAY button on it, not as the front door
+               of a neon arcade runner.
+- Evidence:    Clean-launch screenshot, S-004 (`docs/agent/scratch/s004/hub_after.png`). Concretely,
+               against the owner's own `rules/web/design-quality.md` "banned patterns" list:
+               1. **Uniform card grid, no hierarchy.** Six tiles in two 3-wide rows — DAILY RUSH /
+                  REWARDS / MISSIONS then CHARACTERS / SHOP / WORLDS — at identical size, radius,
+                  and spacing. Exactly the banned "default card grid".
+               2. **Rewards and navigation are visually the same class of object.** Nothing tells
+                  the player that the top row is *things that changed since you left* and the bottom
+                  row is *places to go*. Only REWARDS is filled, and that is the sole hierarchy cue
+                  in the whole lower half.
+               3. **Nine stacked, centre-aligned rows** (wordmark · hero · name pill · FURTHEST chip
+                  · PLAY · FIRST RUN · loadout chips · rewards rail · nav row). Uniform rhythm, no
+                  grid-breaking, no editorial composition, everything symmetric about one axis.
+               4. **Two competing secondary chips sandwich PLAY** — "FURTHEST 01 · PULSE CITY ›"
+                  above and "FIRST RUN ›" below — so the primary action is framed by two things that
+                  look equally tappable.
+               5. **Dead second lines.** "MISSIONS / BOARD" — "BOARD" carries no information.
+               6. **Unbalanced top corners:** a bare level ring on the left against a coin pill +
+                  gear pill on the right.
+               7. The hero character floats in a large empty centre while the wordmark collides with
+                  the city backdrop behind it.
+- Impact:      This is the first screen every player sees and the one they return to between every
+               run. Decree 6 (clarity) is met after PR-0445; what is missing is *character*.
+- Fix sketch:  Pick a real direction before touching code (the owner's rules list worthwhile ones —
+               bento composition and editorial/arcade both fit a neon runner). Then: give the
+               rewards rail and the nav row genuinely different treatments; break the centre axis;
+               make PLAY the only thing at its weight; collapse the two secondary chips into one;
+               use scale contrast rather than six equal tiles.
+- Constraints: Decrees 1–6 all bind here, especially **2 (previews never lie** — the hero stage must
+               keep showing the equipped skin exactly as it plays, via the `SkinCatalog` resolver at
+               `MenuView.swift:157`, never raw `selectedSkin`) and **4 (everything leads somewhere)**.
+               **G3** (invariant 6): read `ProfileStore.shared` directly in `body`; never `@State` a
+               shared `@Observable`, and keep `loadout` a concrete typed child — `AnyView` there
+               already shipped the "Head Start does nothing" bug once.
+- Blast radius: `UI/MenuView.swift` primarily; `UI/GameView.swift:1046+` for the hub's layering.
+- Verification: Clean-launch screenshots (uninstall → install → launch) at several profile states:
+               fresh (coins 0, FIRST RUN), mid (rewards claimable), and deep (world 12+). A diff
+               does not prove a redesign.
+- Related:     Absorbs the individual hub nits — PR-0149 (hero stage 140 pt floor can overflow small
+               screens), PR-0150 (BEST/FIRST RUN chip has no 44 pt minimum), PR-0134 (`rewards:` is
+               still an `AnyView`), PR-0155 (WORLDS tile and menu chip disagree). Fix them inside
+               the redesign rather than separately. PR-0445 (attract-track scrim) is DONE and is a
+               prerequisite, not a duplicate.

@@ -1043,9 +1043,13 @@ struct GameView: View {
         .accessibilityHidden(true)
     }
 
+    /// The near-black the 3D scene sits on. Shared by the root backdrop and the hub's lower-third
+    /// scrim (PR-0445) so the fade resolves to exactly the same colour it started from.
+    static let voidColor = Color(red: 7.0 / 255, green: 2.0 / 255, blue: 26.0 / 255)
+
     var body: some View {
         ZStack {
-            Color(red: 7.0 / 255, green: 2.0 / 255, blue: 26.0 / 255).ignoresSafeArea()
+            Self.voidColor.ignoresSafeArea()
 
             RealityView { content in
                 model.install(content)
@@ -1085,6 +1089,24 @@ struct GameView: View {
                 }
                 .padding(.top, 14)
                 .padding(.trailing, 14)
+            }
+
+            // PR-0445 / D-008 — the attract track used to cross the hub's glyphs: a solid magenta
+            // band cut straight through "HEAD START ×1" and diagonals sliced the CHARACTERS / SHOP /
+            // WORLDS row. That fails decree 6 (clarity beats spectacle). The hub's lower half is
+            // where every tappable card lives, so the track fades into the void colour under it —
+            // the neon look survives up top around the hero and the wordmark, which is the part
+            // worth keeping, and nothing crosses a glyph below. Menu only; hit-testing untouched.
+            if model.core.snapshot.mode == .menu && model.activeSheet == nil {
+                LinearGradient(stops: [
+                    .init(color: .clear, location: 0.00),
+                    .init(color: Self.voidColor.opacity(0.55), location: 0.50),
+                    .init(color: Self.voidColor.opacity(0.93), location: 0.66),
+                    .init(color: Self.voidColor.opacity(0.97), location: 1.00),
+                ], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
             }
 
             switch model.core.snapshot.mode {
