@@ -288,3 +288,71 @@ both halves of that pairing; a test pins spectral skins to `.sphere` for exactly
 
 `bodyHex` stays the authored cyan (it is the third band) because the glow, trail, wake and death
 burst all read from it. The spectrum is the body's *surface*, not its identity colour.
+
+---
+
+## D-012 · Audio-engine recovery is SILENT (session 007, PR-0314)
+
+**Decision.** When `AVAudioEngine` fails to start or dies, the app retries at four moments
+(interruption end, route change, engine config change, app foreground) and tells the player nothing.
+
+**Why.** Decree 3 says no broken-looking states for expected situations, and a silent game does read
+as broken — which argues for a notice. But the condition is transient, now self-healing, and gives
+the player **nothing to act on**. A warning about a problem that fixes itself is noise, and a
+"sound failed" banner on a game whose sound is about to come back is a worse lie than saying
+nothing. If a future session finds a failure mode that does NOT self-heal, revisit this.
+
+**Mechanism.** `wantsAudio` (intent) is split from `started` (fact). They were one flag, which is
+exactly why the bug existed: a failed start cleared `started`, and every recovery path guarded on
+`started`, so the one failure that most needed a retry was the one that permanently disabled
+retrying.
+
+---
+
+## D-013 · The character stands on a lit RING, not in a diffuse glow (session 007, owner-called)
+
+**Decision.** The hero stage's pedestal is a crisp elliptical rim plus a tight light pool, tinted by
+the skin — not a wide soft radial glow. The figure's own `3.2 × bodyR` halo is off on the hero.
+
+**Origin.** The owner: *"i really dont like the backround light behind the character in the main
+screen … either take it off or cange it for something cool and pretty."* Two stacked diffuse glows
+were smearing the live 3D city and its perspective grid. Diffuse light has no edge; the visual
+language of this game is edges.
+
+**The owner corrected the first fix.** An intermediate version replaced the ring with a plain light
+pool because a too-wide ellipse behind a sphere shows only its side tips and read as "whiskers". He
+said the circle *"was so cool"* and asked for it back. **It was a sizing problem, not a reason to
+drop the ring** — dropping it lower so the near arc clears the body fixes the read. Lesson: when the
+owner names a specific element as good, fix its geometry rather than replacing the idea.
+
+**It was also the wrong COLOUR.** The glow took its tint from `bodyHex`, so after D-011 gave Prism a
+six-band rainbow surface the light under it stayed cyan — a glow that did not match the thing
+casting it. Spectral skins now sweep their own bands. Fixed hues in an `AngularGradient`, no clock
+in the path, so decree 1 and D-011 hold: this is surface, not a changing identity.
+
+---
+
+## D-014 · The Wardens — per-world antagonists, and the designed fix for PR-0401 (session 007)
+
+**Decision.** Recorded in full in `docs/agent/10_WARDENS.md`. Agreed with the owner, not yet built.
+
+Three owner decisions on record:
+1. **Combat is dodge-to-damage AND auto-fire, combined** — he rejected the either/or framing.
+2. **Wardens appear every 3rd world** (~2,400 m).
+3. **Being caught is struggle-to-escape, then death.**
+
+**The design problem and its solution.** A three-lane runner's inputs are fully booked (jump, slide,
+two lane changes) and decree 6 requires one-frame readability, so a fourth input language would make
+both the running and the fighting worse. The two combat modes coexist by attacking **different
+things**: auto-fire breaks a SHIELD at a rate driven by charge earned from gems collected during the
+run (so the gun is a timer the player earned, never a win button), and dodging the exposed Warden's
+telegraphed attacks is the only path to the CORE. Skill at the existing verb set decides every fight.
+
+**The fairness valve.** Being HIT abducts you; failing to DAMAGE does not. An unbroken shield means
+the Warden breaks off and leaves — you lose the reward, not the run.
+
+**Why it matters beyond being fun.** It is the designed fix for **PR-0401** — the coin sink buys
+nothing that alters play — which is the surviving half of session 003's verdict and the largest
+structural gap left in the design. Countermeasures bought with coins change how an encounter
+resolves. It also gives the world ladder the real progression `05_GAME_DESIGN.md §6` says it
+currently fakes.

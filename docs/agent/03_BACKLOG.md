@@ -996,7 +996,7 @@ items were not renumbered, merged, or deleted.
 ## PR-0302 · SEV2 · [RUNTIME] The Mystery Box OPEN button is inert when unaffordable, and the app already has the right pattern
 - Area:        UI/MysteryBoxView, UI/ShopView
 - Found by:    AUDIT-001 (session 002), observed on a running build
-- Status:      OPEN
+- Status:      DONE(S-007) — the OPEN dead end now carries UnlockPanel's shortfall grammar; GET COINS dismisses (ShopView is the sole presenter)
 - Symptom:     With 100 coins, `OPEN · 300` renders as a full-saturation cyan→magenta CTA. Tapping it does nothing at all — no shortfall copy, no route to coins, no shake, no toast, no disabled styling.
 - Repro:       1. `SIMCTL_CHILD_PR_SCREEN=shop SIMCTL_CHILD_PR_SKIP_SPLASH=1 xcrun simctl launch <UDID> com.rayancheca.prismrush` with fewer than 300 coins. 2. Scroll to POWER-UP PACKS, tap Mystery Box. 3. Tap `OPEN · 300`. **Observed: no change whatsoever, balance unmoved.**
 - Why:         The unaffordable branch has no handler at all, unlike its siblings.
@@ -1009,7 +1009,7 @@ items were not renumbered, merged, or deleted.
 ## PR-0303 · SEV2 · [RUNTIME] The Mystery Box overlay has no backdrop scrim, making the odds table the least legible thing on screen
 - Area:        UI/MysteryBoxView
 - Found by:    AUDIT-001 (session 002), observed on a running build
-- Status:      OPEN
+- Status:      DONE(S-007) — cause was NOT a weak scrim (0.85, strongest in the app) — the odds panel had no opaque card. It has one now
 - Symptom:     The odds panel and the OPEN/CLOSE controls are drawn directly over fully-legible Shop content. `BALANCED PICK`, `7,000`, `$4.99`, `FIRST PURCHASE +50%` (×2), `+32% BONUS`, `BEST VALUE`, `16,000` and `40,000` all read straight through the odds rows and buttons.
 - Repro:       Shop → Mystery Box. **Verified settled, not mid-animation: two consecutive screenshots are identical.**
 - Why:         No dimming layer behind the overlay.
@@ -1021,7 +1021,7 @@ items were not renumbered, merged, or deleted.
 ## PR-0304 · SEV2 · [RUNTIME] The Missions board says "ALL CLEAR" on first launch, when every mission is 0/N
 - Area:        UI/MissionsView
 - Found by:    AUDIT-001 (session 002), observed on a running build
-- Status:      OPEN
+- Status:      DONE(S-007) — MissionBoardSummary makes it a pure three-way; 4 unit tests. Also unit-suffixed the daily countdown
 - Symptom:     `ALL CLEAR · NEW BOARD IN 3:32` sits above seven rows reading `0/150`, `0/15`, `0/10`, `0/1.0k`, `0/75`, `0/30`, `0/5`.
 - Repro:       Fresh install → `SIMCTL_CHILD_PR_SCREEN=missions`. **Screenshot captured.**
 - Why:         The summary strip's state is derived from "nothing claimable" rather than "nothing in progress", and those coincide on an empty board.
@@ -1034,7 +1034,7 @@ items were not renumbered, merged, or deleted.
 ## PR-0305 · SEV2 · [RUNTIME] Mute cannot be undone from the hub or Settings, and it survives relaunch
 - Area:        UI/GameView, UI/SettingsView
 - Found by:    AUDIT-001 (session 002), finder `dead-affordances`, verifier SURVIVES (SEV2)
-- Status:      OPEN
+- Status:      DONE(S-007) — Settings mute row; GameModel.setMuted is the single writer; sliders dim while muted. XCUITest pins the round trip
 - Symptom:     A player who mutes mid-run, quits to the menu and relaunches has a permanently silent game with no visible way to fix it.
 - Repro:       Start a run, tap the corner speaker, quit to menu, force-quit, relaunch. Audio stays off; Settings offers no mute control.
 - Why:         `toggleMute()` (`GameView.swift:603`) has exactly one caller — `GameView.swift:1072`, the in-run/game-over corner control. It persists to the profile (`:606`) and is restored at launch (`:200-201`). `SettingsView` has three volume sliders and no mute.
@@ -1046,7 +1046,7 @@ items were not renumbered, merged, or deleted.
 ## PR-0306 · SEV2 · [RUNTIME] Pre-approval store: seven hardcoded USD prices at full opacity, every one inert
 - Area:        IAP/IAPCatalog, IAP/IAPManager, UI/ShopView
 - Found by:    AUDIT-001 (session 002), observed on a running build
-- Status:      OPEN
+- Status:      DONE(S-007) — never renders a $ StoreKit did not supply; calm first-viewport card; header states are an exhaustive switch
 - Symptom:     With `availability == .notConfigured` the Shop shows `$2.99`, `$1.99`, `$0.99`, `$4.99`, `$9.99`, `$19.99` and Aurora `$1.99` at full opacity. **Tapping `$0.99` produces nothing — no toast, no sheet, no error, no state change.** The only disclosure is a grey `PRICES SHOWN · APP STORE SETUP PENDING` footnote roughly six screens below the first price.
 - Repro:       Bare `simctl launch` (no StoreKit config) → `PR_SCREEN=shop`. **Screenshots captured of both the prices and the no-op tap.**
 - Why:         `.loading` shimmers the price pills (`ShopView.swift:705`, `:722`) and `.offline` renders a first-viewport RETRY card (`:72-99`). `.notConfigured` has neither mitigation, and its tap handler has no branch.
@@ -1071,7 +1071,7 @@ items were not renumbered, merged, or deleted.
 ## PR-0308 · SEV2 · Restore Purchases reports success when nothing was restored
 - Area:        IAP/IAPManager, UI/SettingsView
 - Found by:    AUDIT-001 (session 002) — found independently by **three** of the ten finders
-- Status:      OPEN
+- Status:      DONE(S-007) — RestoreOutcome counts what was restored; a cancel says nothing; no raw Error reaches lastError
 - Symptom:     A player who has never purchased anything taps Restore Purchases and is told "Purchases restored." The failure path separately leaks a raw error string into a different screen.
 - Why:         The success message is unconditional on completion rather than conditional on a non-empty restore set.
 - Impact:      Decree 3. A player debugging a missing purchase is actively misled.
@@ -1101,7 +1101,7 @@ items were not renumbered, merged, or deleted.
 ## PR-0311 · SEV2 · [RUNTIME] The Game Center row on Profile is a dead card that tells the player to quit the app
 - Area:        UI/ProfileView
 - Found by:    AUDIT-001 (session 002), observed on a running build + finder `empty-error-states`
-- Status:      OPEN
+- Status:      DONE(S-007) — StateNotice with a SIGN IN route — GameKit's controller prompts sign-in when presented unauthenticated
 - Symptom:     `Leaderboards need Game Center` / `Sign in from the Settings app, then relaunch.` — no tap target, no in-app sign-in, and the copy asks the player to leave the app and come back.
 - Repro:       Fresh install, `PR_SCREEN=stats`, not signed in to Game Center. **Screenshot captured.**
 - Impact:      Decree 4. This is the signed-out state's only Game Center surface, and it leads nowhere.
@@ -1135,7 +1135,7 @@ items were not renumbered, merged, or deleted.
 ## PR-0314 · SEV2 · Audio-engine start failure is permanent — every recovery path is gated behind the flag the failure clears
 - Area:        Audio/SynthEngine
 - Found by:    AUDIT-001 (session 002), finder `silent-failure`, verifier SURVIVES (SEV2, down from SEV1)
-- Status:      OPEN
+- Status:      DONE(S-007) — wantsAudio (intent) split from started (fact); all four recovery moments route through restoreAudio()
 - Symptom:     One failed `AVAudioEngine` start and the app is silent for the rest of its life. No retry fires, and the player is told nothing.
 - Why:         The failure clears the same `running` flag that every recovery path checks before attempting a restart.
 - Impact:      A silent game reads as broken. Decree 3.
@@ -1146,7 +1146,7 @@ items were not renumbered, merged, or deleted.
 ## PR-0315 · SEV2 · Game Center scores are silently discarded for the whole session when auth fails at launch
 - Area:        Services/GameCenterService
 - Found by:    AUDIT-001 (session 002), finder `silent-failure`
-- Status:      OPEN
+- Status:      DONE(S-007) — in-session queue flushed on auth; NOT seeded from profile.bestScore (checkpoint runs, iron rule 10)
 - Symptom:     A player who launches without connectivity loses every score that session. No retry, no queue, no message.
 - Fix sketch:  Queue submissions and retry on auth success; persist the queue across launches.
 - Blast radius: `Services/GameCenterService.swift`.
@@ -1155,7 +1155,7 @@ items were not renumbered, merged, or deleted.
 ## PR-0316 · SEV2 · Five products simultaneously advertise the single first-purchase bonus
 - Area:        UI/ShopView
 - Found by:    AUDIT-001 (session 002), observed on a running build
-- Status:      OPEN
+- Status:      DONE(S-007) — the first-purchase bonus is stated once, as the account-level rule it is
 - Symptom:     All four coin packs carry `FIRST PURCHASE +50%` and the Starter Bundle carries `FIRST PURCHASE OFFER`. Exactly one can ever be true; the badge reads as a per-pack property.
 - Repro:       Open the Shop on a profile with no purchases. **Screenshot captured.**
 - Impact:      Decree 5 — honest in mechanism, misleading as presented.

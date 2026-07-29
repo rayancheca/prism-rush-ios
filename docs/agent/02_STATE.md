@@ -4,12 +4,21 @@
 > wins** and the other file gets fixed. That includes `state.md` and `README.md` at the repo root,
 > which are the project's human-facing history, not the agent's source of truth.
 
-- **Last written by:** session 006 (2026-07-28) — the chasm (tier six), the slide SFX, Prism's identity
+- **Last written by:** session 007 (2026-07-29) — the Phase 3 failure-state sweep (all 8 items), two
+  owner-called hub visual changes, and the agreed Wardens design
 - **Program phase:** audits 2 of 7 done, and the phase gate is gone (D-005) — audits and fixes now
   interleave. S-004 and S-005 were both pure fix/design sessions; no audit ran.
-- **Next session:** 007 — see `HANDOFF.md`. **Two owner items are open and need HIS input, not
-  code:** the retuned slide SFX (nobody in this program can hear it) and whether act two / the hub /
-  the chasm actually FEEL right.
+- **Next session:** 008 — see `HANDOFF.md`. The likely goal is **PR-0456, the full audio pass**
+  (a standing owner request from S-006), unless Rayan redirects to the **Wardens** build
+  (`10_WARDENS.md`), which he designed with session 007 and which is the bigger prize.
+- **PHASE 3 IS DONE.** All eight failure-state items closed and verified on the simulator:
+  PR-0302/0303/0304/0305/0306/0308/0311/0314/0315/0316. The app no longer has a state that is raw,
+  silent, or actively misleading. `PrismRush/UI/StateNotice.swift` (`ShortfallRow` + `StateNotice`)
+  is the shared grammar the sweep landed on — extracted from `UnlockPanel`, which was already right.
+- **`10_WARDENS.md` is new and is the most valuable doc in the program right now.** Per-world
+  antagonists with dodge-to-damage + auto-fire, agreed with the owner in S-007. It is the designed
+  fix for **PR-0401** — the coin sink that buys nothing altering play, the largest structural gap
+  left. Nothing is built yet.
 - **Code changed by the program so far:** PR-0411 (S-003 + S-004 residue), **PR-0400, PR-0414,
   PR-0445, PR-0451 (S-004)**, **PR-0452, PR-0134, PR-0149, PR-0150, PR-0453-partial (S-005)**,
   **PR-0450, PR-0320, PR-0454, PR-0455 (S-006)**. The simulation, the front door, the audio and the
@@ -51,9 +60,9 @@ binary assets except the generated app icon.
 What is genuinely solid, and session 002 did not dent it:
 - The deterministic core is real. Fixed 1/120 s timestep, seeded SplitMix64, a 200-seed solvability
   bot plus a 12,000 m soak, golden-pinned daily-challenge seeds. `RendererPort` is clean.
-- **191 SPM tests pass in ~29 s and 209 Xcode tests (198 unit + 11 XCUITest) pass, re-measured by
-  session 006, zero failures.** The 187 → 191 delta is S-006's two `PatternOrderTests` additions,
-  the bot's chasm-encounter guard, and the tier-six step gate.
+- **196 SPM tests and 215 Xcode tests (203 unit + 12 XCUITest) pass, re-measured by session 007,
+  zero failures.** S-007 added four `MissionBoardSummary` tests, one `mysteryBoxShortfall` test and
+  a mute round-trip XCUITest.
 - Zero `TODO` / `FIXME` / `HACK` / `XXX` / `fatalError` in 95 files. Re-verified, still true.
 - All 12 world families render distinctly, verified on device. Character previews are internally
   truthful (hero and swatch move in exact lockstep).
@@ -90,12 +99,14 @@ declared and never applied) and Prism's 8 s colour shimmer was deleted (PR-0455 
 
 ## The three things that should worry you most
 
-1. **Every failure state fails identically.** Store not loaded, not enough coins, empty mission
-   board, signed out of Game Center, audio failed to start, nothing to restore, a purchase awaiting
-   parental approval — each is raw, silent, or actively misleading. The happy path is polished; the
-   moment anything is not normal, the app stops being finished. **The good news: the correct pattern
-   already exists in the codebase** (the Worlds `UnlockPanel` and the revive offer both show
-   `NEED N MORE` + a route to coins). Most of Phase 3 is "use the pattern you already wrote."
+1. ~~**Every failure state fails identically.**~~ — **CLOSED by session 007.** All eight items are
+   done and each was verified on the simulator, not by reading. Two filed claims were REFUTED by
+   running the build: the Mystery Box OPEN button was already dimmed+disabled (the real defect was
+   no reason, no route, and no a11y label at all), and tapping a pre-launch price already showed a
+   toast (the real defect was six fabricated USD prices and a disclosure six screens down). What is
+   left in this area is smaller and named in the backlog: `packRow`'s shortfall is still a11y-only,
+   `CharacterSelectView.deny()` still self-clears after 450 ms, and a disabled SwiftUI button is
+   dropped from the accessibility tree entirely — a VoiceOver user cannot perceive a blocked CTA.
 2. **25 of 59 features have no automated test, and the green build conceals it.** `swift test`
    compiles none of `UI/`, `Render/`, `IAP/`, `SynthEngine`, StoreKit or GameKit;
    `CharacterParityTests.swift` is `#if canImport(UIKit)`-gated and silently compiles to nothing
