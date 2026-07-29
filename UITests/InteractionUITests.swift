@@ -287,4 +287,26 @@ final class InteractionUITests: XCTestCase {
         XCTAssertTrue(single.waitForNonExistence(timeout: 6),
                       "the final tier's claim should retire the button (receipt row)")
     }
+
+    /// PR-0305 — mute persists across launches, and before the sweep the in-run corner speaker was
+    /// the ONLY control that could clear it. A muted player had to guess that starting a run was
+    /// the way back to sound. Settings must be able to undo it.
+    func testMuteIsReversibleFromSettings() {
+        let app = launch(["PR_SCREEN": "settings"])
+        let mute = app.switches["muteToggle"]
+        XCTAssertTrue(mute.waitForExistence(timeout: 6), "Settings must offer a mute control")
+        XCTAssertEqual(mute.value as? String, "0", "a fresh profile starts unmuted")
+        mute.tap()
+        XCTAssertEqual(mute.value as? String, "1", "tapping must mute")
+        mute.tap()
+        XCTAssertEqual(mute.value as? String, "0", "and it must be reversible — the whole point")
+    }
+
+    // PR-0302's UI is NOT covered here, deliberately. The shortfall row only renders when the
+    // profile cannot afford 300 coins, and XCUITest runs share an installed app whose coins
+    // accumulate across runs (mission claims bank them), so the state is not reachable
+    // deterministically. It needs a coin-pinning launch hook, which does not exist and which
+    // PR-0313 (every PR_* hook ships un-gated in Release) argues against adding casually.
+    // The affordability MATH is pinned by ShopValueTests.testMysteryBoxShortfallIsTheGapToTheCost
+    // under `swift test`; the rendered state was verified on the simulator (S-007 screenshots).
 }

@@ -250,25 +250,17 @@ struct ProfileView: View {
             .buttonStyle(.neon)
             .accessibilityIdentifier("leaderboardRow")
         } else {
-            // Inline signed-out state instead of a row that silently does nothing.
-            HStack(spacing: 12) {
-                Image(systemName: "trophy")
-                    .scaledFont(17, weight: .semibold, design: .default)
-                    .foregroundStyle(.white.opacity(0.4))
-                    .frame(width: 24)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Leaderboards need Game Center")
-                        .scaledFont(14, weight: .semibold)
-                        .foregroundStyle(.white.opacity(0.8))
-                    Text("Sign in from the Settings app, then relaunch.")
-                        .scaledFont(12, weight: .medium)
-                        .foregroundStyle(.white.opacity(0.5))
-                }
-                Spacer()
-            }
-            .padding(16)
-            .neonCard()
-            .accessibilityElement(children: .combine)
+            // Signed out is a state with a way OUT of it, not a notice. This was an untappable card
+            // whose copy told the player to leave the app and come back ("Sign in from the Settings
+            // app, then relaunch") — the only Game Center surface a signed-out player has, and it
+            // led nowhere (PR-0311). GameKit's own leaderboard controller prompts sign-in when
+            // presented unauthenticated, so the route was always available; nothing ever offered it.
+            StateNotice(symbol: "trophy",
+                        title: "Leaderboards need Game Center",
+                        detail: "Sign in to see how your best stacks up against friends.",
+                        actionTitle: "SIGN IN",
+                        action: { gc.showLeaderboard() },
+                        identifier: "leaderboardSignInCard")
         }
     }
 

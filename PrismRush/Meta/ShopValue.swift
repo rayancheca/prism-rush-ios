@@ -122,6 +122,13 @@ enum ShopConsumables {
         ("400 coins",            22, 0xFFD23D),
         ("200 coins",            40, 0xFFD23D),
     ]
+
+    /// Coins still needed to open the box; 0 means affordable.
+    ///
+    /// Pure, so both CTA states pin in the Linux suite. The view renders from this rather than
+    /// re-deriving the comparison itself — the old view knew only `afford: Bool`, which is why it
+    /// could dim the button but had no number to show the player (PR-0302).
+    static func mysteryBoxShortfall(coins: Int) -> Int { max(0, mysteryBoxCost - coins) }
 }
 
 /// Honest store states for the pre-launch window (the former `IAPManager.Availability`).

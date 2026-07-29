@@ -11,7 +11,23 @@ final class GameCenterService: NSObject, GKGameCenterControllerDelegate {
     /// Recurring leaderboard (daily reset in App Store Connect) for the shared-seed daily challenge.
     static let dailyLeaderboardID = "prismrush.daily"
 
-    private(set) var authenticated = false
+    private(set) var authenticated = false {
+        didSet { if authenticated, !oldValue { flushPending() } }
+    }
+
+    /// Best score that arrived while signed out, this session.
+    ///
+    /// One value is a sufficient queue: the all-time board keeps each player's MAXIMUM, so
+    /// submitting the best of the session converges on exactly the same result as replaying every
+    /// run — without persisting anything. Before this, a player who launched without connectivity
+    /// lost every score they set that session, silently (PR-0315).
+    ///
+    /// Deliberately NOT seeded from `profile.bestScore` on flush: the local best updates even for
+    /// checkpoint runs, which are never leaderboard-eligible (iron rule 10). Only scores that
+    /// already passed `submitRun`'s guard can land here.
+    private var pendingBest = 0
+    /// The daily board is per-day, so its queue carries the day it belongs to.
+    private var pendingDaily: (score: Int, day: Int)?
 
     func authenticate() {
         GKLocalPlayer.local.authenticateHandler = { viewController, _ in
@@ -25,6 +41,20 @@ final class GameCenterService: NSObject, GKGameCenterControllerDelegate {
         }
     }
 
+    /// Submit whatever was banked while signed out. Fired by `authenticated` flipping true, so it
+    /// covers a late sign-in from the Profile card as well as a delayed launch handshake.
+    private func flushPending() {
+        if pendingBest > 0 {
+            let score = pendingBest
+            pendingBest = 0
+            submit(score)
+        }
+        if let queued = pendingDaily {
+            pendingDaily = nil
+            submitDailyChallenge(score: queued.score, day: queued.day)
+        }
+    }
+
     /// Submit a finished run's score. Checkpoint runs reach end-game speed (66 pts/s) from t = 0 —
     /// strictly better for best-score chasing — so they are never leaderboard-eligible
     /// (AGENT_core.md §Game Center). The local best still updates regardless; the leaderboard
@@ -35,7 +65,8 @@ final class GameCenterService: NSObject, GKGameCenterControllerDelegate {
     }
 
     func submit(_ score: Int) {
-        guard authenticated, score > 0 else { return }
+        guard score > 0 else { return }
+        guard authenticated else { pendingBest = max(pendingBest, score); return }
         Task {
             try? await GKLeaderboard.submitScore(score, context: 0, player: GKLocalPlayer.local,
                                                  leaderboardIDs: [Self.leaderboardID])
@@ -45,7 +76,15 @@ final class GameCenterService: NSObject, GKGameCenterControllerDelegate {
     /// Submit a daily-challenge run. `day` (UTC days since epoch) rides along as the context so a
     /// score's challenge date is recoverable; the recurring leaderboard handles the daily reset.
     func submitDailyChallenge(score: Int, day: Int) {
-        guard authenticated, score > 0 else { return }
+        guard score > 0 else { return }
+        guard authenticated else {
+            // Keep the best score for the CURRENT day only; a queued score from a previous day
+            // would land on a board that has already reset.
+            if pendingDaily?.day != day || score > (pendingDaily?.score ?? 0) {
+                pendingDaily = (score, day)
+            }
+            return
+        }
         Task {
             try? await GKLeaderboard.submitScore(score, context: day, player: GKLocalPlayer.local,
                                                  leaderboardIDs: [Self.dailyLeaderboardID])

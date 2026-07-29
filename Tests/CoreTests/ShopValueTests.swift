@@ -111,4 +111,15 @@ final class ShopValueTests: XCTestCase {
         XCTAssertEqual(StoreAvailability.afterThrow(current: .notConfigured), .offline)
         XCTAssertEqual(StoreAvailability.afterThrow(current: .offline), .offline)
     }
+
+    // MARK: - Mystery Box shortfall (PR-0302)
+
+    /// The view knew only `afford: Bool`, so it could dim the OPEN button but had no number to
+    /// show — a dead end with no reason and no route. This is the number it now renders.
+    func testMysteryBoxShortfallIsTheGapToTheCost() {
+        XCTAssertEqual(ShopConsumables.mysteryBoxShortfall(coins: 0), ShopConsumables.mysteryBoxCost)
+        XCTAssertEqual(ShopConsumables.mysteryBoxShortfall(coins: 100), 200)
+        XCTAssertEqual(ShopConsumables.mysteryBoxShortfall(coins: ShopConsumables.mysteryBoxCost), 0)
+        XCTAssertEqual(ShopConsumables.mysteryBoxShortfall(coins: 5_000), 0, "never negative")
+    }
 }

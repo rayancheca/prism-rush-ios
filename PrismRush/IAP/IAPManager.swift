@@ -123,9 +123,18 @@ final class IAPManager {
 
     func storeProduct(_ id: String) -> Product? { products.first { $0.id == id } }
 
-    /// Localized price if StoreKit has loaded it, else the catalog fallback.
-    func displayPrice(_ id: String) -> String {
-        storeProduct(id)?.displayPrice ?? (IAPCatalog.product(id)?.fallbackPrice ?? "")
+    /// Localized StoreKit price, or nil when StoreKit has not supplied one.
+    func storePrice(_ id: String) -> String? { storeProduct(id)?.displayPrice }
+
+    /// What a price pill renders. Never a fabricated `$`: `IAPCatalog.fallbackPrice` holds USD
+    /// literals that exist to size the layout, and quoting them to a player — in any storefront,
+    /// in the pre-launch state a build actually sits in — is advertising a price that is not real
+    /// and cannot be paid (decree 5, PR-0306).
+    func displayPrice(_ id: String) -> String { storePrice(id) ?? "—" }
+
+    /// How a price reads aloud. "Buy for —." is not a sentence.
+    func spokenPrice(_ id: String) -> String {
+        storePrice(id).map { "Buy for \($0)." } ?? "Price available when the store opens."
     }
 
     /// Numeric price for value math (the Shop's computed badges): live StoreKit price when

@@ -37,6 +37,10 @@ struct ShortfallRow: View {
     /// Gold when the route leads to money, cyan when it leads to a screen.
     var routeTint: Color = Theme.Role.reward
     var identifier: String?
+    /// Identifier for the shortfall TEXT. Needed separately because an identifier on the row
+    /// container is not a queryable element — the whole point of this row is that the number is
+    /// visible rather than a11y-only, so it has to be assertable.
+    var shortfallIdentifier: String?
     /// Spoken destination, e.g. "Opens the shop".
     var routeHint: String = "Opens the shop"
 
@@ -46,6 +50,7 @@ struct ShortfallRow: View {
                 .typeScale(.caption)
                 .monospacedDigit()
                 .foregroundStyle(Theme.Role.danger)
+                .accessibilityIdentifier(shortfallIdentifier ?? "")
 
             Button(action: route) {
                 Text(routeTitle)

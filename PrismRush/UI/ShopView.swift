@@ -27,8 +27,16 @@ struct ShopView: View {
         MetaScreenScaffold(title: "Shop", coins: ProfileStore.shared.profile.coins,
                            onClose: { model.closeSheet() }) {
             VStack(alignment: .leading, spacing: Theme.Space.l) {
-                if iap.availability == .offline { offlineCard }
-                if iap.availability == .ready, let error = iap.lastError { inlineErrorStrip(error) }
+                // Exhaustive on purpose: every store state gets exactly one header presentation,
+                // and the compiler — not a reader — guarantees the next state added gets one too.
+                // As two loose `if`s, `.notConfigured` fell through both and the pre-launch store
+                // said nothing above the fold (PR-0306).
+                switch iap.availability {
+                case .offline:       offlineCard
+                case .notConfigured: setupPendingCard
+                case .loading:       EmptyView()
+                case .ready:         if let error = iap.lastError { inlineErrorStrip(error) }
+                }
                 heroSection
                 if showsStarterCard { starterOfferCard }
                 coinsSection
@@ -98,6 +106,37 @@ struct ShopView: View {
         .accessibilityLabel("App Store unreachable. The coin shop is still open.")
     }
 
+    /// Pre-launch = the request SUCCEEDED and App Store Connect has no (full) catalog yet. Normal,
+    /// not broken (decree 3): no red, and no RETRY, because the manager already re-checks on every
+    /// Shop open and app foreground — a button here could only ever answer "still not live"
+    /// (decree 4). Not a `Button` for the same reason the signed-out leaderboard isn't.
+    ///
+    /// This state used to say nothing above the fold at all: the only disclosure was a grey footnote
+    /// six screens down, so the first thing a player met was six real-looking dollar prices that
+    /// could not be bought (PR-0306). It states the one fact they can act on — the coin shop below
+    /// is fully live.
+    private var setupPendingCard: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "hourglass")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("Store opens with the App Store listing")
+                    .typeScale(.body)
+            }
+            .foregroundStyle(Theme.Role.textSecondary)
+            Text("Real-money prices arrive then. Everything priced in coins below works right now.")
+                .typeScale(.caption)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Theme.Role.textTertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(Theme.Space.m)
+        .neonCard(radius: Theme.Radius.l)
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("storeSetupPendingCard")
+        .accessibilityLabel("Store opens with the App Store listing. Real-money prices arrive then. Everything priced in coins below works right now.")
+    }
+
     /// Purchase/restore failure as a dismissible-by-retry inline strip, never a modal (uiux §4.2).
     /// Rendered in the READY state only — pre-launch states use the friendly toast instead.
     private func inlineErrorStrip(_ error: String) -> some View {
@@ -161,7 +200,7 @@ struct ShopView: View {
                           preview: doubleCoinsGlyph(size: 56),
                           pill: goldPricePill(productID: Self.doublerID),
                           tag: "ONE PURCHASE · EVERY RUN",
-                          a11y: "Double Coins. Every run pays double, forever. Buy for \(iap.displayPrice(Self.doublerID)).") {
+                          a11y: "Double Coins. Every run pays double, forever. \(iap.spokenPrice(Self.doublerID))") {
                     buy(Self.doublerID)
                 }
             case .starter:
@@ -170,7 +209,7 @@ struct ShopView: View {
                           preview: coinStack(2, size: 26),
                           pill: goldPricePill(productID: IAPCatalog.starterID),
                           tag: "FIRST PURCHASE",
-                          a11y: "Starter Bundle. \(starterBlurb) Buy for \(iap.displayPrice(IAPCatalog.starterID)).") {
+                          a11y: "Starter Bundle. \(starterBlurb) \(iap.spokenPrice(IAPCatalog.starterID))") {
                     buy(IAPCatalog.starterID)
                 }
             case .rotation(let id):
@@ -301,7 +340,7 @@ struct ShopView: View {
         .disabled(busy != nil)
         .accessibilityIdentifier("starterCard")
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Starter Bundle, first purchase offer. \(starterBlurb) Buy for \(iap.displayPrice(IAPCatalog.starterID)).")
+        .accessibilityLabel("Starter Bundle, first purchase offer. \(starterBlurb) \(iap.spokenPrice(IAPCatalog.starterID))")
     }
 
     // MARK: coin packs — tight 2×2 grid with computed value framing
@@ -316,6 +355,24 @@ struct ShopView: View {
     @ViewBuilder private var coinsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             kicker("COIN PACKS")
+            // Stated ONCE, as the account-level rule it actually is. All four packs used to carry
+            // `FIRST PURCHASE +50%` simultaneously, which reads as a per-pack property when only
+            // one of them can ever be true (PR-0316, decree 5).
+            if firstPurchaseBonusEligible {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles").font(.system(size: 11, weight: .bold))
+                    Text("YOUR FIRST PURCHASE GETS +50% EXTRA COINS").typeScale(.micro)
+                }
+                .foregroundStyle(Theme.Role.reward)
+                .padding(.horizontal, Theme.Space.s + 2).padding(.vertical, 7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.Role.reward.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.Radius.s))
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.s)
+                    .strokeBorder(Theme.Role.reward.opacity(0.35)))
+                .accessibilityElement(children: .ignore)
+                .accessibilityIdentifier("firstPurchaseBanner")
+                .accessibilityLabel("Your first purchase gets 50 percent extra coins.")
+            }
             LazyVGrid(columns: [GridItem(.flexible(), spacing: Theme.Space.s),
                                 GridItem(.flexible(), spacing: Theme.Space.s)],
                       spacing: Theme.Space.m) {
@@ -387,12 +444,7 @@ struct ShopView: View {
                     .typeScale(.heading)
                     .monospacedDigit()
                     .foregroundStyle(Theme.Role.reward)
-                if firstPurchaseBonusEligible {
-                    Text("FIRST PURCHASE +50%")
-                        .typeScale(.micro)
-                        .foregroundStyle(Theme.Role.reward)
-                        .lineLimit(1).minimumScaleFactor(0.7)
-                }
+                // The per-pack badge is gone — the section banner states the bonus once (PR-0316).
                 pricePill(productID: product.id)
             }
             .frame(maxWidth: .infinity)
@@ -416,7 +468,7 @@ struct ShopView: View {
         case .none: break
         }
         if firstPurchaseBonusEligible { parts.append("Plus fifty percent first purchase bonus.") }
-        parts.append("Buy for \(iap.displayPrice(product.id)).")
+        parts.append(iap.spokenPrice(product.id))
         return parts.joined(separator: " ")
     }
 
@@ -462,7 +514,7 @@ struct ShopView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(owned
                                 ? "Double Coins. Every run pays two times coins, forever. Owned."
-                                : "Double Coins. Every run pays two times coins, forever. Buy for \(iap.displayPrice(Self.doublerID)).")
+                                : "Double Coins. Every run pays two times coins, forever. \(iap.spokenPrice(Self.doublerID))")
             .accessibilityAddTraits(owned ? [] : .isButton)
             .accessibilityAction { if !owned, busy == nil { buy(Self.doublerID) } }
         }
@@ -627,7 +679,7 @@ struct ShopView: View {
     private func railA11y(_ skin: Skin, owned: Bool, equipped: Bool) -> String {
         if equipped { return "\(skin.name). Equipped." }
         if owned { return "\(skin.name). Owned." }
-        if skin.premium { return "\(skin.name). Premium, \(iap.displayPrice(Self.auroraID))." }
+        if skin.premium { return "\(skin.name). Premium. \(iap.spokenPrice(Self.auroraID))" }
         return "\(skin.name). \(skin.cost) coins."
     }
 
@@ -658,16 +710,8 @@ struct ShopView: View {
 
     @ViewBuilder private var footer: some View {
         VStack(spacing: Theme.Space.s) {
-            if iap.availability == .notConfigured {
-                // Quiet, factual, caption-weight: the request SUCCEEDED, the products just don't
-                // exist in App Store Connect yet. Not an error, so no red, no RETRY button.
-                Text("PRICES SHOWN · APP STORE SETUP PENDING")
-                    .typeScale(.micro)
-                    .foregroundStyle(Theme.Role.textTertiary)
-                    .frame(maxWidth: .infinity)
-                    .accessibilityLabel("Prices shown. App Store setup pending.")
-                    .accessibilityIdentifier("storePendingFootnote")
-            }
+            // The pre-launch footnote that used to live here is gone: `setupPendingCard` states
+            // the same fact in the FIRST viewport, and saying it twice is the PR-0316 sin.
             Text("No ads. Ever. Purchases support development.")
                 .typeScale(.caption)
                 .foregroundStyle(Theme.Role.textTertiary)

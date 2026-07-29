@@ -55,7 +55,8 @@ struct MysteryBoxView: View {
     // MARK: idle — odds + OPEN
 
     private var idleContent: some View {
-        let afford = ProfileStore.shared.profile.coins >= cost
+        // G3: coins read live off the store during `body`'s evaluation — never snapshotted.
+        let shortfall = ShopConsumables.mysteryBoxShortfall(coins: ProfileStore.shared.profile.coins)
         return VStack(spacing: Theme.Space.m) {
             Text("MYSTERY BOX").font(.system(size: 15, weight: .heavy, design: .rounded)).tracking(3)
                 .foregroundStyle(Theme.Role.textSecondary)
@@ -91,15 +92,50 @@ struct MysteryBoxView: View {
                 .foregroundStyle(.black)
                 .padding(.horizontal, 30).frame(height: 54)
                 .background(Theme.actionGradient, in: Capsule())
-                .opacity(afford ? 1 : 0.5)
+                .opacity(shortfall == 0 ? 1 : 0.5)
             }
             .buttonStyle(.neon)
-            .disabled(!afford)
+            .disabled(shortfall > 0)
             .accessibilityIdentifier("mysteryBoxOpenButton")
-            Button("CLOSE") { dismiss() }
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-                .foregroundStyle(Theme.Role.textSecondary)
+            // The button carried NO label at all before, so VoiceOver read the price digits and
+            // nothing else — strictly worse than the dimmed-row anti-pattern this sweep exists
+            // to kill.
+            .accessibilityLabel(shortfall == 0
+                                ? "Open the Mystery Box for \(cost) coins"
+                                : "Open costs \(cost) coins — you need \(shortfall) more")
+
+            if shortfall > 0 {
+                // GET COINS dismisses rather than routing to the Shop: `ShopView` is this
+                // overlay's ONLY presenter, so `model.open(.shop)` would be a no-op that left the
+                // box sitting on top of the coin packs it just sent the player to.
+                ShortfallRow(shortfall: shortfall, routeTitle: "GET COINS", route: { dismiss() },
+                             identifier: "mysteryBoxGetCoins",
+                             shortfallIdentifier: "mysteryBoxShortfall",
+                             routeHint: "Closes the box and returns to the coin packs")
+            }
+
+            // Real chrome: this was bare text, the only control in the app without any.
+            Button { dismiss() } label: {
+                Text("CLOSE")
+                    .typeScale(.caption)
+                    .foregroundStyle(Theme.Role.textSecondary)
+                    .padding(.horizontal, Theme.Space.l).padding(.vertical, 10)
+                    .background(Theme.Role.surface, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Theme.Role.hairline))
+            }
+            .buttonStyle(.neon)
+            .accessibilityIdentifier("mysteryBoxClose")
         }
+        // PR-0303: the odds table is this app's honesty surface and was the least legible thing on
+        // screen. The 0.85 scrim at `:25` is already the strongest in the app and was never the
+        // problem — `Role.surface` is 6% white, so the panel transmitted the Shop straight through
+        // it. Every other modal sits on an opaque card (`UnlockPanel`, LevelSelectView:549); this
+        // was the only one that did not.
+        .padding(Theme.Space.m)
+        .frame(maxWidth: 340)
+        .background(Theme.Role.bg, in: RoundedRectangle(cornerRadius: Theme.Radius.l))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.l)
+            .strokeBorder(Theme.Role.hairline))
     }
 
     // MARK: reveal
