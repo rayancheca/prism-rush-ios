@@ -1880,3 +1880,45 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
                `SynthTests` sanity bounds, and every change needs Rayan's ears before it is called
                done. Prefer few, well-argued changes over a sweep nobody can audition.
 - Verification: `SynthTests` bounds per cue; then HIM.
+
+---
+
+## PR-0457 · SEV2 · THE WARDENS — per-world antagonists · **DONE(S-008) for phase 1**
+
+- Area:        `Core/Warden.swift` · `Core/GameCore.swift` · `Render/Reality/WardenRig.swift` ·
+               `UI/HUDView.swift` · `Meta/Profile.swift` · design in `docs/agent/10_WARDENS.md`
+- Status:      **PHASE 1 DONE (S-008).** Phases 2–5 OPEN (see below).
+- Why:         The designed fix for **PR-0401** — ~83,500 coins of permanent sink that buys nothing
+               altering play, the surviving half of session 003's verdict. Also gives the world
+               ladder the real progression `05_GAME_DESIGN.md §6` says it currently fakes, and gives
+               an endless runner the punctuation it structurally lacks.
+- Shipped:     A Warden guards every third world (2,400 m apart) inside a 660 m arena swept clear of
+               obstacles but NOT of gems. It arrives shielded; the player's auto-fire breaks the
+               shield at a rate set by a charge bank earned from gems and spent as it burns. Shield
+               down → telegraph→strike beams that always close the player's lane and 40% of the time
+               a second one; each clean dodge lands one core hit, three kills it. Being caught kills
+               (respecting a held shield); failing to damage does not — it breaks off and you keep
+               the run. Payout: a coin bounty, a score bonus, and `Profile.wardensDefeated`.
+- Proof:       209 SPM + 228 Xcode green. The 200-seed × 6,000 m solvability bot stays green AND
+               meets the hazard: 48/48 encounters armed, 144 telegraphs, 144 clean dodges, 48 kills,
+               zero deaths. Charge tuned from measurement (the bot banks ~637 gems by 2,400 m across
+               24 seeds, 586–686), not from a guess. Verified on the simulator; screenshots in
+               `docs/agent/scratch/s008/`.
+- Cost:        `layoutVersion` 9 → 10 (the entity set on the deck changes). Goldens repinned in
+               `DailyChallengeTests` **and** `MissionsTests`; all eight prior pins reproduced in
+               Python first; a v11 pin is pre-armed.
+- **Still open, in the owner's priority order:**
+  - **Phase 2 — abduction.** A caught player currently just dies. The owner's call was
+    struggle-to-escape *then* death, which is a genuinely new death with its own emotion and the
+    moment that makes a purchased counter feel worth buying. `10_WARDENS.md §6`.
+  - **Phase 3 — Countermeasures.** THE POINT OF THE FEATURE, and the only part that actually closes
+    PR-0401. Coin-bought, permanent, per-family: Charge Cell, Overclock, Ion Shield, Scarab Charm.
+    Until this ships, PR-0401 is still open.
+  - **Phase 4 — a second Warden (the mummy)** to prove the template generalises across families.
+    Everything is in place: the encounter is world-parameterised already.
+  - **Phase 5 — the world-exclusive character reward.** Needs a per-world kill breakdown;
+    `Profile.wardensDefeated` is deliberately a single Int until there is a consumer for the dict.
+- Tuning:      `wardenArenaLength` (660 m, ~27% of track past the first encounter) is the biggest
+               lever and is sized from the crudest provable bound against a measured worst case of
+               438 m. Shrinking it means shortening `wardenShieldWindow`, which moves the charge
+               threshold (currently ~0.80). Owner playtest first.

@@ -41,13 +41,13 @@ why the whole sim is testable headless.
 ./Tools/ci.sh             # generate + build + full test suite
 xcodebuild test -project PrismRush.xcodeproj -scheme PrismRush \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' CODE_SIGNING_ALLOWED=NO
-# → 209 tests (198 unit + 11 XCUITest). Sim overrides: PR_SIM_NAME / PR_SIM_OS / PR_SIM_UDID.
+# → 228 tests (216 unit + 12 XCUITest). Sim overrides: PR_SIM_NAME / PR_SIM_OS / PR_SIM_UDID.
 # Autoplay demo: SIMCTL_CHILD_PR_AUTOPLAY=1 xcrun simctl launch booted com.rayancheca.prismrush
 ```
 
 **Linux / CI (deterministic layers only, via `Package.swift`):**
 ```bash
-swift test -c release     # 191 tests, ~25 s — Core + Meta + Synth DSP (incl. the 200-seed bot)
+swift test -c release     # 209 tests, ~30 s — Core + Meta + Synth DSP (incl. the 200-seed bot)
 ```
 Linux compiles ONLY what `Package.swift` lists (Core/, 7 Meta files, Audio/Synth.swift). Everything
 touching UIKit/RealityKit/SwiftUI/StoreKit/AVFoundation/GameKit is **not even type-checked** there —
@@ -112,7 +112,8 @@ with a decree, the doc is wrong — amend the doc, never "ship the doc". Current
    `DailyChallenge.layoutVersion`** (goldens pinned in `DailyChallengeTests` **and** in
    `MissionsTests.testTodaysChallengeSeedMatchesUTCGoldens`, which pins the same seeds from the meta
    layer and is easy to miss). Consuming one extra `rng.unit()` anywhere in the spawn path silently
-   changes every seeded run. **Currently at layoutVersion 9** (v1.8, S-006 — the chasm + tier six); a v10 pin is pre-armed.
+   changes every seeded run. **Currently at layoutVersion 10** (v1.9, S-008 — THE WARDENS: arenas filter obstacles out of
+   the head of every third world); a v11 pin is pre-armed.
    Derive goldens in Python from the SplitMix64 constants, never read them off the Swift they pin —
    reproduce the existing pins first, then trust the new ones. A green bot proves nothing if it
    never MET the hazard: `SolvabilityBotTests.testTheSoakActuallyDrivesTheBotAcrossChasms` is the

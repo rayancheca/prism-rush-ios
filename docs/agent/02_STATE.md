@@ -4,50 +4,37 @@
 > wins** and the other file gets fixed. That includes `state.md` and `README.md` at the repo root,
 > which are the project's human-facing history, not the agent's source of truth.
 
-- **Last written by:** session 007 (2026-07-29) — the Phase 3 failure-state sweep (all 8 items), two
-  owner-called hub visual changes, and the agreed Wardens design
-- **Program phase:** audits 2 of 7 done, and the phase gate is gone (D-005) — audits and fixes now
-  interleave. S-004 and S-005 were both pure fix/design sessions; no audit ran.
-- **Next session:** 008 — see `HANDOFF.md`. The likely goal is **PR-0456, the full audio pass**
-  (a standing owner request from S-006), unless Rayan redirects to the **Wardens** build
-  (`10_WARDENS.md`), which he designed with session 007 and which is the bigger prize.
-- **PHASE 3 IS DONE.** All eight failure-state items closed and verified on the simulator:
-  PR-0302/0303/0304/0305/0306/0308/0311/0314/0315/0316. The app no longer has a state that is raw,
-  silent, or actively misleading. `PrismRush/UI/StateNotice.swift` (`ShortfallRow` + `StateNotice`)
-  is the shared grammar the sweep landed on — extracted from `UnlockPanel`, which was already right.
-- **`10_WARDENS.md` is new and is the most valuable doc in the program right now.** Per-world
-  antagonists with dodge-to-damage + auto-fire, agreed with the owner in S-007. It is the designed
-  fix for **PR-0401** — the coin sink that buys nothing altering play, the largest structural gap
-  left. Nothing is built yet.
-- **Code changed by the program so far:** PR-0411 (S-003 + S-004 residue), **PR-0400, PR-0414,
-  PR-0445, PR-0451 (S-004)**, **PR-0452, PR-0134, PR-0149, PR-0150, PR-0453-partial (S-005)**,
-  **PR-0450, PR-0320, PR-0454, PR-0455 (S-006)**. The simulation, the front door, the audio and the
-  character roster have all been changed, not just the copy.
-- **The hub was redesigned in S-005** at Rayan's direct request. Three species of surface —
-  gradient (PLAY alone), cards (claim ribbon, Daily Rush, loadout), bare rail (the four exits) —
-  under an editorial masthead. `RewardsBar.swift` is gone; `ClaimRibbon.swift` replaces it and
-  Missions became a nav exit. Before/after screenshots at three profile states live in
-  `docs/agent/scratch/s005/`.
-- **`DailyChallenge.layoutVersion` is 9** as of S-006 (the chasm + tier six). Every daily track
-  changed; that is expected and is what a layout bump means. A v10 pin is pre-armed.
-- **The catalogue is 15 patterns and the ladder has SIX tiers** (S-006, PR-0450). Tier six opens at
-  2,560 m with THE CHASM — a full-width 8 u gap, the first obstacle with an extent and the first
-  two-sided timing window in the game. Iron rule 4's "moving walls stay LAST" shorthand is amended
-  in `CLAUDE.md`: moving walls are the last entry of tier FIVE (index 13), the chasm is index 14.
-- **Decree 1 now covers TIME as well as space (D-009).** Prism's 8 s hue shimmer is deleted on the
-  owner's direct call. No skin changes colour with the world OR as it runs. **Prism then got a
-  STATIC rainbow (D-011)** — six fixed bands, same in every frame and every world. The invariant
-  forbids an identity that *changes*, not one that is *complex*; the test pins that there is no
-  clock in the resolution path.
-- **The read-only phase is over (D-005).** Sessions may now fix code as they go. The audit sequence
-  continues because it is producing real findings, not because a rule requires it.
+- **Last written by:** session 008 (2026-07-29) — **THE WARDENS, phase 1**: the encounter is built,
+  playable and verified on the simulator. Owner picked it over the audio pass when asked.
+- **Program phase:** audits 2 of 7 done, phase gate gone (D-005). S-004/005/007/008 were fix/build
+  sessions; five audits remain unrun.
+- **Next session:** 009 — see `HANDOFF.md`. The owner's playtest gates what comes next
+  (`10_WARDENS.md §9` sets that deliberately). If he says the fight feels good, phase 2 (abduction)
+  then **phase 3 (Countermeasures, the part that actually closes PR-0401)**. If not, retune first.
+  **PR-0456, the full audio pass, is still unstarted and is still a standing owner request.**
+- **PR-0457 phase 1 is DONE.** A Warden guards every third world (2,400 m) inside a 660 m arena
+  swept clear of obstacles but NOT gems — gems are the ammunition. Shield broken by auto-fire whose
+  rate is a charge bank earned from gems; beams then telegraph and always close the player's lane
+  (40% a second one too); three clean dodges kill it. Caught = death; failing to damage = it leaves
+  and you keep the run. **209 SPM + 228 Xcode tests green** (was 196/215).
+- **PR-0401 IS STILL OPEN.** The coin sink still buys nothing that alters play — Countermeasures are
+  phase 3. Phase 1 deliberately shipped the *fight*, not the *economy*, because the design doc gates
+  further building on the owner playing it.
+- **`DailyChallenge.layoutVersion` is 10** as of S-008. Arming a Warden costs ZERO spawn-stream
+  draws (own derived RNG; arena filtered at `apply` after `fill` has drawn), but the entity set on
+  the deck changes, so the bump is for the layout promise, not the RNG. A v11 pin is pre-armed.
+- **The chasm guard was repaired, not relaxed.** An arena eats tier six's highest-frequency band, so
+  a per-eligible-km rate is tied to `wardenArenaLength` and is the wrong instrument. Frequency now
+  belongs to `DifficultyCurveTests` (unchanged: 1.84/1.06/1.41/2.20 per km); the bot test guards
+  presence. A/B with suppression off: **0.92/km either way — the Wardens are rate-neutral.**
+- **Everything is pushed to GitHub.** Sessions 006 and 007 had never been pushed; `origin/main` was
+  12 commits behind at the start of S-008 and is now current.
+- **The hub was redesigned in S-005** and its failure states swept in S-007; see those logs.
+- **Decree 1 covers TIME as well as space (D-009/D-011).** No skin changes colour with the world or
+  as it runs; Prism's rainbow is static.
 - **Rayan's standing instruction (2026-07-28):** *"never be limited by arbitrary rules — just work
-  however you think is best."* `01_RULES.md` was cut from ~290 lines of ceremony to ~180, split into
-  judgment (advisory) and nine invariants (damage prevention). Read D-005 before reinstating any
-  process.
-- **Direction:** submission IS the goal, timing is open. **Polish first, publish at the end.** So
-  design/feel work (`05_GAME_DESIGN.md`) outranks the compliance pass in priority; AUDIT-003 still
-  runs, but its findings are a pre-submission checklist, not the next thing to fix.
+  however you think is best."* Read D-005 before reinstating any process.
+- **Direction:** submission IS the goal, timing is open. **Polish first, publish at the end.**
 
 ---
 
