@@ -80,6 +80,15 @@ struct GameSnapshot: Sendable {
     var grounded: Bool
     var usedCheckpoint: Bool        // run began mid-track — meta layer must skip Game Center submit
     var entities: [EntityState]
+    /// The live Warden encounter, or `nil` on open track. Deliberately its own field rather than an
+    /// `EntityKind`: a Warden is a set piece with its own state machine and its own collision rule,
+    /// and Core has six switches over `EntityKind` whose `default:` arms would have swallowed a new
+    /// case silently. See `WardenEncounter`.
+    var warden: WardenState?
+    /// The player's Warden charge bank, 0…1 — earned from gems, spent breaking a shield. Lives in
+    /// the snapshot (not just inside `warden`) because the HUD meter must be readable BEFORE an
+    /// encounter, which is the whole reason collecting gems matters early.
+    var wardenCharge: Double
     var score: Int
     var gems: Int
     var mult: Int
@@ -111,6 +120,8 @@ struct GameSnapshot: Sendable {
         grounded: true,
         usedCheckpoint: false,
         entities: [],
+        warden: nil,
+        wardenCharge: 0,
         score: 0,
         gems: 0,
         mult: 1,
@@ -142,4 +153,13 @@ enum FXEvent: Sendable, Equatable {
     case boostEnded                  // boost timer crossed 0 (edge, like chronoEnded)
     case flowSurge(level: Int, x: Double)   // every flowPerSurge-th near-miss; level = surges this run (1-based)
     case died(x: Double)
+
+    // MARK: Wardens (v1.9)
+    case wardenArrived(world: Int)              // the craft drops in — the arena has begun
+    case wardenShieldBroke                      // auto-fire won: the core is open, attacks start
+    case wardenTelegraph(mask: UInt8)           // a beam locked these lanes; the wind-up is the read
+    case wardenStruck(mask: UInt8, caught: Bool) // it fired; `caught` = it landed on the player
+    case wardenCoreHit(hits: Int)               // a clean dodge damaged the open core (1-based)
+    case wardenDefeated(world: Int, bounty: Int)
+    case wardenBrokeOff                         // the shield held out the window — it leaves, you live
 }

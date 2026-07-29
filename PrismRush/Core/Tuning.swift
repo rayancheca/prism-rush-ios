@@ -225,4 +225,118 @@ enum Tuning {
     /// speed constants are ever retuned.
     static let chasmBotLeadSeconds: Double = 0.28
     static let chasmBotLeadMin: Double = 7, chasmBotLeadMax: Double = 11
+
+    // MARK: v1.9 — THE WARDENS (PR-0457, design in docs/agent/10_WARDENS.md)
+
+    /// A Warden guards every third world, so encounters land 2,400 m apart (worlds 3, 6, 9, …).
+    /// Owner call, S-007: often enough to be a structure, rare enough to stay an event.
+    static let wardenEveryWorlds = 3
+
+    /// The arena: the stretch of deck at the head of a Warden's world where obstacles and boost pads
+    /// are suppressed so the encounter's telegraphs are the only thing to read (decree 6). Gems are
+    /// deliberately NOT suppressed — they are the ammunition, so the shield phase is spent
+    /// collecting rather than waiting.
+    ///
+    /// Must outlast the longest possible encounter in DISTANCE, since the encounter is timed and the
+    /// arena is not. Sized from the crudest bound that is still provable, so no run can defeat it:
+    /// `wardenArmWindow` (60) + `wardenMaxSeconds` (16) × `boostSpeedMax` (36) = 636 m, against 660.
+    /// Using `boostSpeedMax` rather than `speedCap` is deliberate — pads are suppressed inside the
+    /// arena, but a player can enter one already boosting. Measured worst case across 24 seeded bot
+    /// runs is 438 m, so the bound is conservative by design. Pinned by
+    /// `WardenTests.testAnEncounterCanNeverOutrunItsArena` and `…testEveryEncounterFinishesInsideItsArena`.
+    ///
+    /// This is the feature's biggest tuning lever and the first thing to revisit after playtesting:
+    /// 660 m of deliberately clear deck every 2,400 m is ~27% of the track past the first encounter.
+    /// Shrinking it means shortening `wardenShieldWindow`, which moves the charge threshold below.
+    static let wardenArenaLength: Double = 660
+
+    // Encounter timings. The whole set is bounded by construction: three fixed core hits, a fixed
+    // shield window, and a fixed number of seconds — a Warden can never become a war of attrition.
+    static let wardenArriveTime: Double = 0.9    // craft drops into view; nothing is lethal yet
+    static let wardenShieldWindow: Double = 9.0  // break the shield inside this or it breaks off
+    static let wardenTelegraphTime: Double = 0.85 // wind-up before a beam fires — the read
+    static let wardenStrikeShowTime: Double = 0.30 // the fired beam stays lit this long
+    static let wardenAttackRecover: Double = 0.55  // gap after a strike before the next telegraph
+    static let wardenDieTime: Double = 1.0
+    static let wardenLeaveTime: Double = 0.9
+
+    /// Hard ceiling on a whole encounter, from arrival to the craft clearing the sky.
+    ///
+    /// The phase timings alone do NOT bound it. A held shield absorbs a caught beam, and an absorbed
+    /// beam is spent without landing a core hit — so a player who keeps picking up shields (pickups
+    /// are deliberately left in the arena) can trade indefinitely and drag the fight past the end of
+    /// its own arena, where obstacles resume and beams and walls arrive together. That is the one
+    /// combination the arena exists to prevent, so the encounter is capped outright: at the cap it
+    /// breaks off exactly as it would on a held shield. Pinned by
+    /// `WardenTests.testAnEncounterCanNeverOutrunItsArena`.
+    static let wardenMaxSeconds: Double = 16.0
+
+    /// A Warden only arms in the first stretch of its arena. Without this, a checkpoint run that
+    /// began 80 m from the arena's end would summon a Warden with no room to fight it.
+    static let wardenArmWindow: Double = 60
+
+    /// Clean dodges needed to kill. Fixed and small: the fight is the fun part, not the grind.
+    static let wardenCoreHits = 3
+
+    // The gun. Fire rate is the player's charge bank, spent as it burns — a timer they earned before
+    // the fight started, never a win button (it cannot kill; only dodging can).
+    //
+    // Damage is `wardenBaseDPS + charge × wardenChargeDPS` while charge drains at
+    // `wardenChargeDrain`/s, so the integral to break `wardenShieldHP` inside `wardenShieldWindow`
+    // solves to a threshold at charge ≈ 0.80:
+    //   charge 1.00 → shield falls at 6.25 s ✓   charge 0.85 → 8.02 s ✓
+    //   charge 0.80 → 9.13 s ✗ (just past the window)   charge ≤ 0.75 → never
+    // A player who banked nothing fires at `wardenBaseDPS` and mathematically cannot break it,
+    // which is the point. Pinned by `WardenTests.testTheChargeThresholdIsWhereTheArithmeticSaysItIs`.
+    static let wardenShieldHP: Double = 100
+    static let wardenBaseDPS: Double = 4
+    static let wardenChargeDPS: Double = 16
+    static let wardenChargeDrain: Double = 0.08
+
+    /// Gems needed to fill the bank from empty. Measured, not guessed: the solvability bot banks
+    /// ~637 gems by the first encounter at 2,400 m (24 seeds, min 586, max 686), so 520 fills a
+    /// well-run first act with margin and the 0.80 threshold lands at ~416 gems — reachable by
+    /// collecting, missable by ignoring. Charge is SPENT, so every later Warden must be re-armed.
+    static let wardenChargeFullGems: Double = 520
+    static var wardenChargePerGem: Double { 1.0 / wardenChargeFullGems }
+
+    /// How often a beam closes a SECOND lane as well as the player's own.
+    ///
+    /// Every beam always locks the lane the player is standing in, so standing still is always
+    /// fatal and the gun can never win a fight on its own — that invariant is the design's, and an
+    /// earlier build that merely *usually* stalked broke it: a player who never moved won outright
+    /// whenever three consecutive beams happened to pick an empty lane, because "wasn't in the beam"
+    /// was being scored as a dodge. It isn't one.
+    ///
+    /// This much of the time a second lane closes too, leaving exactly one safe lane — so answering
+    /// every telegraph with a blind sidestep is punished about half the time, and the wind-up has to
+    /// actually be READ. At most two of three lanes ever close, so a safe answer always exists and
+    /// every attack resolves in exactly one cycle: the fight stays bounded at `wardenCoreHits`
+    /// exchanges and can never outrun its arena.
+    static let wardenDoubleBeamChance: Double = 0.4
+
+    /// Half-width of the beam column. Same value as `laneHitHalfWidth`, deliberately: a beam is as
+    /// wide as a wall, so the lane you are safe in is the lane you would be safe in for anything
+    /// else, and mid-transit between two lanes is exposed to both — exactly as it already is.
+    static let wardenBeamHalfWidth: Double = laneHitHalfWidth
+
+    // Where the craft hangs. Far enough forward to read as a thing in the sky ahead rather than an
+    // obstacle arriving, low enough to sit inside the camera's frustum above the vanishing point.
+    //
+    // Checked against the actual rig (`RealityRenderer`: eye at (0, 5.1, 9.6), looking at
+    // (0, 1.3, −5), 62° FOV — a view axis 14.6° below horizontal, 31° half-angle). At hover the
+    // craft sits 14.7° off that axis: in frame, upper third. At the top of its arrival it is 25.9°
+    // off — still inside. `wardenLeaveRise` deliberately takes it PAST the edge, because leaving the
+    // frame is what "climbs away" should look like. Well in front of the ~65 u backdrop plane.
+    static let wardenStandOff: Double = 26     // units ahead of the player (rendered at z = −this)
+    static let wardenHoverY: Double = 5.2
+    static let wardenArriveRise: Double = 7.0  // starts this much higher and descends in
+    static let wardenLeaveRise: Double = 14.0  // climbs away by this much on the way out
+
+    /// Payout for a kill. Coins are deliberately the SMALLEST reward tier (10_WARDENS.md §4) — this
+    /// feature exists to fix the coin sink, not to feed it — but a fight with no payout is not a
+    /// fight worth playtesting, so phase 1 ships the bounty and the run-scoped kill count. The
+    /// world-exclusive character and the Countermeasure sink are later phases.
+    static let wardenCoinBounty = 150
+    static let wardenScoreBonus = 1_200
 }

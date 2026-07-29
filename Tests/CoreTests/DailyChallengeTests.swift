@@ -15,9 +15,9 @@ final class DailyChallengeTests: XCTestCase {
     /// `folded ^ tag ^ (version << 48)` mix — never read back off the Swift it pins. The same script
     /// reproduced all seven pre-existing pins first, which is what makes the new three trustworthy.
     func testGoldenSeeds() async {
-        XCTAssertEqual(DailyChallenge.seed(year: 2026, month: 6, day: 10), 0x6BF4_7293_9ED0_79AB)
-        XCTAssertEqual(DailyChallenge.seed(year: 2026, month: 6, day: 11), 0x9383_9F35_88F7_1A97)
-        XCTAssertEqual(DailyChallenge.seed(year: 2025, month: 12, day: 31), 0x05DA_400D_E37F_EB85)
+        XCTAssertEqual(DailyChallenge.seed(year: 2026, month: 6, day: 10), 0x2F9C_F876_7EBE_A5C0)
+        XCTAssertEqual(DailyChallenge.seed(year: 2026, month: 6, day: 11), 0x96EE_0451_179D_E767)
+        XCTAssertEqual(DailyChallenge.seed(year: 2025, month: 12, day: 31), 0x54D7_29F8_4D0B_374E)
         // Older layout versions stay reachable explicitly — proves each bump reshuffled, not rederived.
         XCTAssertEqual(DailyChallenge.seed(year: 2026, month: 6, day: 10, layoutVersion: 5),
                        0x6390_28BA_85C6_9769)
@@ -27,9 +27,11 @@ final class DailyChallengeTests: XCTestCase {
                        0xA7A5_9815_BF47_186A)
         XCTAssertEqual(DailyChallenge.seed(year: 2026, month: 6, day: 10, layoutVersion: 8),
                        0x2FC8_A9EA_C0B9_E30F)
-        // Pre-armed pin for the NEXT spawn-stream change (layoutVersion 10).
-        XCTAssertEqual(DailyChallenge.seed(year: 2026, month: 6, day: 10, layoutVersion: 10),
-                       0x2F9C_F876_7EBE_A5C0, "layoutVersion must reshuffle the whole seed")
+        XCTAssertEqual(DailyChallenge.seed(year: 2026, month: 6, day: 10, layoutVersion: 9),
+                       0x6BF4_7293_9ED0_79AB)
+        // Pre-armed pin for the NEXT layout change (layoutVersion 11).
+        XCTAssertEqual(DailyChallenge.seed(year: 2026, month: 6, day: 10, layoutVersion: 11),
+                       0xD6A1_D120_8B63_B231, "layoutVersion must reshuffle the whole seed")
     }
 
     func testConsecutiveDatesDiffer() async {

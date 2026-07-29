@@ -67,6 +67,24 @@ enum Collisions {
         abs(z) < Tuning.chasmHalfLength && playerY < Tuning.chasmClearance
     }
 
+    /// Warden beam (v1.9): the strike resolves the instant the beam fires, against the player's real
+    /// x rather than their committed lane — so a lane change that has been tapped but not yet
+    /// travelled does not teleport them clear.
+    ///
+    /// There is no `z` term: the beam is a vertical column dropped on a lane for one instant, not an
+    /// object arriving down the track. Height is deliberately absent too — jumping does not clear it
+    /// and sliding does not duck it, which is what keeps the answer a single unambiguous input
+    /// (change lane) and the read a single frame (decree 6).
+    ///
+    /// An empty `mask` means no beam is in flight, and must never register as a hit.
+    static func wardenBeamHit(playerX: Double, mask: UInt8) -> Bool {
+        guard mask != 0 else { return false }
+        for lane in 0..<Tuning.laneX.count where mask & (1 << UInt8(lane)) != 0 {
+            if abs(playerX - Tuning.laneX[lane]) < Tuning.wardenBeamHalfWidth { return true }
+        }
+        return false
+    }
+
     /// Gem pickup window (uses the gem's *base* Y, before cosmetic bob).
     static func gemPickup(playerCenterY pcy: Double, playerX: Double, gemX: Double, gemBaseY: Double, z: Double) -> Bool {
         abs(z) < Tuning.gemPickup.dz

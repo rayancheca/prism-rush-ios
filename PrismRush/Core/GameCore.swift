@@ -67,6 +67,18 @@ final class GameCore {
     @ObservationIgnored private var deathDistance: Double = 0   // where the run died (revive scrubs the decel drift)
     @ObservationIgnored private(set) var usedCheckpoint = false // run began mid-track (not leaderboard-eligible)
 
+    /// The live Warden encounter, or `nil` on open track (v1.9).
+    @ObservationIgnored private(set) var warden: WardenEncounter?
+    /// The last world whose Warden is finished — stops an arena re-arming behind the player.
+    @ObservationIgnored private(set) var wardenWorldDone: Int = -1
+    /// Charge bank, 0…1: earned one gem at a time, spent breaking a Warden's shield.
+    @ObservationIgnored private(set) var wardenCharge: Double = 0
+    /// Wardens killed this run — the meta layer banks this once, in `applyRunSummary`.
+    @ObservationIgnored private(set) var wardensDefeatedThisRun: Int = 0
+    /// The run's seed, kept so a Warden can derive its OWN stream from it without ever drawing from
+    /// the spawn stream (iron rule 2 — arming a Warden costs zero `rng` calls).
+    @ObservationIgnored private(set) var runSeed: UInt64
+
     @ObservationIgnored private(set) var activeObstacles: [CoreEntity] = []
     @ObservationIgnored private(set) var activeGems: [CoreEntity] = []
     @ObservationIgnored private(set) var activePickups: [CoreEntity] = []
@@ -80,6 +92,7 @@ final class GameCore {
 
     init(seed: UInt64 = .random(in: .min ... .max)) {
         rng = SplitMix64(seed: seed)
+        runSeed = seed
         activeObstacles.reserveCapacity(Tuning.capLow + Tuning.capTall + Tuning.capBar)
         activeGems.reserveCapacity(Tuning.capGem)
         activePickups.reserveCapacity(Tuning.capShield + Tuning.capMagnet)
@@ -136,7 +149,10 @@ final class GameCore {
 
     /// Reset to the fresh menu state. Reseeds if `seed` is given (else a new random stream).
     func reset(seed: UInt64?) {
-        rng = SplitMix64(seed: seed ?? .random(in: .min ... .max))
+        let s = seed ?? .random(in: .min ... .max)
+        rng = SplitMix64(seed: s)
+        runSeed = s
+        warden = nil; wardenWorldDone = -1; wardenCharge = 0; wardensDefeatedThisRun = 0
         spawner = Spawner()
         mode = .menu; distance = 0; scoreOffset = 0; speed = Tuning.menuSpeed; revivesUsed = 0
         deathDistance = 0; usedCheckpoint = false
@@ -174,6 +190,7 @@ final class GameCore {
         stepWorld(dt)
         if mode == .play { spawn() }
         stepPlayer(dt)
+        stepWarden(dt)   // after the player has moved: a beam resolves against where the body IS
         stepObstacles(dt)
         stepGems(dt)
         stepPickups(dt)
@@ -355,6 +372,54 @@ final class GameCore {
         }
     }
 
+    /// Drive the Warden encounter (v1.9).
+    ///
+    /// Arming is a pure function of distance, so a checkpoint run that starts mid-arena still meets
+    /// its Warden instead of coasting through an empty one — and no encounter can re-arm behind the
+    /// player. The encounter draws only from its own derived stream, so nothing here perturbs the
+    /// seeded spawn stream (iron rule 2).
+    private func stepWarden(_ dt: Double) {
+        guard mode == .play else { return }
+        if warden == nil, let w = Warden.armableWorld(forDistance: distance), w != wardenWorldDone {
+            warden = WardenEncounter(world: w, runSeed: runSeed)
+            emit(.wardenArrived(world: w))
+        }
+        guard var w = warden else { return }
+        let ev = w.step(dt, playerLane: laneIndex, playerX: px, charge: &wardenCharge)
+        warden = w
+
+        if ev.shieldBroke { emit(.wardenShieldBroke) }
+        if ev.telegraphBegan { emit(.wardenTelegraph(mask: w.beamMask)) }
+        if ev.struck {
+            emit(.wardenStruck(mask: ev.struckMask, caught: ev.caughtPlayer))
+            if ev.caughtPlayer && invulnT <= 0 {
+                // A landed beam is exactly as lethal as a wall, and a held shield eats it exactly
+                // as it eats a wall. It does NOT count as a dodge — absorbing is surviving, not
+                // damaging. (Phase 2 replaces this branch with the abduction struggle.)
+                if shield {
+                    shield = false; invulnT = Tuning.invulnDuration; streak = 0; mult = 1
+                    flowStreak = 0
+                    emit(.shieldAbsorbed(x: px))
+                } else {
+                    die()
+                }
+            } else if ev.coreHit {
+                emit(.wardenCoreHit(hits: w.coreHits))
+            }
+        }
+        if ev.killed {
+            wardensDefeatedThisRun += 1
+            bonus += Tuning.wardenScoreBonus * mult
+            gemCount += Tuning.wardenCoinBounty   // currency only, like a ring — never streak (rule 9)
+            emit(.wardenDefeated(world: w.world, bounty: Tuning.wardenCoinBounty))
+        }
+        if ev.brokeOff { emit(.wardenBrokeOff) }
+        if ev.finished {
+            wardenWorldDone = w.world
+            warden = nil
+        }
+    }
+
     private func stepPlayer(_ dt: Double) {
         let tx = Tuning.laneX[laneIndex]
         px = lerp(px, tx, min(1, dt * Tuning.laneLerpRate))
@@ -501,6 +566,10 @@ final class GameCore {
                 // remain skill stats and always count single. The overdrive boost adds a flat
                 // +boostGemBonus coin per gem on top (stacks with the doubler: 2+1).
                 gemCount += (doublerT > 0 ? 2 : 1) + (boostT > 0 ? Tuning.boostGemBonus : 0)
+                // Charge counts GEMS, never currency: the doubler and the boost multiply the coin
+                // payout, and letting them multiply Warden damage too would make a consumable the
+                // way to win a fight the design says only dodging can win.
+                wardenCharge = min(1, wardenCharge + Tuning.wardenChargePerGem)
                 streak += 1
                 bestStreak = max(bestStreak, streak)
                 mult = clampI(1 + streak / Tuning.streakPerMult, 1, Tuning.multCap)
@@ -637,6 +706,10 @@ final class GameCore {
         // advertised bonuses are always delivered). `magnetT`/`doublerT`/`chronoT` are intentionally
         // left running.
         boostT = 0; flowStreak = 0
+        // A Warden that put the player down has done its job: it breaks off rather than resuming
+        // over a cleared board, and its world is marked finished so the arena can't re-arm as the
+        // player runs the rest of it. The charge bank is deliberately NOT refunded — it was spent.
+        if let w = warden { wardenWorldDone = w.world; warden = nil }
         speed = max(speed, Tuning.speedStart)   // paid continues resume instantly, not from the decel floor
         activeObstacles.removeAll()
         activeGems.removeAll()
@@ -663,6 +736,12 @@ final class GameCore {
     }
 
     private func apply(_ cmd: SpawnCmd) {
+        // A Warden arena is kept clear of obstacles so its telegraphs are the only thing to read
+        // (decree 6). Filtering here rather than in the spawner is deliberate: `Spawner.fill` still
+        // draws exactly the same patterns and consumes exactly the same `rng` values, so the seeded
+        // stream is byte-identical to v1.8 and nothing about pattern SELECTION moves. What changes
+        // is which of those spawns reach the deck — which is a layout change, hence layoutVersion 10.
+        if Warden.suppresses(cmd) { return }
         switch cmd {
         case let .low(d, lane):
             guard obstacleCount(where: { $0 == .low }) < Tuning.capLow else { return }
@@ -749,6 +828,8 @@ final class GameCore {
             sliding: slideT > 0, grounded: grounded,
             usedCheckpoint: usedCheckpoint,
             entities: entityScratch,
+            warden: warden?.state(charge: wardenCharge),
+            wardenCharge: wardenCharge,
             score: score, gems: gemCount, mult: mult, best: best
         )
     }

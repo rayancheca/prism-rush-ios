@@ -33,7 +33,14 @@ enum DailyChallenge {
     /// `rng.int(0, slots − 1)` for every seed past 3,200 m. Below 2,560 m the ladder still returns
     /// 5 / 9 / 11 / 13 / 14, so act one's *selection* is byte-identical again — and the shared track
     /// still reshuffles, for the same reason as v8.
-    static func seed(year: Int, month: Int, day: Int, layoutVersion: UInt64 = 9) -> UInt64 {
+    /// layoutVersion 10 = v1.9 — THE WARDENS (PR-0457). Unlike every bump before it, the seeded
+    /// spawn stream is byte-identical: the encounter draws from its own stream derived from the run
+    /// seed, and `Spawner.fill` still makes exactly the same `rng` calls in exactly the same order.
+    /// What changes is which of those spawns reach the deck — obstacles and boost pads inside a
+    /// Warden arena (the first 600 m of every third world) are filtered at `GameCore.apply`. A
+    /// layout version is a promise about the whole run, not about the RNG, so the same seed no
+    /// longer means the same track and the shared daily must reshuffle.
+    static func seed(year: Int, month: Int, day: Int, layoutVersion: UInt64 = 10) -> UInt64 {
         let folded = UInt64(year * 10_000 + month * 100 + day)
         var mix = SplitMix64(seed: folded ^ tag ^ (layoutVersion << 48))
         return mix.next()

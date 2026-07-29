@@ -34,31 +34,64 @@ final class SolvabilityBotTests: XCTestCase {
     /// chasms the bot is actually driven across, so a future change that quietly stops spawning them
     /// (a tier gate moved, a pool table edited, a cap set to 0) turns the green soak red here instead
     /// of leaving it green and meaningless.
+    /// v1.9 note: this is a PRESENCE guard, and frequency has moved to the instrument that can see it.
+    ///
+    /// The Wardens (PR-0457) sweep obstacles out of an arena at the head of every third world, and
+    /// the first one lands squarely on tier six's debut at 2,560 m. That removes real chasm track,
+    /// so the original raw-count floor fired even though chasm *spawning* was untouched.
+    ///
+    /// Expressing it as chasms per eligible (non-arena) kilometre was the obvious repair and it is
+    /// the wrong one: the eligible average is band-mix sensitive, because an arena eats the
+    /// highest-frequency band (1.84/km at 2,560–3,200) and leaves the thinner act-two bands behind.
+    /// The measured rate therefore moves when `wardenArenaLength` moves — 0.92/km at 600 m, 0.84/km
+    /// at 660 m — which would tie a chasm assertion to an unrelated constant and make it fragile.
+    ///
+    /// So the two concerns are split. **Frequency** is guarded by `DifficultyCurveTests`, which
+    /// measures the spawner directly and reports chasm/km per band; those figures are unchanged by
+    /// the Wardens (1.84 / 1.06 / 1.41 / 2.20), because suppression happens after the draw. **This**
+    /// test guards what only a driven run can show: chasms actually reach the deck and get crossed,
+    /// in every seed, repeatedly. The per-kilometre figure is still computed and reported in the
+    /// failure message, because it is the number a human will want when this does go red.
     func testTheSoakActuallyDrivesTheBotAcrossChasms() async {
         var crossed = 0
+        var eligibleMetres = 0.0
         var seedsWithAChasm = 0
+        let tierSixAt = Tuning.chasmDiff * Tuning.diffFullAt   // 2,560 m
         for s in 0..<24 {
             let seed = UInt64(s) &* 0x9E37_79B9_7F4A_7C15 &+ 0x1234_5678
             let core = GameCore(seed: 1)
             core.startRun(seed: seed)
             var seen = Set<Int>()
             var ticks = 0
+            var last = core.distance
             while core.mode == .play && core.distance < 6_000 && ticks < 400_000 {
                 Autopilot.drive(core)
                 core.tick(Tuning.tickDt)
                 ticks += 1
+                // Track that could have carried a chasm: past the tier-six gate and outside an arena.
+                if core.distance > tierSixAt && !Warden.isArena(core.distance) {
+                    eligibleMetres += core.distance - last
+                }
+                last = core.distance
                 // Count a chasm once its far rim is behind the player — i.e. actually survived.
+                // Only chasms on eligible track count, so the numerator and the denominator are
+                // measuring the same stretch of deck (an arena contributes to neither).
                 for o in core.activeObstacles where o.kind == .chasm {
-                    if core.distance > o.d + Tuning.chasmHalfLength { seen.insert(o.id) }
+                    if core.distance > o.d + Tuning.chasmHalfLength, !Warden.isArena(o.d) {
+                        seen.insert(o.id)
+                    }
                 }
             }
             XCTAssertEqual(core.mode, .play, "seed \(seed) died — the soak should have caught this")
             if !seen.isEmpty { seedsWithAChasm += 1 }
             crossed += seen.count
         }
+        let perKm = Double(crossed) / (eligibleMetres / 1_000)
+        let detail = String(format: "%d crossed over %.2f eligible km = %.2f/km",
+                            crossed, eligibleMetres / 1_000, perKm)
         XCTAssertEqual(seedsWithAChasm, 24, "every 6,000 m run must meet the tier-six pattern")
-        XCTAssertGreaterThan(crossed, 24 * 3,
-                             "the chasm should be a recurring beat past 2,560 m, not a rarity")
+        XCTAssertGreaterThanOrEqual(crossed, 36, "the chasm should be a recurring beat past "
+                                    + "2,560 m, not a one-off — \(detail)")
     }
 
     /// v1.3 containment invariant (geometric, no sim): the overdrive runway emits ZERO obstacles,

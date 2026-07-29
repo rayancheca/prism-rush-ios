@@ -83,6 +83,32 @@ enum Autopilot {
             if nextDangerous && !stayingForced { laneDir = 0 }
         }
 
+        // 1b) The Warden's beam (v1.9) OUTRANKS the obstacle read, and has to.
+        //
+        // A Warden arena is swept clear of obstacles, so every lane scores `.infinity`, nothing is
+        // blocked, and the logic above settles on "stay put" — which is the single answer the beam
+        // punishes, because it stalks the lane the player is standing in most of the time. Without
+        // this the bot walks into ~60% of every telegraph and the 200-seed solvability proof turns
+        // red for a reason that has nothing to do with the spawner.
+        //
+        // Only a beam that is still WINDING UP is dodged (`isTelegraphing`); the lit afterglow of a
+        // shot already fired is ignored, so the bot never chases a spent beam.
+        if let w = c.warden, w.isTelegraphing, w.closes(target) {
+            // Least movement first, centre as the tie-break — the same preference order the
+            // obstacle logic above uses. Ascending iteration keeps the choice deterministic.
+            // A beam never closes more than two of three lanes, so an escape always exists.
+            var pick = -1
+            var bestCost = Int.max
+            for l in 0..<3 where !w.closes(l) && !blockedNow[l] {
+                let cost = abs(l - c.laneIndex) * 2 + (l == 1 ? 0 : 1)
+                if cost < bestCost { bestCost = cost; pick = l }
+            }
+            if pick >= 0 {
+                target = pick
+                laneDir = target > c.laneIndex ? 1 : (target < c.laneIndex ? -1 : 0)
+            }
+        }
+
         // 2) Vertical: jump lows in the target lane, slide (or air-slam) bars. Leads scale with
         //    the EFFECTIVE speed — under chrono slow-mo, obstacles arrive at the slowed rate.
         let jumpLead = clampD(c.effectiveSpeed * 0.17, 4.5, 6.5)
