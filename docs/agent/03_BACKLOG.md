@@ -1843,6 +1843,11 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
 - Decree 2:    Holds by construction — swatch and rig both resolved through the same function, so
                both move to `bodyHex` in lockstep. Hero, 24-card grid, shop rows and in-run body
                cannot disagree.
-- Verification: `testEverySkinHoldsOneFixedIdentity` replaces the old shimmer test. Solid-cyan Prism
-               visible in `docs/agent/scratch/s006/v5_*.png`; the earlier `chasm_*.png` from the
-               same build show it yellow, pink, gold and orange.
+- Verification: `testEverySkinHoldsOneFixedIdentity` replaces the old shimmer test.
+- **Follow-up the same session (D-011):** solid cyan removed the objection but also removed the
+  reason the character is called Prism. Owner: *"keep prism as a static rainbow, not solid cyan."*
+  Prism now wears six FIXED bands (magenta → violet → cyan → green → gold → orange-red) built from
+  flat `UnlitMaterial`s via `ProceduralMesh.bandedSphere` — the renderer has no textures or shaders,
+  so a gradient was never available. Bands split by equal HEIGHT in both layers, which is what makes
+  decree 2 hold by construction. Verified in-run, on the hub hero and on the detail card:
+  `docs/agent/scratch/s006/prism_run_2_crop.png`, `prism_hub_crop.png`, `prism_chars_crop.png`.

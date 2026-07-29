@@ -26,7 +26,10 @@
   two-sided timing window in the game. Iron rule 4's "moving walls stay LAST" shorthand is amended
   in `CLAUDE.md`: moving walls are the last entry of tier FIVE (index 13), the chasm is index 14.
 - **Decree 1 now covers TIME as well as space (D-009).** Prism's 8 s hue shimmer is deleted on the
-  owner's direct call. No skin changes colour with the world OR as it runs.
+  owner's direct call. No skin changes colour with the world OR as it runs. **Prism then got a
+  STATIC rainbow (D-011)** — six fixed bands, same in every frame and every world. The invariant
+  forbids an identity that *changes*, not one that is *complex*; the test pins that there is no
+  clock in the resolution path.
 - **The read-only phase is over (D-005).** Sessions may now fix code as they go. The audit sequence
   continues because it is producing real findings, not because a rule requires it.
 - **Rayan's standing instruction (2026-07-28):** *"never be limited by arbitrary rules — just work

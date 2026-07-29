@@ -256,3 +256,35 @@ wave 3.
 **What the instrument cannot see, recorded so nobody chases these numbers.** `DifficultyCurveTests`
 counts input EDGES, not input precision. A chasm costs one jump, exactly like a low — but with a
 ±0.25 s window against the low's ±0.64 s. Every figure above therefore *undervalues* the chasm.
+
+## D-011 · Prism wears a static rainbow, and "static" is the whole distinction
+
+**Session 006, immediately after D-009. Owner:** *"keep prism as a static rainbow, not solid cyan."*
+
+D-009 removed Prism's 8 s hue cycle and left it solid cyan — which fixed the objection but also
+removed the reason the character is called Prism. The correction is narrow and worth stating
+precisely, because the two states look similar in a still and are opposites in the invariant:
+
+- **Forbidden (D-009):** an identity that CHANGES. A clock, a world palette, anything that makes
+  the character look different at two moments.
+- **Fine (D-011):** an identity that is COMPLEX. A fixed spectrum is one look, and it is the same
+  look in frame 1, in frame 100,000, and in all twelve worlds.
+
+The test pins the distinction rather than the pixels: there is no clock in the resolution path.
+
+**Why the implementation looks the way it does.** The renderer is `UnlitMaterial` only — one flat
+colour per entity, no textures, no shaders (zero binary assets). A gradient is simply not
+available, so the rainbow is built from flat colour: `ProceduralMesh.bandedSphere` emits one mesh
+with one PART per band and the caller supplies one material per part. The body stays a single
+`ModelEntity` (squash, blink and the pose code all address `playerBody`), so the spectrum is just
+its material array — no new entities, no new render path, no per-frame allocation.
+
+**Bands are equal in HEIGHT, not equal in angle.** On a sphere those are equivalent for surface
+area, so the bands read evenly wide rather than bunching at the poles — and it hands the 2-D swatch
+a rule it can mirror exactly (clip to the silhouette, fill N equal-height strips). **Decree 2 holds
+by construction:** both layers derive from ONE list and ONE rule, instead of two sets of numbers
+that somebody has to keep in agreement. Any future body shape that wants a spectrum has to supply
+both halves of that pairing; a test pins spectral skins to `.sphere` for exactly this reason.
+
+`bodyHex` stays the authored cyan (it is the third band) because the glow, trail, wake and death
+burst all read from it. The spectrum is the body's *surface*, not its identity colour.

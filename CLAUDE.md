@@ -70,7 +70,10 @@ with a decree, the doc is wrong — amend the doc, never "ship the doc". Current
    saw Prism's 8 s cyan→magenta→amber shimmer: *"why does the character change colours as it runs.
    that defeats the whole purpose of having different characters."* The shimmer was world-blind, so
    earlier sessions read it as compliant; that reading was too literal. Prism is now its authored
-   cyan, and the shimmer machinery is deleted rather than disabled.)
+   cyan; the shimmer machinery is deleted rather than disabled. **Then D-011:** Prism wears a
+   STATIC rainbow — six fixed bands. The invariant forbids an identity that *changes*, not one
+   that is *complex*, and the test pins the distinction by asserting no clock is in the
+   resolution path.)
 2. **Previews never lie.** Menu hero, select swatches, shop cards and tease renders must match
    the in-game appearance (same colors, shape, eye style — same character).
 3. **No broken-looking states for expected situations.** Pre-launch/offline store, empty

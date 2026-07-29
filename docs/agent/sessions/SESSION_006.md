@@ -176,6 +176,34 @@ that *every* skin authors its own trail.
 Decree 2 holds by construction: swatch and rig both resolved through the same function, so both move
 to `bodyHex` in lockstep.
 
+### 3b. …and then a static rainbow (D-011)
+
+> *"keep prism as a static rainbow, not solid cyan."*
+
+Solid cyan removed the objection but also removed the reason the character is called Prism. The
+correction is narrow and the distinction is the whole point: **decree 1 forbids an identity that
+CHANGES, not one that is COMPLEX.** A fixed spectrum is one look — identical in frame 1, frame
+100,000, and all twelve worlds. The test pins that by asserting there is no clock in the resolution
+path, not by asserting pixels.
+
+**The renderer is `UnlitMaterial` only** — one flat colour per entity, no textures, no shaders — so
+a gradient was never available and the rainbow had to be built out of flat colour.
+`ProceduralMesh.bandedSphere` emits ONE mesh with one PART per band; the caller supplies one
+material per part. The body stays a single `ModelEntity` (squash, blink and the pose code all
+address `playerBody`), so the spectrum is nothing but its material array.
+
+**Bands split by equal HEIGHT, not equal angle.** On a sphere those are the same for surface area,
+so bands read evenly wide instead of bunching at the poles — and it gives the 2-D swatch a rule it
+can mirror exactly (clip to the silhouette, fill N equal-height strips). That is what makes decree 2
+hold *by construction*: both layers derive from one list and one rule, not from two sets of numbers
+somebody keeps in sync. A test pins spectral skins to `.sphere`, since that pairing is what exists.
+
+Six bands top to bottom: magenta, violet, cyan, green, gold, orange-red. The cyan band is the
+authored `bodyHex`, left unchanged because the glow, trail, wake and death burst all read from it.
+
+Verified on all three surfaces: `prism_run_2_crop.png` (in-run rig), `prism_hub_crop.png` (hub
+hero), `prism_chars_crop.png` (detail card) — same six bands, same order.
+
 ---
 
 ## Verification
@@ -192,4 +220,4 @@ Simulator, world 9 autoplay: `docs/agent/scratch/s006/` — `chasm_*.png` (v1: u
 ## Filed
 
 `PR-0454` (slide SFX), `PR-0455` (Prism identity). Closed: `PR-0450`, `PR-0320`.
-Decisions: `D-009`, `D-010`.
+Decisions: `D-009`, `D-010`, `D-011`.

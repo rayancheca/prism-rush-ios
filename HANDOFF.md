@@ -93,6 +93,12 @@ landed in v1.4.2 and S-005 recorded it as decree-compliant *because it is world-
 was too literal. **Decree 1 now covers space AND time.** The shimmer machinery is deleted, not
 disabled.
 
+Then he asked for a **static rainbow** rather than solid cyan (D-011), and that is what ships: six
+fixed bands via `ProceduralMesh.bandedSphere` — one mesh, one part per band, one flat
+`UnlitMaterial` each, because the renderer has no textures or shaders and a gradient was never
+available. **The distinction that matters: decree 1 forbids an identity that CHANGES, not one that
+is COMPLEX.** The test pins it by asserting no clock exists in the resolution path.
+
 ---
 
 # Things you would otherwise rediscover the hard way
@@ -118,6 +124,10 @@ disabled.
 - **`DifficultyCurveTests` counts input EDGES, not input precision.** A chasm costs one jump exactly
   like a low, but with a ±0.25 s window against ±0.64 s. The instrument *undervalues* it. Do not
   tune against those numbers without reading D-010.
+- **Any new banded/spectral body must supply BOTH halves of the pairing** — a 3-D mesh split rule
+  and the matching 2-D swatch rule. Today that is `bandedSphere` (equal-height zones) and the
+  swatch's equal-height strips, and a test pins spectral skins to `.sphere` so nobody adds a
+  spectrum to a cube and silently gets a flat-coloured preview against a banded rig.
 - **Derive `layoutVersion` goldens in Python** from the SplitMix64 constants and reproduce the
   existing pins first — never read them off the Swift they pin. They live in TWO places
   (`DailyChallengeTests` **and** `MissionsTests.testTodaysChallengeSeedMatchesUTCGoldens`).
@@ -161,10 +171,10 @@ until Rayan says otherwise.
    program no agent can verify: nothing here can hear audio. The fix is DSP reasoning (the old burst
    had no attack ramp and a 6 dB/oct filter at 600 Hz) plus sanity tests. If it is still wrong, the
    knobs are all one line each in `Synth.slide()` — `attack`, `poles`, `cutoff`, `vol`.
-2. **Prism is now solid cyan.** That is its authored `bodyHex` and exactly what Reduce Motion users
-   already saw. If you wanted Prism to keep a *static* rainbow rather than a single colour, say so —
-   that is a different and larger change than the one made, because the swatch and the 3D rig both
-   have to render the same gradient for decree 2 to hold.
+2. ~~Prism is now solid cyan~~ — **DONE, he asked for the static rainbow and it shipped (D-011).**
+   Six fixed bands, verified matching across the in-run rig, the hub hero and the detail card.
+   Worth ten seconds of his eyes on the 24-card grid at small size, which is the one surface not
+   captured this session.
 3. **Does the chasm feel right?** Verified fair (200-seed bot green, symmetric ±0.25 s window) and
    legible in stills, but a still and 33 m/s are different claims. Does the gap read as a gap the
    first time you meet it? Fastest way to see it:
@@ -193,4 +203,5 @@ until Rayan says otherwise.
 # Resolved in session 006
 
 PR-0450 · PR-0320 · PR-0454 · PR-0455. New decisions: **D-009** (decree 1 covers time),
-**D-010** (tier-six placement + the two rejected act-two weightings, with measurements).
+**D-010** (tier-six placement + the two rejected act-two weightings, with measurements),
+**D-011** (a static rainbow is an identity; a changing one is not).
