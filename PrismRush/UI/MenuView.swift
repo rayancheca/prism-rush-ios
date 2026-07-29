@@ -287,10 +287,9 @@ struct MenuView<Loadout: View>: View {
             // now share one leading edge, which is the same spine the masthead's wordmark sits on.
             // The `Spacer` wrapper keeps `loadout` a concrete typed child — only `AnyView` severs
             // observation (G3).
-            HStack(spacing: 0) {
-                loadout
-                Spacer(minLength: 0)
-            }
+            // Centred and sitting directly on PLAY: the loadout IS the run's cargo, so it reads as
+            // part of the launch control rather than as its own half-empty bar (S-007, owner call).
+            loadout
             playButton
             DailyRushRow(onDailyRush: onDailyRush)
         }

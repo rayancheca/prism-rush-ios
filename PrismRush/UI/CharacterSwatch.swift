@@ -38,6 +38,10 @@ struct AnimatedCharacterSwatch: View {
     /// centered; the hero/splash bias it down so the added headroom lands above the antenna while
     /// the feet stay near the disc.
     var verticalAnchor: CGFloat = 0.5
+    /// Scales the soft body halo. 1 keeps every existing call site byte-identical; the hub hero
+    /// passes 0 because it stands on a lit platform instead, and stacking a diffuse cloud on top
+    /// of that just smeared the 3D scene behind it (S-007, the owner's "background light").
+    var haloScale: CGFloat = 1
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -93,12 +97,16 @@ struct AnimatedCharacterSwatch: View {
         let bodyColor = Theme.color(skin.bodyHex)
 
         // Glow — teased renders keep it: the whole canvas fades as one, so the glow reads as a
-        // dimmed version of the owned look rather than a different art style.
-        let glowRect = CGRect(x: center.x - bodyR * 1.6, y: center.y - bodyR * 1.6,
-                              width: bodyR * 3.2, height: bodyR * 3.2)
-        ctx.fill(Path(ellipseIn: glowRect),
-                 with: .radialGradient(Gradient(colors: [bodyColor.opacity(0.45), .clear]),
-                                       center: center, startRadius: bodyR * 0.4, endRadius: bodyR * 1.6))
+        // dimmed version of the owned look rather than a different art style. `haloScale == 0`
+        // skips it entirely (the hub hero, which is lit by its platform instead).
+        if haloScale > 0 {
+            let haloR = bodyR * 1.6 * haloScale
+            let glowRect = CGRect(x: center.x - haloR, y: center.y - haloR,
+                                  width: haloR * 2, height: haloR * 2)
+            ctx.fill(Path(ellipseIn: glowRect),
+                     with: .radialGradient(Gradient(colors: [bodyColor.opacity(0.45), .clear]),
+                                           center: center, startRadius: bodyR * 0.4, endRadius: haloR))
+        }
 
         // Legendary aura (v1.6): an orbiting glow ring behind the figure — the unmistakable
         // "this one is special" tell. Drawn before the body so it reads as a halo around it.
@@ -413,24 +421,30 @@ struct CharacterHeroStage: View {
     var body: some View {
         VStack(spacing: Theme.Space.s) {
             ZStack(alignment: .bottom) {
+                // Wider than the figure and dropped below its base, so the near arc clears the body
+                // and the ring reads as ONE platform in perspective rather than two stray slivers
+                // either side of it.
                 glowDisc
-                    .frame(width: swatchSize * 1.7, height: swatchSize * 0.42)
-                    .offset(y: swatchSize * 0.12)
+                    .frame(width: swatchSize * 1.45, height: swatchSize * 0.4)
+                    .offset(y: swatchSize * 0.16)
                     .opacity(locked ? 0.55 : 1)   // dimmed pedestal under a teased skin
                 // Floor reflection at 18% (skipped under Reduce Motion: one Canvas, not two).
                 // Offset so the mirrored feet meet the real feet; the stage frame clips the rest.
                 // Locked: plain render faded harder (0.18 × 0.6) — a mirrored lock chip is noise.
                 if !reduceMotion && showsReflection {
-                    AnimatedCharacterSwatch(skin: skin, size: swatchSize, widthScale: Self.glowWidthScale)
+                    AnimatedCharacterSwatch(skin: skin, size: swatchSize,
+                                            widthScale: Self.glowWidthScale, haloScale: 0)
                         .scaleEffect(x: 1, y: -1)
-                        .opacity(locked ? 0.11 : 0.18)
+                        // Halved: with the halo gone there is nothing to soften the mirrored body,
+                        // and at 18% it read as a dark blob sitting on the platform.
+                        .opacity(locked ? 0.06 : 0.09)
                         .mask(LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .center))
                         .offset(y: swatchSize)
                 }
                 AnimatedCharacterSwatch(skin: skin, size: swatchSize,
                                         silhouette: locked, teaseOpacity: Self.stageTeaseOpacity,
                                         heightScale: 1.85, widthScale: Self.glowWidthScale,
-                                        verticalAnchor: 0.66)
+                                        verticalAnchor: 0.66, haloScale: 0)
             }
             // Clip matches the figure's own 1.85× canvas, so the antenna + up-bob are never cropped
             // (anchor 0.66 lands the headroom above the tip); only the mirrored reflection's spill
@@ -450,10 +464,40 @@ struct CharacterHeroStage: View {
         disc(tint: discTint)
     }
 
+    /// The stage floor: a lit platform with an EDGE, not a soft blob.
+    ///
+    /// The old pedestal was a wide diffuse radial glow, and the figure carried a second halo
+    /// `3.2 × bodyR` across. On the hub — where the live 3D city and its perspective grid show
+    /// through — the two stacked into a murky teal smear that dirtied the grid lines instead of
+    /// lighting anything (the owner's "background light behind the character", S-007). One cause:
+    /// diffuse light has no edge, and the visual language of this game is edges.
+    ///
+    /// The rim is also the only honest option for a SPECTRAL skin. The glow took its colour from
+    /// `bodyHex`, so once D-011 gave Prism a six-band rainbow surface the light behind it stayed
+    /// cyan — a glow that did not match the thing casting it. The rim sweeps the real spectrum, so
+    /// Prism stands on its own colours. Static by construction: fixed hues in an `AngularGradient`,
+    /// no clock in the path (decree 1).
     private func disc(tint: Color) -> some View {
-        Ellipse().fill(
-            RadialGradient(colors: [tint.opacity(0.5), tint.opacity(0.12), .clear],
-                           center: .center, startRadius: 1, endRadius: swatchSize * 0.85))
+        Ellipse()
+            .fill(poolStyle(tint: tint))
+            // Bright at the contact point, gone by the edge — a pool of light with a centre, not a
+            // rectangle of haze. A stroked ring was tried first and read as two whiskers: a sphere
+            // sitting on an ellipse hides its far arc, so only the side slivers survive.
+            .mask(Ellipse().fill(
+                RadialGradient(colors: [.white, .white.opacity(0.45), .clear],
+                               center: .center, startRadius: 1, endRadius: swatchSize * 0.5)))
+            .blur(radius: swatchSize * 0.04)
+    }
+
+    /// Spectral skins light their own pad with their own bands; everyone else gets their identity
+    /// hue. The first colour repeats last so the sweep closes without a seam. Fixed hues, no clock
+    /// in the path — this is surface, not a changing identity (decree 1 / D-011).
+    private func poolStyle(tint: Color) -> AnyShapeStyle {
+        guard let spectrum = skin.spectrum, let first = spectrum.first, spectrum.count > 1 else {
+            return AnyShapeStyle(tint.opacity(0.55))
+        }
+        return AnyShapeStyle(AngularGradient(colors: (spectrum + [first]).map { Theme.color($0).opacity(0.8) },
+                                             center: .center))
     }
 
     private var namePill: some View {

@@ -31,21 +31,26 @@ struct LoadoutStrip: View {
         }
     }
 
+    /// Icon-forward and compact on purpose. These used to be two wide labelled pills pinned to the
+    /// deck's leading edge, which read as a full-width bar that had failed to fill — the owner's
+    /// "they don't even fill up the width of the screen". A short centred cluster reads as a
+    /// deliberate accessory to PLAY instead of a broken row, and gives the deck back a row of
+    /// height (S-007). The name stays on the chip: an unlabelled icon here would be a guess.
     private func chip(icon: String, name: String, count: Int, tint: Color, armed: Bool,
                       action: @escaping () -> Void, a11y: String) -> some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 Image(systemName: armed ? "checkmark.circle.fill" : icon)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                 Text(armed ? "ARMED" : name).typeScale(.micro)
                 Text("×\(count)").typeScale(.micro).monospacedDigit().opacity(0.8)
             }
             .foregroundStyle(armed ? AnyShapeStyle(.black) : AnyShapeStyle(tint))
-            .padding(.horizontal, 12).padding(.vertical, 8)
+            .padding(.horizontal, 10).padding(.vertical, 6)
             .background(armed ? AnyShapeStyle(tint) : AnyShapeStyle(Theme.Role.surface), in: Capsule())
             .overlay(Capsule().strokeBorder(tint.opacity(armed ? 0 : 0.5), lineWidth: 1))
             .shadow(color: armed ? tint.opacity(0.55) : .clear, radius: 8)
-            .frame(minHeight: 44)
+            .frame(minHeight: 36)
             .contentShape(Capsule())
         }
         .buttonStyle(.neon)
