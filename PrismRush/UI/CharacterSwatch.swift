@@ -425,8 +425,8 @@ struct CharacterHeroStage: View {
                 // and the ring reads as ONE platform in perspective rather than two stray slivers
                 // either side of it.
                 glowDisc
-                    .frame(width: swatchSize * 1.45, height: swatchSize * 0.4)
-                    .offset(y: swatchSize * 0.16)
+                    .frame(width: swatchSize * 1.6, height: swatchSize * 0.5)
+                    .offset(y: swatchSize * 0.22)
                     .opacity(locked ? 0.55 : 1)   // dimmed pedestal under a teased skin
                 // Floor reflection at 18% (skipped under Reduce Motion: one Canvas, not two).
                 // Offset so the mirrored feet meet the real feet; the stage frame clips the rest.
@@ -477,16 +477,31 @@ struct CharacterHeroStage: View {
     /// cyan — a glow that did not match the thing casting it. The rim sweeps the real spectrum, so
     /// Prism stands on its own colours. Static by construction: fixed hues in an `AngularGradient`,
     /// no clock in the path (decree 1).
+    /// A lit ring the character stands inside, with a pool of light in it.
+    ///
+    /// The ring is the point (owner's call, S-007): a crisp ellipse reads as a stage the figure
+    /// stands on, where the old wide diffuse glow just smeared the 3D scene behind it. It sits low
+    /// enough that its NEAR arc clears the body — an ellipse tucked up behind a sphere shows only
+    /// its side tips and reads as two whiskers, which is what a first attempt did.
+    ///
+    /// Tinted per character, which is also the only honest option for a SPECTRAL skin: the old glow
+    /// took its colour from `bodyHex`, so after D-011 gave Prism a six-band rainbow surface the
+    /// light under it stayed cyan. Fixed hues, no clock in the path — surface, not a changing
+    /// identity (decree 1 / D-011).
     private func disc(tint: Color) -> some View {
-        Ellipse()
-            .fill(poolStyle(tint: tint))
-            // Bright at the contact point, gone by the edge — a pool of light with a centre, not a
-            // rectangle of haze. A stroked ring was tried first and read as two whiskers: a sphere
-            // sitting on an ellipse hides its far arc, so only the side slivers survive.
-            .mask(Ellipse().fill(
-                RadialGradient(colors: [.white, .white.opacity(0.45), .clear],
-                               center: .center, startRadius: 1, endRadius: swatchSize * 0.5)))
-            .blur(radius: swatchSize * 0.04)
+        ZStack {
+            // Pool: bright at the contact point, gone by the edge.
+            Ellipse()
+                .fill(poolStyle(tint: tint))
+                .mask(Ellipse().fill(
+                    RadialGradient(colors: [.white, .white.opacity(0.4), .clear],
+                                   center: .center, startRadius: 1, endRadius: swatchSize * 0.52)))
+                .blur(radius: swatchSize * 0.04)
+            // The rim.
+            Ellipse()
+                .strokeBorder(poolStyle(tint: tint), lineWidth: 2.4)
+                .shadow(color: tint.opacity(0.55), radius: 10)
+        }
     }
 
     /// Spectral skins light their own pad with their own bands; everyone else gets their identity

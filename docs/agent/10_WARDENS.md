@@ -87,9 +87,21 @@ Bounded by construction:
 - A player who dodges perfectly always survives, regardless of charge. Charge only decides whether
   they get to *win*.
 
-**Reward proposal (needs owner sign-off):** a world-exclusive character unlocked by defeating that
-world's Warden N times. Ties the boss to the 24-character roster and gives the reskin ladder real
-progression. Alternative: a coin bounty (weaker — coins already have a sink problem).
+### Reward — owner-decided (S-007), tiered
+
+The owner picked the world-exclusive character as **the** reward and asked for the others layered
+underneath, explicitly deferring the balance ("don't take my word as law, I'm not a game designer").
+So: one headline goal, with texture under it.
+
+| Tier | Reward | Why it earns its place |
+|---|---|---|
+| **Headline** | **A world-exclusive character**, unlocked by defeating that world's Warden N times | Ties bosses to the 24-character roster and gives the world ladder the real progression `05_GAME_DESIGN.md §6` says it currently fakes. This is the goal a player can NAME. |
+| Every win | Countermeasure parts | Feeds the upgrade loop — fighting Wardens is how you get better at fighting Wardens. **Keep the headline character off this currency** so the loop can never gate the goal behind grinding. |
+| Every win | A coin bounty | Immediate, legible payout. Deliberately the *smallest* tier: coins already have a sink problem and this feature exists to fix it, not feed it. |
+| Permanent | A plaque per world on the Worlds screen | Free progression legibility — shows at a glance which Wardens you've beaten. Cheap, and it makes the Worlds screen a trophy case instead of a menu. |
+
+Design note for whoever builds it: N should be small (3–5). This is a headline unlock, not a grind,
+and the whole point of the feature is that the fight is the fun part.
 
 ---
 
