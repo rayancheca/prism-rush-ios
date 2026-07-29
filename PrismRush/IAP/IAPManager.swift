@@ -176,26 +176,61 @@ final class IAPManager {
         }
     }
 
-    /// Restore non-consumables. Returns true on success (used for Settings-row feedback).
-    @discardableResult
-    func restorePurchases() async -> Bool {
-        do {
-            try await AppStore.sync()   // re-fetch entitlements from the store (may prompt sign-in)
-            await restoreEntitlements()
-            lastError = nil
-            return true
-        } catch {
-            lastError = "Restore failed. \(error.localizedDescription)"
-            return false
+    /// What a Restore Purchases tap actually did. Replaces a `Bool` that reported "success" for
+    /// a sync which restored nothing, so a player with no purchases was told "Purchases restored."
+    /// — actively misleading exactly the person who taps this button to debug a missing purchase
+    /// (PR-0308).
+    enum RestoreOutcome: Equatable {
+        case restored(Int)
+        /// The sync worked; this Apple Account simply owns nothing. An honest, ordinary outcome —
+        /// not an error (decree 3).
+        case nothingToRestore
+        /// The player dismissed the sign-in sheet. Says nothing, exactly as `purchase()` already
+        /// treats `.userCancelled`: a cancellation is not a failure worth announcing.
+        case cancelled
+        case failed
+
+        /// Player-facing copy. Never carries a raw `Error` description — decree 3, and the reason
+        /// a cancelled restore used to print StoreKit's own wording into the Settings sheet.
+        var message: String? {
+            switch self {
+            case let .restored(count): "Restored \(count) purchase\(count == 1 ? "" : "s")."
+            case .nothingToRestore:    "Nothing to restore on this Apple Account."
+            case .cancelled:           nil
+            case .failed:              "Couldn't reach the App Store. Try again in a moment."
+            }
         }
     }
 
-    func restoreEntitlements() async {
+    /// Restore non-consumables, reporting what was actually restored.
+    func restorePurchases() async -> RestoreOutcome {
+        do {
+            try await AppStore.sync()   // re-fetch entitlements from the store (may prompt sign-in)
+            let count = await restoreEntitlements()
+            lastError = nil
+            return count > 0 ? .restored(count) : .nothingToRestore
+        } catch {
+            if let storeKitError = error as? StoreKitError, case .userCancelled = storeKitError {
+                return .cancelled   // leaves `lastError` untouched — nothing failed
+            }
+            // Deliberately NOT `error.localizedDescription`: `lastError` is also rendered by the
+            // Shop's inline strip, so a raw StoreKit string here surfaces on a different screen.
+            lastError = "Couldn't reach the App Store. Try again in a moment."
+            return .failed
+        }
+    }
+
+    /// Applies every verified entitlement and returns how many there were.
+    @discardableResult
+    func restoreEntitlements() async -> Int {
+        var restored = 0
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result {
                 IAPCatalog.restore(transaction.productID, to: ProfileStore.shared)
+                restored += 1
             }
         }
+        return restored
     }
 
     private func listenForTransactions() -> Task<Void, Never> {

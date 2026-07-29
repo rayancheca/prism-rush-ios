@@ -262,4 +262,45 @@ final class MissionsTests: XCTestCase {
         let back = try JSONDecoder().decode(Profile.self, from: JSONEncoder().encode(p))
         XCTAssertEqual(back, p)
     }
+
+    // MARK: - board summary (PR-0304)
+
+    private func state(claimable: Bool, claimed: Bool, reward: Int) -> ProfileStore.MissionState {
+        ProfileStore.MissionState(progress: 0, target: 10, reward: reward,
+                                  claimable: claimable, claimed: claimed, tier: 0, tierCount: 1)
+    }
+
+    /// THE regression. A brand-new board — every mission 0/N, nothing claimable, nothing claimed —
+    /// used to render exactly like a finished one, so the first thing a new player read on the
+    /// Missions screen was that they had already completed it.
+    func testUntouchedBoardIsOpenNotAllClear() {
+        let fresh = (0..<7).map { _ in state(claimable: false, claimed: false, reward: 100) }
+        XCTAssertEqual(ProfileStore.MissionBoardSummary.of(fresh),
+                       .open(count: 7, coins: 700),
+                       "a 0/N board is the opposite of ALL CLEAR")
+    }
+
+    func testAllClearOnlyWhenEveryMissionIsExhausted() {
+        let done = (0..<4).map { _ in state(claimable: false, claimed: true, reward: 100) }
+        XCTAssertEqual(ProfileStore.MissionBoardSummary.of(done), .allClear)
+
+        // One unfinished mission is enough to disqualify ALL CLEAR.
+        XCTAssertEqual(ProfileStore.MissionBoardSummary.of(done + [state(claimable: false, claimed: false, reward: 250)]),
+                       .open(count: 1, coins: 250))
+    }
+
+    func testClaimableWinsAndCountsOnlyClaimableRewards() {
+        let board = [state(claimable: true, claimed: false, reward: 700),
+                     state(claimable: true, claimed: false, reward: 540),
+                     state(claimable: false, claimed: false, reward: 999),
+                     state(claimable: false, claimed: true, reward: 999)]
+        XCTAssertEqual(ProfileStore.MissionBoardSummary.of(board),
+                       .claimable(count: 2, coins: 1_240),
+                       "the waiting total is the claimable rewards, not the whole board")
+    }
+
+    /// An empty board can't be "open" — degenerate, but it decides which copy renders.
+    func testEmptyBoardIsAllClear() {
+        XCTAssertEqual(ProfileStore.MissionBoardSummary.of([]), .allClear)
+    }
 }

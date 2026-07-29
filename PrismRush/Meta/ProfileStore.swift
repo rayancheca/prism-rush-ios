@@ -503,6 +503,36 @@ final class ProfileStore {
         var tierCount: Int     // total tiers (tiered missions only; else 1)
     }
 
+    /// What the Missions board's summary strip should say.
+    ///
+    /// Pure, and deliberately not a `Bool`. The strip used to branch on "is anything claimable"
+    /// alone, which made an UNTOUCHED board (every row 0/N) render identically to a finished one:
+    /// the first thing a new player read on that screen was `ALL CLEAR`, i.e. that they had
+    /// already finished it (PR-0304). "Nothing to collect yet" and "nothing left to do" are
+    /// different states and only the mission list can tell them apart.
+    enum MissionBoardSummary: Equatable {
+        /// At least one reward is sitting there waiting to be collected.
+        case claimable(count: Int, coins: Int)
+        /// Nothing to collect yet, but missions are still live. The normal board, including a
+        /// brand-new one.
+        case open(count: Int, coins: Int)
+        /// Every mission on the board is exhausted. The ONLY state allowed to say ALL CLEAR.
+        case allClear
+
+        static func of(_ states: [MissionState]) -> MissionBoardSummary {
+            let claimable = states.filter(\.claimable)
+            if !claimable.isEmpty {
+                return .claimable(count: claimable.count,
+                                  coins: claimable.reduce(0) { $0 + $1.reward })
+            }
+            // A claimable mission is never `claimed`, so this can't double-count what the branch
+            // above already reported — it is only reached when nothing is claimable.
+            let open = states.filter { !$0.claimed }
+            guard !open.isEmpty else { return .allClear }
+            return .open(count: open.count, coins: open.reduce(0) { $0 + $1.reward })
+        }
+    }
+
     func missionState(_ m: Mission, now: Date = Date()) -> MissionState {
         let progress = profile.missionProgress[m.id] ?? 0
         switch m.scope {

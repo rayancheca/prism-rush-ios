@@ -1,5 +1,8 @@
 import AVFoundation
 import os
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// AVAudioEngine graph for fully-synthesized audio (no asset files). A pool of player nodes plays
 /// one-shot SFX buffers through `sfxMixer`; `Music` streams step buffers through `musicMixer`
@@ -19,7 +22,16 @@ final class SynthEngine {
     private let format: AVAudioFormat?
     private let music: Music?
     private var sfxCache: [Synth.SFX: AVAudioPCMBuffer] = [:]
+    /// The graph is live: session active, `engine.start()` returned, players playing.
     private var started = false
+    /// The app has ASKED for audio, whether or not starting it ever worked.
+    ///
+    /// These two used to be one flag, and that was PR-0314: a failed `start()` left `started ==
+    /// false`, every recovery path guarded on `started`, so the one failure that most needed a
+    /// retry was the one that permanently disabled retrying. Splitting the intent (`wantsAudio`)
+    /// from the fact (`started`) is what lets the interruption / route-change / config-change /
+    /// foreground handlers below re-attempt a start that never succeeded in the first place.
+    private var wantsAudio = false
     private var masterTarget: Float = 1
     private var observers: [NSObjectProtocol] = []   // session/engine notification tokens, app-lifetime
     private let log = Logger(subsystem: "com.rayancheca.prismrush", category: "audio")
@@ -76,6 +88,7 @@ final class SynthEngine {
     }
 
     func start() {
+        wantsAudio = true
         guard !started, format != nil else { return }
         do {
             let session = AVAudioSession.sharedInstance()
@@ -115,9 +128,11 @@ final class SynthEngine {
     /// `calm` starts the bed at a quieter target (the hub/splash ambience); the default full
     /// intensity is the in-run bed. Either way mute is mixer-level — never gate scheduling on it.
     func musicStart(calm: Bool = false) {
-        guard started else { return }
-        if !engine.isRunning { recoverEngine() }   // self-heal if an interruption beat us here
-        guard engine.isRunning else { return }
+        // Music starts at the hub and at every run — the coarsest, cheapest moment to notice the
+        // engine is down and re-attempt it. `restoreAudio` covers a never-started engine too, so
+        // a launch-time failure heals the first time the player reaches a menu (PR-0314).
+        restoreAudio()
+        guard started, engine.isRunning else { return }
         musicIsCalm = calm
         applyMusicUserVolume()                     // feed the right bed's user level before fading in
         music?.start(targetVolume: calm ? 0.4 : 0.85)
@@ -158,25 +173,41 @@ final class SynthEngine {
 
     // A phone call / Siri / alarm / headphone unplug stops the engine out from under us; without
     // these observers `started` stays true and all later audio silently no-ops forever.
+    //
+    // These are also the moments that rescue a start which never succeeded — launching during a
+    // call is the common case, and `willEnterForeground` is the backstop for every cause we did
+    // not anticipate. Recovery is silent on purpose: the condition is transient, self-healing and
+    // gives the player nothing to act on, so a warning would be noise rather than honesty (D-012).
     private func observeSessionNotifications() {
         let nc = NotificationCenter.default
         observers.append(nc.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
             let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
             MainActor.assumeIsolated {
                 guard raw == AVAudioSession.InterruptionType.ended.rawValue else { return }
-                self?.recoverEngine()
+                self?.restoreAudio()
             }
         })
         observers.append(nc.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.recoverIfStalled() }
+            MainActor.assumeIsolated { self?.restoreAudio() }
         })
         observers.append(nc.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.recoverIfStalled() }
+            MainActor.assumeIsolated { self?.restoreAudio() }
         })
+        #if canImport(UIKit)
+        observers.append(nc.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.restoreAudio() }
+        })
+        #endif
     }
 
-    private func recoverIfStalled() {
-        guard started, !engine.isRunning else { return }
+    /// The single recovery entry point, covering BOTH failure shapes:
+    /// a start that never succeeded (`!started` — re-attempt it from scratch) and a graph that
+    /// died under us (`started`, engine stopped). Every recovery moment routes through here so
+    /// neither shape can be reachable-only-by-the-other's-path again (PR-0314).
+    private func restoreAudio() {
+        guard wantsAudio, format != nil else { return }
+        guard started else { start(); return }
+        guard !engine.isRunning else { return }
         recoverEngine()
     }
 

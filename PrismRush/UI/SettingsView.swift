@@ -73,16 +73,32 @@ struct SettingsView: View {
         VStack(spacing: 14) {
             // Two separate music beds: the calm hub/splash ambience and the in-run track. Tuning
             // the menu bed down here changes it live while the hub plays, leaving gameplay untouched.
-            sliderRow(symbol: "house.fill", label: "Menu music", value: $menuMusic) { final in
-                store.mutate { $0.menuMusicVolume = final }
+            // Dimmed while muted so the override is visible: otherwise dragging a slider on a muted
+            // game does nothing audible and reads as broken (PR-0305). Still live, not disabled —
+            // setting levels for later is legitimate.
+            VStack(spacing: 14) {
+                sliderRow(symbol: "house.fill", label: "Menu music", value: $menuMusic) { final in
+                    store.mutate { $0.menuMusicVolume = final }
+                }
+                sliderRow(symbol: "gamecontroller.fill", label: "Game music", value: $music) { final in
+                    store.mutate { $0.musicVolume = final }
+                }
+                sliderRow(symbol: "speaker.wave.2.fill", label: "Sound effects", value: $sfx) { final in
+                    store.mutate { $0.sfxVolume = final }
+                }
             }
-            sliderRow(symbol: "gamecontroller.fill", label: "Game music", value: $music) { final in
-                store.mutate { $0.musicVolume = final }
-            }
-            sliderRow(symbol: "speaker.wave.2.fill", label: "Sound effects", value: $sfx) { final in
-                store.mutate { $0.sfxVolume = final }
-            }
+            .opacity(model.muted ? 0.45 : 1)
+
+            Divider().overlay(.white.opacity(0.1))
+
+            // The ONLY unmute outside a run before PR-0305 was the in-run corner speaker, and mute
+            // persists across launches — so a muted player had to guess that starting a run was the
+            // way back to sound.
+            toggleRow(symbol: "speaker.slash.fill", label: "Mute all sound",
+                      detail: "Overrides the volumes above", identifier: "muteToggle",
+                      isOn: Binding(get: { model.muted }, set: { model.setMuted($0) }))
         }
+        .animation(.easeInOut(duration: 0.2), value: model.muted)
         .padding(16)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.12)))
@@ -132,7 +148,7 @@ struct SettingsView: View {
     }
 
     private func toggleRow(symbol: String, label: String, detail: String? = nil,
-                           isOn: Binding<Bool>) -> some View {
+                           identifier: String? = nil, isOn: Binding<Bool>) -> some View {
         Toggle(isOn: isOn) {
             HStack(spacing: 12) {
                 Image(systemName: symbol)
@@ -153,6 +169,7 @@ struct SettingsView: View {
         }
         .tint(Theme.color(0x00F5FF))
         .padding(.vertical, 8)
+        .accessibilityIdentifier(identifier ?? "")
     }
 
     // MARK: navigation rows
@@ -174,9 +191,12 @@ struct SettingsView: View {
             guard !restoring else { return }
             restoring = true
             Task {
-                let ok = await IAPManager.shared.restorePurchases()
+                let outcome = await IAPManager.shared.restorePurchases()
                 restoring = false
-                restoreNote = ok ? "Purchases restored." : (IAPManager.shared.lastError ?? "Restore failed.")
+                // A dismissed sign-in sheet has no message: the player cancelled on purpose and
+                // does not need to be told what they just did (PR-0308).
+                guard let note = outcome.message else { return }
+                restoreNote = note
                 try? await Task.sleep(for: .seconds(2.4))
                 restoreNote = nil
             }

@@ -626,10 +626,17 @@ final class GameModel {
         }
     }
 
-    func toggleMute() {
-        muted.toggle()
-        synth.muted = muted
-        ProfileStore.shared.mutate { $0.muted = muted }
+    func toggleMute() { setMuted(!muted) }
+
+    /// The single writer for mute: the model flag, the live engine and the saved profile move
+    /// together. Both the in-run corner control and the Settings row route through here — before
+    /// PR-0305 the corner control was the ONLY caller, so a player who muted mid-run and relaunched
+    /// had a permanently silent game and no way to find the one control that could undo it.
+    func setMuted(_ on: Bool) {
+        guard on != muted else { return }
+        muted = on
+        synth.muted = on
+        ProfileStore.shared.mutate { $0.muted = on }
     }
 
     /// Push the equipped skin's full rig recipe to the renderer (v1.3 `applySkin(Skin)` API).

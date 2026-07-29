@@ -36,7 +36,7 @@ struct MissionsView: View {
                 let now = context.date
                 let claimables = claimableMissions(store: store, now: now)
                 VStack(spacing: 22) {
-                    summaryStrip(claimables: claimables, store: store, now: now)
+                    summaryStrip(store: store, now: now)
                     claimAllRow(claimables: claimables, store: store, now: now)
                     sectionBlock(missions: store.dailyMissions(now: now), tint: Self.todayTint,
                                  store: store, now: now) { todayHeader(now: now) }
@@ -62,34 +62,53 @@ struct MissionsView: View {
 
     // MARK: summary strip
 
-    /// One-line board status: claimable count + coins waiting. Gold ONLY while something waits
-    /// (Role rules — gold means money); otherwise a neutral "all clear" with the next reset.
-    private func summaryStrip(claimables: [Mission], store: ProfileStore, now: Date) -> some View {
-        let count = claimables.count
-        let waiting = claimables.reduce(0) { $0 + store.missionState($1, now: now).reward }
+    /// One-line board status. Three states, not two: gold ONLY while a reward waits (Role rules —
+    /// gold means money), a neutral live count while the board is simply unfinished, and ALL CLEAR
+    /// reserved for a board with genuinely nothing left on it. See `MissionBoardSummary` for why
+    /// the middle state has to exist (PR-0304).
+    private func summaryStrip(store: ProfileStore, now: Date) -> some View {
+        let summary = ProfileStore.MissionBoardSummary.of(activeStates(store: store, now: now))
+        let isReward = summary.isClaimable
         return HStack(spacing: Theme.Space.s) {
-            Image(systemName: count > 0 ? "sparkles" : "checkmark.circle")
+            Image(systemName: summary.symbol)
                 .font(.system(size: 12, weight: .bold))
-            Text(count > 0
-                 ? "\(count) CLAIMABLE · \(waiting.formatted()) COINS WAITING"
-                 : "ALL CLEAR · NEW BOARD IN \(dailyCountdown(now: now))")
+            Text(summaryText(summary, now: now))
                 .typeScale(.caption)
                 .fontWeight(.heavy)
                 .monospacedDigit()
             Spacer(minLength: 0)
-            if count > 0 { CoinGlyph(size: 13) }
+            if summary.showsCoinGlyph { CoinGlyph(size: 13) }
         }
-        .foregroundStyle(count > 0 ? Theme.Role.reward : Theme.Role.textTertiary)
+        .foregroundStyle(isReward ? Theme.Role.reward : summary.tint)
         .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(count > 0 ? Theme.Role.reward.opacity(0.08) : Theme.Role.surface,
+        .background(isReward ? Theme.Role.reward.opacity(0.08) : Theme.Role.surface,
                     in: RoundedRectangle(cornerRadius: Theme.Radius.m))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m)
-            .strokeBorder(count > 0 ? Theme.Role.reward.opacity(0.4) : Theme.Role.hairline))
+            .strokeBorder(isReward ? Theme.Role.reward.opacity(0.4) : Theme.Role.hairline))
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("missionsSummary")
-        .accessibilityLabel(count > 0
-                            ? "\(count) rewards claimable, \(waiting) coins waiting."
-                            : "All clear. New board in \(dailyCountdownSpoken(now: now)).")
+        .accessibilityLabel(summarySpoken(summary, now: now))
+    }
+
+    private func summaryText(_ s: ProfileStore.MissionBoardSummary, now: Date) -> String {
+        switch s {
+        case let .claimable(count, coins): "\(count) CLAIMABLE · \(coins.formatted()) COINS WAITING"
+        case let .open(count, coins):      "\(count) OPEN · UP TO \(coins.formatted()) COINS"
+        case .allClear:                    "ALL CLEAR · NEW BOARD IN \(dailyCountdown(now: now))"
+        }
+    }
+
+    private func summarySpoken(_ s: ProfileStore.MissionBoardSummary, now: Date) -> String {
+        switch s {
+        case let .claimable(count, coins): "\(count) rewards claimable, \(coins) coins waiting."
+        case let .open(count, coins):      "\(count) missions open, up to \(coins) coins available."
+        case .allClear:                    "All clear. New board in \(dailyCountdownSpoken(now: now))."
+        }
+    }
+
+    /// Every mission on the board, resolved to its state — the input the summary is pure over.
+    private func activeStates(store: ProfileStore, now: Date) -> [ProfileStore.MissionState] {
+        activeMissions(store: store, now: now).map { store.missionState($0, now: now) }
     }
 
     // MARK: claim all
@@ -136,10 +155,14 @@ struct MissionsView: View {
         }
     }
 
-    private func claimableMissions(store: ProfileStore, now: Date) -> [Mission] {
-        let active = MissionCatalog.perRun + store.dailyMissions(now: now)
+    /// Every mission the board is currently showing, in render order.
+    private func activeMissions(store: ProfileStore, now: Date) -> [Mission] {
+        MissionCatalog.perRun + store.dailyMissions(now: now)
             + store.weeklyMissions(now: now) + MissionCatalog.achievements
-        return active.filter { store.missionState($0, now: now).claimable }
+    }
+
+    private func claimableMissions(store: ProfileStore, now: Date) -> [Mission] {
+        activeMissions(store: store, now: now).filter { store.missionState($0, now: now).claimable }
     }
 
     // MARK: sections
@@ -257,9 +280,12 @@ struct MissionsView: View {
 
     // MARK: helpers
 
+    /// Unit-suffixed so it can't be misread as minutes:seconds, and so it sits in the same format
+    /// family as the weekly "3D" it appears beside on this screen (PR-0304's second half).
     private func dailyCountdown(now: Date) -> String {
         let secs = Int(ProfileStore.secondsUntilUTCMidnight(now: now))
-        return String(format: "%d:%02d", secs / 3600, (secs / 60) % 60)
+        let hours = secs / 3600, minutes = (secs / 60) % 60
+        return hours > 0 ? "\(hours)H \(minutes)M" : "\(minutes)M"
     }
 
     private func dailyCountdownSpoken(now: Date) -> String {
@@ -271,6 +297,32 @@ struct MissionsView: View {
     private func weeklyCountdown(now: Date) -> String {
         let days = 7 - ProfileStore.daysSinceEpoch(now) % 7
         return days <= 1 ? dailyCountdown(now: now) : "\(days)D"
+    }
+}
+
+/// Presentation for the board summary. Lives here, not beside the enum: `MissionBoardSummary` is
+/// in the Linux-testable Meta layer and must not learn about `Theme`.
+private extension ProfileStore.MissionBoardSummary {
+    var isClaimable: Bool { if case .claimable = self { true } else { false } }
+
+    /// The coin glyph is money language — it belongs only where coins are actually waiting.
+    var showsCoinGlyph: Bool { isClaimable }
+
+    var symbol: String {
+        switch self {
+        case .claimable: "sparkles"
+        case .open:      "target"
+        case .allClear:  "checkmark.circle"
+        }
+    }
+
+    /// An unfinished board is live content, not a footnote; a finished one is genuinely quiet.
+    var tint: Color {
+        switch self {
+        case .claimable: Theme.Role.reward
+        case .open:      Theme.Role.textSecondary
+        case .allClear:  Theme.Role.textTertiary
+        }
     }
 }
 
