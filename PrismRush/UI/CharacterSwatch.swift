@@ -457,51 +457,10 @@ struct CharacterHeroStage: View {
         .accessibilityHidden(true)   // the wrapping button / sibling texts carry the label
     }
 
-    /// Elliptical glow disc tinted by the skin's fixed authored body hex. Prism's disc rides
-    /// the SAME shared 8 s shimmer as its body (no skin ever tracks the world palette);
-    /// static at phase 0 under Reduce Motion, per uiux §1.8.
+    /// The lit platform the figure stands on. One implementation, shared with the splash — see
+    /// `CharacterStageRing`.
     @ViewBuilder private var glowDisc: some View {
-        disc(tint: discTint)
-    }
-
-    /// The stage floor: a lit platform with an EDGE, not a soft blob.
-    ///
-    /// The old pedestal was a wide diffuse radial glow, and the figure carried a second halo
-    /// `3.2 × bodyR` across. On the hub — where the live 3D city and its perspective grid show
-    /// through — the two stacked into a murky teal smear that dirtied the grid lines instead of
-    /// lighting anything (the owner's "background light behind the character", S-007). One cause:
-    /// diffuse light has no edge, and the visual language of this game is edges.
-    ///
-    /// The rim is also the only honest option for a SPECTRAL skin. The glow took its colour from
-    /// `bodyHex`, so once D-011 gave Prism a six-band rainbow surface the light behind it stayed
-    /// cyan — a glow that did not match the thing casting it. The rim sweeps the real spectrum, so
-    /// Prism stands on its own colours. Static by construction: fixed hues in an `AngularGradient`,
-    /// no clock in the path (decree 1).
-    /// A lit ring the character stands inside, with a pool of light in it.
-    ///
-    /// The ring is the point (owner's call, S-007): a crisp ellipse reads as a stage the figure
-    /// stands on, where the old wide diffuse glow just smeared the 3D scene behind it. It sits low
-    /// enough that its NEAR arc clears the body — an ellipse tucked up behind a sphere shows only
-    /// its side tips and reads as two whiskers, which is what a first attempt did.
-    ///
-    /// Tinted per character, which is also the only honest option for a SPECTRAL skin: the old glow
-    /// took its colour from `bodyHex`, so after D-011 gave Prism a six-band rainbow surface the
-    /// light under it stayed cyan. Fixed hues, no clock in the path — surface, not a changing
-    /// identity (decree 1 / D-011).
-    private func disc(tint: Color) -> some View {
-        ZStack {
-            // Pool: bright at the contact point, gone by the edge.
-            Ellipse()
-                .fill(poolStyle(tint: tint))
-                .mask(Ellipse().fill(
-                    RadialGradient(colors: [.white, .white.opacity(0.4), .clear],
-                                   center: .center, startRadius: 1, endRadius: swatchSize * 0.52)))
-                .blur(radius: swatchSize * 0.04)
-            // The rim.
-            Ellipse()
-                .strokeBorder(poolStyle(tint: tint), lineWidth: 2.4)
-                .shadow(color: tint.opacity(0.55), radius: 10)
-        }
+        CharacterStageRing(skin: skin, size: swatchSize)
     }
 
     /// Spectral skins light their own pad with their own bands; everyone else gets their identity
@@ -526,5 +485,62 @@ struct CharacterHeroStage: View {
         .padding(.horizontal, Theme.Space.m).padding(.vertical, Theme.Space.s)
         .background(Color.white.opacity(0.08), in: Capsule())
         .overlay(Capsule().strokeBorder(Theme.Role.hairline))
+    }
+}
+
+/// The stage floor a character stands on: a lit ring with a pool of light in it.
+///
+/// **The ring is the point** (owner's call, S-007, reaffirmed S-009). The original pedestal was a
+/// wide diffuse radial glow and the figure carried a second soft halo `3.2 × bodyR` across. Two
+/// problems, both of which the owner named:
+///
+/// 1. On the hub — where the live 3D city and its perspective grid show through — the two stacked
+///    into a murky teal smear that dirtied the grid lines instead of lighting anything ("background
+///    light behind the character"). Diffuse light has no edge, and the visual language of this game
+///    is edges.
+/// 2. The soft halo is drawn `1.6 × size` wide, so any canvas narrower than that HARD-CLIPS it into
+///    a faint rectangle with visible vertical edges either side of the figure (PR-0453 — the
+///    owner's "box"). That is a blur cut square, and it reads as one.
+///
+/// Splitting this out of `CharacterHeroStage` is the fix for S-009's report that the splash still
+/// showed the box: the splash was never using the stage, so it inherited the raw halo and none of
+/// the ring. Decree 2 says previews never lie, and the cheapest way to keep two surfaces honest is
+/// to give them one implementation rather than two that agree today.
+///
+/// Tinted per character, which is also the only honest option for a SPECTRAL skin: the old glow
+/// took its colour from `bodyHex`, so after D-011 gave Prism a six-band rainbow surface the light
+/// under it stayed cyan — light that did not match the thing casting it. The rim sweeps the real
+/// spectrum, so Prism stands on its own colours. Fixed hues, no clock in the resolution path —
+/// this is surface, never a changing identity (decree 1 / D-011).
+struct CharacterStageRing: View {
+    let skin: Skin
+    /// The figure's size, not the ring's — the ring derives its own proportions so every caller
+    /// gets the same platform under the same-sized character.
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            // Pool: bright at the contact point, gone by the edge.
+            Ellipse()
+                .fill(style)
+                .mask(Ellipse().fill(
+                    RadialGradient(colors: [.white, .white.opacity(0.4), .clear],
+                                   center: .center, startRadius: 1, endRadius: size * 0.52)))
+                .blur(radius: size * 0.04)
+            // The rim — the edge that makes it a platform rather than a blob.
+            Ellipse()
+                .strokeBorder(style, lineWidth: 2.4)
+                .shadow(color: Theme.color(skin.bodyHex).opacity(0.55), radius: 10)
+        }
+    }
+
+    /// Spectral skins light their own pad with their own bands; everyone else gets their identity
+    /// hue. The first colour repeats last so the sweep closes without a seam.
+    private var style: AnyShapeStyle {
+        guard let spectrum = skin.spectrum, let first = spectrum.first, spectrum.count > 1 else {
+            return AnyShapeStyle(Theme.color(skin.bodyHex).opacity(0.55))
+        }
+        return AnyShapeStyle(AngularGradient(
+            colors: (spectrum + [first]).map { Theme.color($0).opacity(0.8) }, center: .center))
     }
 }

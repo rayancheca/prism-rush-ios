@@ -9,6 +9,10 @@ import SwiftUI
 struct SplashView: View {
     let onStart: () -> Void
 
+    /// The hero figure's size. Named because the stage ring derives its own frame from it — the two
+    /// must not be able to drift apart.
+    private static let figureSize: CGFloat = 150
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
     @State private var entered = false      // master intro spring (scale/opacity)
@@ -32,10 +36,34 @@ struct SplashView: View {
                     .scaleEffect(entered ? 1 : 0.6)
                     .opacity(entered ? 1 : 0)
                     .offset(y: entered ? 0 : -24)
-                // The character bursts in out of a ring of shards, flip-spinning up to size.
+                // The character bursts in out of a ring of shards, flip-spinning up to size, and
+                // lands on the SAME lit ring it stands on everywhere else in the app.
+                //
+                // It used to sit on the raw `AnimatedCharacterSwatch` halo instead (S-009, owner:
+                // *"same ring under the character. not the diffused color"*). That halo is drawn
+                // 1.6 × `size` wide, so a default-width canvas cut it square and it read as a faint
+                // teal rectangle with visible vertical edges behind the figure — the same "box"
+                // PR-0453 fixed for the hub hero and never fixed here, because the splash was
+                // never using the hero stage. `haloScale: 0` removes the blur; `CharacterStageRing`
+                // replaces it with the platform, which is the one the owner signed off in S-007.
+                //
+                // The ring deliberately does NOT ride the flip-spin: it is the floor, and a floor
+                // that rotates with the thing standing on it stops reading as a floor.
                 ZStack {
                     shardBurst(tint: tint)
-                    AnimatedCharacterSwatch(skin: skin, size: 150, heightScale: 1.85, verticalAnchor: 0.62)
+                    // 0.82 is derived, not eyeballed, and it reproduces the hub hero's geometry:
+                    // in a 1.85× canvas anchored at 0.62 the figure's feet land 0.722 × size below
+                    // centre, and `CharacterHeroStage` sits its ring a further ~0.10 × size under
+                    // the feet so the NEAR arc clears the body. An ellipse tucked up behind a
+                    // sphere shows only its side tips and reads as two stray whiskers.
+                    CharacterStageRing(skin: skin, size: Self.figureSize)
+                        .frame(width: Self.figureSize * 1.6, height: Self.figureSize * 0.5)
+                        .offset(y: Self.figureSize * 0.82)
+                        .scaleEffect(entered ? 1 : 0.4)
+                        .opacity(entered ? 1 : 0)
+                    AnimatedCharacterSwatch(skin: skin, size: Self.figureSize,
+                                            heightScale: 1.85, widthScale: 1.6,
+                                            verticalAnchor: 0.62, haloScale: 0)
                         .scaleEffect(entered ? 1 : 0.15)
                         .rotation3DEffect(.degrees(spin), axis: (x: 0, y: 1, z: 0))
                         .opacity(entered ? 1 : 0)
