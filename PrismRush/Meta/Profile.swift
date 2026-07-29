@@ -30,6 +30,12 @@ struct Profile: Codable, Equatable, Sendable {
     var totalDistance: Double = 0
     var totalGems: Int = 0
     var totalCoinsEarned: Int = 0
+    /// Wardens defeated across every run (v1.9). Cumulative and monotone, so it merges as `max`
+    /// like every other lifetime counter — a device that has been offline can only ever be behind.
+    /// The per-world breakdown the world-exclusive character reward will need is deliberately NOT
+    /// here yet: phase 1 ships one Warden template, and a dictionary added before it has a consumer
+    /// would be a schema guess.
+    var wardensDefeated: Int = 0
     var bestStreak: Int = 0
 
     // Progression — highest world ordinal reached (enables level select / checkpoint start).
@@ -109,6 +115,7 @@ extension Profile {
     enum CodingKeys: String, CodingKey {
         case coins, slowMoCharges, speedUpCharges, shieldCharges, headStartCharges, coinSurgeCharges
         case bestScore, totalRuns, totalDistance, totalGems, totalCoinsEarned, bestStreak
+        case wardensDefeated
         case maxWorldReached, ownedSkins, selectedSkin
         case lastDailyClaim, loginStreak, lastChestOpen
         case missionProgress, claimedMissions, achievementTier, dailyMissionDate
@@ -135,6 +142,7 @@ extension Profile {
         totalDistance = try c.decodeIfPresent(Double.self, forKey: .totalDistance) ?? d.totalDistance
         totalGems = try c.decodeIfPresent(Int.self, forKey: .totalGems) ?? d.totalGems
         totalCoinsEarned = try c.decodeIfPresent(Int.self, forKey: .totalCoinsEarned) ?? d.totalCoinsEarned
+        wardensDefeated = try c.decodeIfPresent(Int.self, forKey: .wardensDefeated) ?? d.wardensDefeated
         bestStreak = try c.decodeIfPresent(Int.self, forKey: .bestStreak) ?? d.bestStreak
         maxWorldReached = try c.decodeIfPresent(Int.self, forKey: .maxWorldReached) ?? d.maxWorldReached
         ownedSkins = try c.decodeIfPresent(Set<String>.self, forKey: .ownedSkins) ?? d.ownedSkins

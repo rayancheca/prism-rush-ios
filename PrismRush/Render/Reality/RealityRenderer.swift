@@ -25,10 +25,15 @@ final class RealityRenderer: RendererPort {
     private var rungs: [ModelEntity] = []
     private var laneLines: [ModelEntity] = []
     private var pools: EntityPools!
+    private let wardenRig = WardenRig()   // v1.9 set piece; off unless an encounter is live
     private var decor: WorldDecor!
 
     private let cGold = UIColor(red: 1, green: 210/255.0, blue: 61/255.0, alpha: 1) // #FFD23D
     private let cWhite = UIColor.white
+    // Warden hazard colours (v1.9). World-blind by design — the same reason the chasm's walls are:
+    // a threat must look identical in all twelve families, and the accents reach pure white in two.
+    private let cWardenHazard = UIColor(red: 1, green: 51/255.0, blue: 85/255.0, alpha: 1)  // #FF3355
+    private let cWardenShield = UIColor(red: 102/255.0, green: 224/255.0, blue: 1, alpha: 1) // #66E0FF
 
     private let rungSpacing: Float = 4
     private let rungCount = 36
@@ -440,6 +445,10 @@ final class RealityRenderer: RendererPort {
             }
         }
 
+        // The Warden set piece (v1.9). Driven from its own snapshot field rather than the
+        // entity pools, because it is not an obstacle and must never be pooled as one.
+        wardenRig.sync(snap.warden, reduceMotion: reduceMotion)
+
         // Speed trail behind the player — time-based (≈ the old 3/frame at 60 Hz). The emission
         // rate breathes with chrono slow-mo so the trail thins while the world crawls. The wake
         // is always the skin's own color (Prism's rides the live shimmer hue, never the world
@@ -549,6 +558,46 @@ final class RealityRenderer: RendererPort {
             particles.burst(x: Float(x), y: 1.2, z: 0, color: uiHex(0x9BF0FF), count: 30, power: 5.6, spread: 0.62, life: 0.7)
             shake = max(shake, 1.3)
             kickFOV()
+        // MARK: Wardens (v1.9)
+        //
+        // All four use the fixed hostile red the rig uses, never a world accent — a hazard has to
+        // mean the same thing in all twelve families, and two of them push `accent2` to pure white.
+        case .wardenArrived:
+            // A ring sweeping IN from the horizon, the mirror of the world-change sweep that goes
+            // out: something is arriving, and it is not scenery.
+            particles.ring(y: 5.2, z: -26, radius: 7, color: cWardenHazard,
+                           count: 28, velZ: 14, life: 1.0)
+            kickFOV()
+        case .wardenShieldBroke:
+            particles.burst(x: 0, y: 5.2, z: -26, color: cWardenShield,
+                            count: 70, power: 8.0, spread: 0.6, life: 0.9)
+            if !reduceMotion { shake = max(shake, 0.5) }
+        case let .wardenStruck(mask, caught):
+            // Fire a slam at the foot of every lane the beam actually closed.
+            for lane in 0..<3 where mask & (1 << UInt8(lane)) != 0 {
+                particles.burst(x: Float(Tuning.laneX[lane]), y: 0.2, z: -5,
+                                color: cWardenHazard, count: caught ? 40 : 22,
+                                power: 5.0, spread: 0.5, life: 0.55)
+            }
+            if !reduceMotion { shake = max(shake, caught ? 1.0 : 0.35) }
+        case .wardenCoreHit:
+            // The counter-punch reads from the CRAFT, so a clean dodge is visibly damage dealt
+            // rather than merely damage avoided.
+            particles.burst(x: 0, y: 4.3, z: -26, color: cWardenHazard,
+                            count: 46, power: 7.0, spread: 0.45, life: 0.8)
+            if !reduceMotion { shake = max(shake, 0.45) }
+        case .wardenDefeated:
+            particles.burst(x: 0, y: 5.2, z: -26, color: cWhite, count: 90, power: 10, spread: 0.5, life: 1.2)
+            particles.burst(x: 0, y: 5.2, z: -26, color: cWardenHazard, count: 120, power: 7.5, spread: 0.7, life: 1.4)
+            particles.ring(y: 5.2, z: -26, radius: 4, color: cWardenShield, count: 30, velZ: 30, life: 1.1)
+            if !reduceMotion { shake = max(shake, 1.1) }
+            kickFOV()
+        case .wardenTelegraph, .wardenBrokeOff:
+            // Deliberately silent here. The telegraph IS the rig's descending column — duplicating
+            // it with a particle burst would compete with the one thing the player must read. A
+            // break-off is the Warden giving up: nothing happened to the player, so nothing fires.
+            break
+
         case let .died(x):
             // First (colored) burst shatters in the skin's own color; the white flash stays global.
             particles.burst(x: Float(x), y: 1, z: 0, color: skinTrailColor, count: 120, power: 7.5, spread: 0.55, life: 1.2)
@@ -754,6 +803,7 @@ final class RealityRenderer: RendererPort {
         camera.position = SIMD3<Float>(0, 5.1, 9.6)
         camera.look(at: SIMD3<Float>(0, 1.3, -5), from: camera.position, relativeTo: nil)
         root.addChild(camera)
+        wardenRig.install(into: root)
 
         // The backdrop wall IS the per-world horizon: the bespoke WorldSky set-pieces (Orbital's
         // planet limb, Solar's sun, Ashfall's volcano…) are tuned to sit right at it. Pushing it back

@@ -87,6 +87,7 @@ final class GameModel {
     // Per-run FX counters (missions feed + game-over stats), reset in `startRun`.
     @ObservationIgnored private var nearMissesThisRun = 0
     @ObservationIgnored private var closesThisRun = 0
+    @ObservationIgnored private var wardensDefeatedThisRun = 0
     @ObservationIgnored private var slicksThisRun = 0
     @ObservationIgnored private var slidesThisRun = 0
     var nearMisses: Int { nearMissesThisRun }
@@ -220,6 +221,14 @@ final class GameModel {
         // Placed at the spawn horizon so it fades in from the backdrop exactly as a real one does.
         if ProcessInfo.processInfo.environment["PR_CHASM"] == "1" {
             core.debugSpawn(.chasm(d: core.distance + Tuning.spawnHorizon))
+        }
+        // Debug: PR_WARDEN=1 starts the run at the mouth of the first Warden arena with a full
+        // charge bank, so the encounter can be inspected without running 2,400 m and collecting
+        // ~520 gems to earn one. Uses the same checkpoint path a real world-start would, so the
+        // arena, the arm window and the suppression all behave exactly as they do in a live run.
+        if ProcessInfo.processInfo.environment["PR_WARDEN"] == "1" {
+            beginRun(fromWorld: Tuning.wardenEveryWorlds, seed: 7)
+            core.debugFillWardenCharge()
         }
         // Debug: drop a shield just ahead AND deploy one now (so the HUD chip + in-world dome show).
         if ProcessInfo.processInfo.environment["PR_SHIELD"] == "1" {
@@ -430,6 +439,7 @@ final class GameModel {
         lastChallengePayout = 0
         nearMissesThisRun = 0
         closesThisRun = 0
+        wardensDefeatedThisRun = 0
         slicksThisRun = 0
         slidesThisRun = 0
         statsRecorded = false
@@ -571,6 +581,38 @@ final class GameModel {
                 synth.play(.sneakersPickup)  // bespoke spring-loaded leap (v1.6, was reusing boostStart)
             }
             flash(0.28)
+        // MARK: Wardens (v1.9)
+        //
+        // Every sound here is a REUSE of an existing one-shot, chosen for what it already means:
+        // the shield really is a shield breaking, the defeat really is an achievement stinger.
+        // Bespoke Warden synthesis belongs to the audio pass (PR-0456) — nothing in this program
+        // can hear a sound, so inventing four new DSP voices unheard would be guesswork shipped.
+        case .wardenArrived:
+            addPopup("WARDEN", color: Theme.color(0xFF3355), worldX: 0)
+            synth.play(.worldSweep)
+            flash(0.4)
+        case .wardenTelegraph:
+            synth.play(.laneTick)   // short warning blip under the descending column
+        case let .wardenStruck(_, caught):
+            synth.play(caught ? .crash : .close)
+        case let .wardenCoreHit(hits):
+            addPopup("HIT \(hits)/\(Tuning.wardenCoreHits)", color: Theme.color(0xFF3355), worldX: 0)
+            synth.play(.ringPerfect)
+        case .wardenShieldBroke:
+            addPopup("SHIELD DOWN", color: Theme.color(0x66E0FF), worldX: 0)
+            synth.play(.shieldBreak)
+            flash(0.5)
+        case let .wardenDefeated(_, bounty):
+            wardensDefeatedThisRun += 1
+            addPopup("WARDEN DOWN  +\(bounty)", color: Theme.color(0xFFD23D), worldX: 0)
+            synth.play(.levelUp)
+            flash(0.6)
+        case .wardenBrokeOff:
+            // It gave up. Decree 3: this is an expected outcome, not a failure — so it is stated
+            // plainly and paid nothing, rather than dressed up as a loss.
+            addPopup("WARDEN WITHDREW", color: Theme.color(0x9AA6C8), worldX: 0)
+            synth.play(.boostEnd)
+
         case let .shieldAbsorbed(x):
             // A real glass-shatter moment so you KNOW the shield broke: cyan call-out, hard flash,
             // the screen-crack overlay, and the glass-break SFX (v1.6).
@@ -780,6 +822,7 @@ final class GameModel {
             summary.gems = gemsDelta                       // == run totals at first death
             summary.distance = distanceDelta
             summary.nearMissCloses = closesThisRun
+            summary.wardensDefeated = wardensDefeatedThisRun
             summary.slicks = slicksThisRun
             summary.slides = slidesThisRun
             summary.bestStreak = core.bestStreak           // max-style: engine maxes

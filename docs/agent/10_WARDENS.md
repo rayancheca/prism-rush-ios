@@ -1,6 +1,23 @@
 # Wardens — per-world antagonists, and the fix for the coin sink
 
-**Status:** DESIGN AGREED (owner, S-007). Not yet built.
+**Status:** **PHASE 1 BUILT (S-008)** — the encounter is live, playable and green. Phases 2–5
+(abduction struggle, Countermeasures, the second Warden, the world-exclusive character) are not.
+Design agreed with the owner in S-007.
+
+> **Where this doc is now wrong, and why.** Three things changed under contact with the code. They
+> are corrected in place below and recorded as D-015/D-016/D-017.
+>
+> 1. **§8's first bullet is obsolete.** It said the build would need new `EntityKind`s and would
+>    have to thread six `default:` clauses. It does not: a Warden is a snapshot field with its own
+>    collision rule, so `EntityKind` is untouched and all six arms were avoided rather than audited.
+> 2. **§3's attack rule was underspecified and the gap was a real defect.** "Each attack read and
+>    dodged cleanly lands one hit" left open what happens when the beam picks a lane the player
+>    simply is not standing in. Scoring that as a dodge let a player who never moved win outright.
+>    A beam now ALWAYS closes the player's lane; the variety comes from a second lane closing too.
+> 3. **§8's last bullet cites the wrong lesson.** It warns that "the camera cannot see into a hole".
+>    A Warden is the inverse problem — the camera looks 14.6° BELOW horizontal with a 31° half
+>    angle, so a craft hovering at y 5.2 and z −26 sits comfortably in the upper third of frame.
+>    Confirmed on the simulator, no camera change needed.
 **Owner decisions on record:** combat = dodge-to-damage **and** auto-fire, combined (not either/or);
 frequency = every 3rd world; catching the player = struggle-to-escape, then death.
 

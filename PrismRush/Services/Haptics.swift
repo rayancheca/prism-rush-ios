@@ -55,6 +55,36 @@ final class Haptics {
         case .died:
             notify.notificationOccurred(.error)
             heavy.impactOccurred()
+
+        // MARK: Wardens (v1.9)
+        //
+        // The telegraph gets its own distinct tap on purpose: it is the one Warden event the player
+        // must act on, and a cue they can feel means they can start moving before their eyes have
+        // finished parsing which lanes are lit. Arrival and defeat are announcements, so they get
+        // the same double-tap grammar as a world change.
+        case .wardenTelegraph:
+            rigid.impactOccurred(intensity: 0.65)
+        case let .wardenStruck(_, caught):
+            if caught {
+                notify.notificationOccurred(.error)
+                heavy.impactOccurred()
+            } else {
+                medium.impactOccurred(intensity: 0.8)   // a clean dodge lands a hit — it should thump
+            }
+        case .wardenArrived:
+            heavy.impactOccurred(intensity: 0.9)
+        case .wardenShieldBroke:
+            rigid.impactOccurred(intensity: 1.0)
+        case .wardenCoreHit:
+            rigid.impactOccurred(intensity: 0.85)
+        case .wardenDefeated:
+            notify.notificationOccurred(.success)
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(120))
+                self?.heavy.impactOccurred()
+            }
+        case .wardenBrokeOff:
+            light.impactOccurred(intensity: 0.5)   // it gives up: a soft release, not a punishment
         case .worldChanged:
             // Double-tap: a hard hit now, a lighter echo a beat later (UIFeedbackGenerator has no
             // pattern API; a short MainActor sleep is the documented-safe equivalent).

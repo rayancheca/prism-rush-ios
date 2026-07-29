@@ -356,3 +356,74 @@ nothing that alters play — which is the surviving half of session 003's verdic
 structural gap left in the design. Countermeasures bought with coins change how an encounter
 resolves. It also gives the world ladder the real progression `05_GAME_DESIGN.md §6` says it
 currently fakes.
+
+---
+
+## D-015 · A Warden is not an `EntityKind` (session 008)
+
+**Decision.** The Warden is a first-class field of `GameSnapshot` (`warden: WardenState?`) with its
+own state machine, lifetime and collision predicate — **not** a new case in `EntityKind`.
+
+**Why.** `10_WARDENS.md §8` flagged that `Core/` has six switches over `EntityKind` carrying a
+`default:` arm — `obstacleX`, the collision dispatch, the near-miss scorer, `freeLaneNear`,
+`Autopilot.decide` and `Spawner.isObstacle`. A new case is silently *accepted* by all six and
+becomes a decorative, non-lethal prop that the solvability bot cannot see. The doc treated that as a
+cost to be paid carefully. It is avoidable instead: a Warden is a set piece, not an obstacle on the
+deck, and modelling it as one was only ever a convenience. The renderer now gets a new field it is
+*forced* to handle rather than an enum case it can ignore — the `fire(_:)` switch failed to compile
+until every Warden event had a reaction, which is exactly the pressure we want.
+
+**Consequence.** Zero of the six `default:` arms were touched, and `EntityKind` is unchanged.
+
+---
+
+## D-016 · Every beam closes the player's own lane (session 008)
+
+**Decision.** A Warden's beam **always** closes the lane the player occupies when the telegraph
+locks, and `wardenDoubleBeamChance` (0.4) of the time closes one other lane as well.
+
+**Why — this was a defect, found by a test rather than by reading.** The first build had the beam
+*usually* stalk (60%) and otherwise pick a lane at random, on the reasoning that a beam which always
+followed you would be a rhythm rather than a read. It made the design's central invariant false: a
+player who never moved at all won outright whenever three consecutive beams happened to pick empty
+lanes, because "was not standing in the beam" was being scored as a clean dodge. It is not one, and
+`testTheGunAloneCanNeverKill` caught it at 1 kill in 40 seeds.
+
+Closing the player's lane every time makes standing still always fatal, so the gun can never win a
+fight alone (`10_WARDENS.md §3`). The second lane is what preserves the *read*: answering every
+telegraph with a blind sidestep is punished about half the time. At most two of three lanes ever
+close, so a safe answer always exists, every attack resolves in exactly one cycle, and the fight
+stays bounded at `wardenCoreHits` exchanges.
+
+---
+
+## D-017 · The arena is a pure function of distance, and it costs a layoutVersion bump (session 008)
+
+**Decision.** Obstacles and boost pads are suppressed across a fixed 660 m stretch at the head of
+every third world, filtered at `GameCore.apply` **after** `Spawner.fill` has already drawn. Gems,
+rings and power-ups are deliberately kept.
+
+**Why filter at apply rather than park the spawner.** Parking the cursor was the obvious
+alternative and it is worse: it moves where every later draw lands, so the whole seeded stream past
+the first arena shifts. Filtering downstream leaves `fill`'s cursor, distance and draw values
+byte-identical to v1.8 — pattern *selection* never moves, and `PatternOrderTests` needed no edit.
+Verified: with arenas on and off, the sequence of spawned obstacle kinds for a seed is identical.
+
+**Why the arena is distance-derived and not fight-derived.** Tying suppression to how the fight is
+going would make the realised track depend on player performance, and two players on the same daily
+seed would run different layouts. That would void the daily challenge's only real promise.
+
+**Why gems stay.** Gems are the ammunition. Leaving them turns the shield phase into something the
+player *does* with verbs they already own, instead of a bar they watch empty.
+
+**Cost.** The entity set on the deck changes, so the same seed no longer means the same track:
+`layoutVersion` 9 → 10, goldens repinned in `DailyChallengeTests` **and**
+`MissionsTests.testTodaysChallengeSeedMatchesUTCGoldens`. All eight pre-existing pins were
+reproduced in Python from the SplitMix64 constants before the three new values were trusted, and a
+v11 pin is pre-armed.
+
+**Known cost, flagged for the owner.** 660 m every 2,400 m is ~27% of the track past the first
+encounter running deliberately clear. The length is set by the crudest *provable* bound
+(`wardenArmWindow` + `wardenMaxSeconds` × `boostSpeedMax`), against a measured worst case of 438 m,
+so there is real slack to reclaim — but shrinking it means shortening `wardenShieldWindow`, which
+moves the charge threshold. This is the feature's first tuning lever after playtesting.

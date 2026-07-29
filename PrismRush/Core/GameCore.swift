@@ -675,6 +675,11 @@ final class GameCore {
     /// glow + HUD ring can be screenshotted. Consumes no RNG; play-gated like the real activation.
     func debugActivateSuperSneakers() { if mode == .play { superSneakersT = Tuning.superSneakersDuration } }
 
+    /// Debug/QA hook (`PR_WARDEN`): fill the charge bank without collecting ~520 gems first, so an
+    /// encounter can be inspected on the simulator. Consumes no RNG; play-gated like every other
+    /// debug activation, so it can never affect a seeded run or the solvability bot.
+    func debugFillWardenCharge() { if mode == .play { wardenCharge = 1 } }
+
     /// Test/diagnostic hook: wipe every live entity and park the spawner so hand-built scenarios
     /// (`debugSpawn`) run with zero procedural interference.
     func debugClearTrack() {

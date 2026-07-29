@@ -41,6 +41,7 @@ struct HUDView: View {
                 // Starts below the mute/pause cluster anchored in the top-trailing corner.
                 VStack(alignment: .trailing, spacing: 8) {
                     gemMultPill(snap)
+                    chargeMeter(snap)
                     powerUpStack(snap)
                     flowPips(snap)
                 }
@@ -48,6 +49,7 @@ struct HUDView: View {
                 // the owner found the old 38 crowded them. Starts the chips ~22pt under the buttons.
                 .padding(.top, 64)
             }
+            wardenPanel(snap)
             Spacer()
             xpBar(snap)
         }
@@ -58,6 +60,84 @@ struct HUDView: View {
         .animation(.spring(duration: 0.25), value: snap.shieldActive)
         .opacity(snap.mode == .play ? 1 : 0)
         .allowsHitTesting(false)   // the run is the UI — pause is the only in-play button
+    }
+
+    // MARK: Wardens (v1.9)
+
+    private static let hazard = Theme.color(0xFF3355)
+    private static let shieldHue = Theme.color(0x66E0FF)
+
+    /// The charge bank: gems collected become Warden fire rate.
+    ///
+    /// It is on screen during ordinary running on purpose. Charge is the one system in the game
+    /// whose payoff arrives minutes after the input that earns it, so if the bar only appeared once
+    /// a Warden did, a player would meet their first encounter with no idea why their gun was slow
+    /// — and no way to learn. It stays a single thin rule rather than a labelled gauge so the calm
+    /// of the HUD survives (decree 6).
+    @ViewBuilder
+    private func chargeMeter(_ snap: GameSnapshot) -> some View {
+        if snap.wardenCharge > 0.001 {
+            let full = snap.wardenCharge >= 0.999
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(full ? "CHARGED" : "CHARGE")
+                    .font(.system(size: 9, weight: .heavy, design: .rounded))
+                    .tracking(0.8)
+                    .foregroundStyle((full ? Self.hazard : .white).opacity(full ? 0.95 : 0.5))
+                Capsule()
+                    .fill(.white.opacity(0.16))
+                    .frame(width: 76, height: 4)
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(full ? Self.hazard : Self.shieldHue)
+                            .frame(width: 76 * snap.wardenCharge, height: 4)
+                    }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Warden charge \(Int(snap.wardenCharge * 100)) percent")
+        }
+    }
+
+    /// The encounter readout: what is left of the shield, and how much of the core is gone.
+    ///
+    /// Centre-top, below the score row, because during a fight this is the only thing that matters
+    /// and it must not be hunted for. Absent entirely on open track — nothing here is decorative.
+    @ViewBuilder
+    private func wardenPanel(_ snap: GameSnapshot) -> some View {
+        if let w = snap.warden, w.phase != .leaving {
+            let broken = w.shieldFraction <= 0
+            VStack(spacing: 5) {
+                Text(broken ? "CORE EXPOSED" : "WARDEN")
+                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                    .tracking(1.6)
+                    .foregroundStyle(broken ? Self.hazard : Self.shieldHue)
+                if broken {
+                    // Three pips, not a bar: the kill is a fixed count of clean dodges, so the
+                    // readout should be countable at a glance rather than estimated off a length.
+                    HStack(spacing: 5) {
+                        ForEach(0..<Tuning.wardenCoreHits, id: \.self) { i in
+                            Capsule()
+                                .fill(i < w.coreHits ? Self.hazard : .white.opacity(0.22))
+                                .frame(width: 22, height: 5)
+                        }
+                    }
+                } else {
+                    Capsule()
+                        .fill(.white.opacity(0.16))
+                        .frame(width: 132, height: 6)
+                        .overlay(alignment: .leading) {
+                            Capsule()
+                                .fill(Self.shieldHue)
+                                .frame(width: 132 * w.shieldFraction, height: 6)
+                        }
+                }
+            }
+            .padding(.top, 6)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(broken
+                ? "Warden core exposed, \(w.coreHits) of \(Tuning.wardenCoreHits) hits landed"
+                : "Warden shielded, \(Int(w.shieldFraction * 100)) percent")
+            .transition(.opacity)
+        }
     }
 
     // MARK: live level / XP bar (the owner wants to watch level + XP grow mid-run)

@@ -15,6 +15,7 @@ struct RunSummary: Sendable, Equatable {
     var revives: Int = 0          // core.revivesUsed
     var duration: Double = 0      // wall-clock seconds in .play this run
     var startWorld: Int = 0       // checkpoint start world (0 = full run) — XP world-delta basis
+    var wardensDefeated: Int = 0  // Wardens killed this run (v1.9) — banked once, like every field here
 }
 
 /// A mission: a metric, a target, and a coin reward. Four scopes:

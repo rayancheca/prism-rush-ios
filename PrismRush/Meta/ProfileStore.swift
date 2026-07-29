@@ -441,6 +441,10 @@ final class ProfileStore {
             $0.totalXP += xp
             if grant > 0 { $0.coins += grant; $0.totalCoinsEarned += grant }
             $0.xpLevelRewarded = max($0.xpLevelRewarded, after)
+            // Wardens are banked here with every other run stat, so the once-per-run guarantee that
+            // protects the economy (iron rule 9) covers them too — the coin bounty itself already
+            // rode in through `summary.gems`, exactly as ring coins do.
+            $0.wardensDefeated += summary.wardensDefeated
             // Per-world best distance (R14): credit every world index this run traversed with how
             // far INTO it the run got (absolute position = startWorld·L + distance, L per world).
             let L = Tuning.worldLength
@@ -694,6 +698,7 @@ final class ProfileStore {
         merged.grantedTransactionIDs.formUnion(remote.grantedTransactionIDs)
         merged.trimGrantedTransactionIDs()
         merged.bestScore = max(merged.bestScore, remote.bestScore)
+        merged.wardensDefeated = max(merged.wardensDefeated, remote.wardensDefeated)
         merged.maxWorldReached = max(merged.maxWorldReached, remote.maxWorldReached)
         merged.purchasedWorlds.formUnion(remote.purchasedWorlds)
         merged.ownedSkins.formUnion(remote.ownedSkins)
