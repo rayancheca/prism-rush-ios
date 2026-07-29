@@ -56,6 +56,7 @@ final class RealityRenderer: RendererPort {
     private var skinTrailColor =                    // always the skin's OWN color, never the world
         UIColor(red: 0, green: 245 / 255.0, blue: 1, alpha: 1)   // Prism's authored cyan 0x00F5FF
     private var skinBodyShape: Skin.BodyShape = .sphere
+    private var skinSpectrum: [UInt32]? = nil       // static banded body (Prism) — see D-011
     private var skinScale: Float = 1                // folded into the per-frame pose, 0.85…1.12
     private var skinEyeRadius: Float = 0.13
     private var skinEyeTintHex: UInt32 = 0xFFFFFF
@@ -710,6 +711,7 @@ final class RealityRenderer: RendererPort {
         skinAntennaHex = skin.antennaHex
         skinTrailColor = skin.trailHex.map { uiHex($0) } ?? uiHex(skin.bodyHex)
         skinBodyShape = skin.bodyShape
+        skinSpectrum = skin.spectrum
         skinScale = min(max(skin.scale, 0.85), 1.12)   // visual-only cap — never misrepresent the hitbox
         skinEyeRadius = skin.eyeRadius
         skinEyeTintHex = skin.eyeTintHex
@@ -734,7 +736,7 @@ final class RealityRenderer: RendererPort {
     /// promise — a body-colored stem erased Mono's black spike and Thorn's leaf-green cue),
     /// and never moves hue with anything — world or clock.
     private func applyCharacterColors() {
-        playerBody.model?.materials = [UnlitMaterial(color: uiHex(skinBodyHex))]
+        playerBody.model?.materials = bodyMaterials()
         let antennaMat = UnlitMaterial(color: uiHex(skinAntennaHex))
         antenna.model?.materials = [antennaMat]
         antennaTip.model?.materials = [antennaMat]
@@ -839,7 +841,12 @@ final class RealityRenderer: RendererPort {
         let bodyR = CharacterProportions.sphereRadius
         switch skinBodyShape {
         case .sphere:
-            bodyMesh = .generateSphere(radius: bodyR)
+            // A spectral skin gets ONE mesh with a part per band, so the body stays a single
+            // ModelEntity (squash, blink and the pose code all address it) and the spectrum is
+            // just its material array.
+            bodyMesh = skinSpectrum.map {
+                ProceduralMesh.bandedSphere(radius: bodyR, bands: $0.count)
+            } ?? .generateSphere(radius: bodyR)
         case .cube:
             let edge = bodyR * 2 * CharacterProportions.cubeEdgeRatio
             bodyMesh = .generateBox(width: edge, height: edge, depth: edge,
@@ -852,7 +859,7 @@ final class RealityRenderer: RendererPort {
         }
         // Seed materials from the stored skin hexes (not fixed cyan/magenta) so even the
         // pre-first-`applyCharacterColors` frame shows the equipped identity (AUDIT D2-1).
-        let body = ModelEntity(mesh: bodyMesh, materials: [UnlitMaterial(color: uiHex(skinBodyHex))])
+        let body = ModelEntity(mesh: bodyMesh, materials: bodyMaterials())
         body.position = SIMD3<Float>(0, bodyY, 0)
         playerRig.addChild(body)
         playerBody = body
@@ -1087,6 +1094,16 @@ final class RealityRenderer: RendererPort {
             }
         }
         return parent
+    }
+
+    /// The body's material array: one flat `UnlitMaterial` per spectrum band (matching the parts
+    /// `bandedSphere` emitted), or a single authored body hex for every other skin. Never reads the
+    /// world palette and never reads a clock — decree 1 in space and in time.
+    private func bodyMaterials() -> [UnlitMaterial] {
+        guard let spectrum = skinSpectrum, skinBodyShape == .sphere else {
+            return [UnlitMaterial(color: uiHex(skinBodyHex))]
+        }
+        return spectrum.map { UnlitMaterial(color: uiHex($0)) }
     }
 
     private func boxEntity(_ w: Float, _ h: Float, _ d: Float, _ c: UIColor) -> ModelEntity {

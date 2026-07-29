@@ -124,9 +124,35 @@ struct AnimatedCharacterSwatch: View {
         }
 
         // Body shape: sphere → circle, cube → rounded rect, crystal → vertical diamond.
-        ctx.fill(bodyPath(center: center, bodyR: bodyR), with: .color(bodyColor))
+        let body = bodyPath(center: center, bodyR: bodyR)
+        if let spectrum = skin.spectrum, skin.bodyShape == .sphere {
+            drawSpectrumBody(&ctx, body: body, center: center, bodyR: bodyR, spectrum: spectrum)
+        } else {
+            ctx.fill(body, with: .color(bodyColor))
+        }
 
         drawEyes(&ctx, t: t, center: center, scale: scale)
+    }
+
+    /// Prism's static spectrum (v1.8 / D-011): equal-HEIGHT bands, top to bottom, clipped to the
+    /// silhouette. That is deliberately the same rule `ProceduralMesh.bandedSphere` slices the 3-D
+    /// body by, so this preview and the in-run rig cannot drift apart — decree 2 holds because both
+    /// layers derive from one list and one rule, not because two sets of numbers were kept in sync.
+    ///
+    /// The bands are drawn a hair wider than the body and clipped, so the seams meet the silhouette
+    /// edge cleanly instead of leaving a half-pixel of background between band and outline.
+    private func drawSpectrumBody(_ ctx: inout GraphicsContext, body: Path,
+                                  center: CGPoint, bodyR: CGFloat, spectrum: [UInt32]) {
+        ctx.drawLayer { layer in
+            layer.clip(to: body)
+            let top = center.y - bodyR
+            let bandH = bodyR * 2 / CGFloat(spectrum.count)
+            for (i, hex) in spectrum.enumerated() {
+                let rect = CGRect(x: center.x - bodyR - 1, y: top + bandH * CGFloat(i),
+                                  width: bodyR * 2 + 2, height: bandH + 0.5)
+                layer.fill(Path(rect), with: .color(Theme.color(hex)))
+            }
+        }
     }
 
     /// Body silhouette — every proportion derives from `CharacterProportions`, the SAME

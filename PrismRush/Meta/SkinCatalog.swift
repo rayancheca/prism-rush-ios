@@ -45,6 +45,17 @@ struct Skin: Identifiable, Sendable {
     let id, name, flavor: String
     let bodyHex, antennaHex: UInt32          // authored identity colors — never world-driven
     var trailHex: UInt32? = nil              // nil = the body hex doubles as the trail
+    /// A STATIC spectrum painted top-to-bottom across the body (Prism only, v1.8 / D-011).
+    ///
+    /// This is not the old shimmer coming back: the hues never move, never cycle, and never depend
+    /// on a clock or on the world — the character looks identical in frame 1 and frame 100,000, in
+    /// every world. Decree 1 forbids an identity that CHANGES; a fixed rainbow is an identity.
+    ///
+    /// One list drives both layers: the RealityKit rig builds `ProceduralMesh.bandedSphere` with a
+    /// material per entry, and the SwiftUI swatch fills the same count of equal-height strips
+    /// clipped to the body silhouette. Split by equal HEIGHT in both, so decree 2 holds by
+    /// construction rather than by two hand-kept lists agreeing.
+    var spectrum: [UInt32]? = nil
     var bodyShape: BodyShape = .sphere
     var scale: Float = 1                     // visual only, 0.85...1.12 — never the hitbox
     var eyeRadius: Float = 0.13
@@ -90,6 +101,10 @@ enum SkinCatalog {
         // COMMON ──────────────────────────────────────────────────────────────────────────────
         Skin(id: "default", name: "Prism", flavor: "The first runner. Every world remembers it.",
              bodyHex: 0x00F5FF, antennaHex: 0xFF2BD6, trailHex: 0x00F5FF,
+             // The name finally means something: white light split into a fixed band of colour.
+             // `bodyHex` stays the authored cyan because the glow, trail, wake and death burst all
+             // read from it — the spectrum is the body's SURFACE, not its identity colour.
+             spectrum: [0xFF2BD6, 0x9D5CFF, 0x00F5FF, 0x3DFF88, 0xFFD23D, 0xFF5E3A],
              rarity: .common, unlock: .free),
         Skin(id: "ember", name: "Ember", flavor: "Runs hot. Cools never.",
              bodyHex: 0xFF5E3A, antennaHex: 0xFFD23D, trailHex: 0xFF7A3D,

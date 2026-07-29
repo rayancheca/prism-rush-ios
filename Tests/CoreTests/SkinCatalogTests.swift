@@ -110,6 +110,20 @@ final class SkinCatalogTests: XCTestCase {
         XCTAssertEqual(prism.bodyHex, 0x00F5FF, "Prism's identity is its authored cyan")
         XCTAssertEqual(prism.trailHex, 0x00F5FF, "and its trail is that same colour, not a shimmer")
 
+        // v1.8 / D-011: Prism wears a STATIC spectrum. The distinction that matters is that these
+        // hues are authored constants — there is no clock anywhere in the resolution path, so the
+        // character looks identical in frame 1 and frame 100,000 and in every world.
+        XCTAssertEqual(prism.spectrum, [0xFF2BD6, 0x9D5CFF, 0x00F5FF, 0x3DFF88, 0xFFD23D, 0xFF5E3A])
+        XCTAssertEqual(prism.spectrum?[2], prism.bodyHex,
+                       "the spectrum carries Prism's authored cyan, so the body still reads as Prism")
+        XCTAssertEqual(SkinCatalog.all.filter { $0.spectrum != nil }.map(\.id), ["default"],
+                       "exactly one spectral skin")
+        for s in SkinCatalog.all where s.spectrum != nil {
+            // `bandedSphere` is the only banded geometry, and the swatch only bands a circle.
+            XCTAssertEqual(s.bodyShape, .sphere, "\(s.id): only a sphere body can be banded")
+            XCTAssertGreaterThanOrEqual(s.spectrum!.count, 2, "\(s.id): a spectrum needs bands")
+        }
+
         // No skin may leave its trail unauthored: `nil` used to mean "ride the shimmer", and the
         // shimmer no longer exists. Every runner states its own trail colour.
         for s in SkinCatalog.all {

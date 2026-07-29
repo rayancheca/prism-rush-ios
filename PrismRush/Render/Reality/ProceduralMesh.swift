@@ -309,6 +309,51 @@ enum ProceduralMesh {
         return build(p, idx, fallback: w)
     }
 
+    /// A sphere split into `bands` horizontal zones, returned as ONE mesh with one PART per zone —
+    /// so the caller assigns `bands` flat `UnlitMaterial`s and gets a static spectrum with no
+    /// texture, no gradient shader, and no extra entities (v1.8, D-011).
+    ///
+    /// Zones are equal in HEIGHT, not equal in angle. On a sphere those are the same thing for
+    /// surface area (Archimedes' hat-box theorem), so the bands read evenly wide instead of
+    /// bunching at the poles — and it makes the rule trivial for the 2-D swatch to mirror exactly:
+    /// split the silhouette's height into N equal strips. That shared rule is what keeps decree 2
+    /// (previews never lie) true by construction rather than by two lists of numbers agreeing.
+    ///
+    /// Faces are double-wound, like the chasm: nothing here sets `faceCulling`, and getting the
+    /// winding backwards on the PLAYER would make the character invisible.
+    static func bandedSphere(radius r: Float, bands: Int, segments: Int = 24, rings: Int = 3) -> MeshResource {
+        var descriptors: [MeshDescriptor] = []
+        for band in 0..<bands {
+            // Band 0 is the TOP (y = +r) so index 0 of the caller's spectrum is the top colour.
+            let yTop = r - 2 * r * Float(band) / Float(bands)
+            let yBottom = r - 2 * r * Float(band + 1) / Float(bands)
+            var p: [SIMD3<Float>] = []
+            var idx: [UInt32] = []
+            for j in 0...rings {
+                let y = yTop + (yBottom - yTop) * Float(j) / Float(rings)
+                let ringR = (max(0, r * r - y * y)).squareRoot()
+                for i in 0...segments {
+                    let a = 2 * Float.pi * Float(i) / Float(segments)
+                    p.append([ringR * cos(a), y, ringR * sin(a)])
+                }
+            }
+            let stride = UInt32(segments + 1)
+            for j in 0..<UInt32(rings) {
+                for i in 0..<UInt32(segments) {
+                    let a = j * stride + i, b = a + 1, c = a + stride, d = c + 1
+                    idx.append(contentsOf: [a, c, d, a, d, b])       // front
+                    idx.append(contentsOf: [a, d, c, a, b, d])       // back
+                }
+            }
+            var desc = MeshDescriptor(name: "band\(band)")
+            desc.positions = MeshBuffers.Positions(p)
+            desc.primitives = .triangles(idx)
+            desc.materials = .allFaces(UInt32(band))                 // one material slot per band
+            descriptors.append(desc)
+        }
+        return (try? MeshResource.generate(from: descriptors)) ?? .generateSphere(radius: r)
+    }
+
     private static func build(_ positions: [SIMD3<Float>], _ indices: [UInt32], fallback: Float) -> MeshResource {
         var d = MeshDescriptor(name: "procedural")
         d.positions = MeshBuffers.Positions(positions)
