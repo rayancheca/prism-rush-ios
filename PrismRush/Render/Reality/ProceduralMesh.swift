@@ -62,6 +62,68 @@ enum ProceduralMesh {
         return build(p, idx, fallback: max(b, h))
     }
 
+    /// The shield pickup: a heater-shield crest — flat shoulders, sides sweeping down to a point.
+    ///
+    /// It used to be `sphereEntity(0.42, cWhite)`, a plain white ball (owner, S-009: *"i dont like
+    /// the shield being a white ball it should be an actual shield"*). A ball is also the one
+    /// silhouette in the pickup set that carries no meaning — the magnet is a ring, the chrono an
+    /// hourglass, the doubler a twin — and it collided with the gems, which are the other small
+    /// round bright thing on the deck.
+    ///
+    /// Built with real thickness rather than as a flat card, because a pickup spins on Y as it
+    /// travels: a zero-depth crest would vanish edge-on twice per rotation. The face is a triangle
+    /// fan from the centre of each side, and the rim is quads between the two faces, so the crest
+    /// reads solid from every angle. Front and back faces are wound opposite so both light up under
+    /// an unlit material.
+    ///
+    /// `halfWidth` is the shoulder half-span, `height` the shoulder-to-tip drop, `halfDepth` the
+    /// thickness. Matches the SF Symbol `shield.fill` the HUD chip uses, so the thing on the deck
+    /// and the thing in the corner are recognisably one object (decree 2).
+    static func shieldCrest(halfWidth w: Float, height h: Float, halfDepth d: Float,
+                            segments n: Int = 9) -> MeshResource {
+        // The silhouette, as a closed outline walked clockwise from the top-left shoulder.
+        // Shoulders are square; the sides bow outward slightly before sweeping to the tip, which is
+        // what separates a shield from a plain triangle at a glance.
+        var outline: [SIMD2<Float>] = [[-w, h], [w, h]]
+        for i in 1...n {
+            let t = Float(i) / Float(n)                 // 0 at the right shoulder, 1 at the tip
+            // Cosine ease keeps the shoulder square and the taper gentle before it snaps to a point.
+            let x = w * cos(t * .pi / 2)
+            let y = h - (h * 2) * t * t * 0.5 - h * t   // drops to −h at t = 1
+            outline.append([x, y])
+        }
+        for i in stride(from: n - 1, through: 1, by: -1) {
+            let t = Float(i) / Float(n)
+            let x = -w * cos(t * .pi / 2)
+            let y = h - (h * 2) * t * t * 0.5 - h * t
+            outline.append([x, y])
+        }
+
+        let m = outline.count
+        var p: [SIMD3<Float>] = []
+        p.reserveCapacity(m * 2 + 2)
+        // 0 = front centre, 1..m = front rim, m+1 = back centre, m+2..2m+1 = back rim.
+        p.append([0, 0, d])
+        for v in outline { p.append([v.x, v.y, d]) }
+        p.append([0, 0, -d])
+        for v in outline { p.append([v.x, v.y, -d]) }
+
+        let backC = UInt32(m + 1)
+        var idx: [UInt32] = []
+        idx.reserveCapacity(m * 12)
+        for i in 0..<m {
+            let a = UInt32(1 + i), b = UInt32(1 + (i + 1) % m)
+            let a2 = backC + 1 + UInt32(i), b2 = backC + 1 + UInt32((i + 1) % m)
+            // Both faces are emitted in both windings. The outline's handedness is not obvious by
+            // inspection, and a crest that renders invisible from the front is a silent failure the
+            // tests cannot see — 76 extra indices is a cheap insurance premium.
+            idx.append(contentsOf: [0, a, b,  0, b, a])             // front face (toward +Z)
+            idx.append(contentsOf: [backC, b2, a2,  backC, a2, b2]) // back face (toward −Z)
+            doubleSidedQuad(a, b, b2, a2, into: &idx)               // the rim
+        }
+        return build(p, idx, fallback: max(w, h))
+    }
+
     /// Four-sided pyramid for the Solar Sands decor.
     static func pyramid(halfBase b: Float, height h: Float) -> MeshResource {
         let p: [SIMD3<Float>] = [

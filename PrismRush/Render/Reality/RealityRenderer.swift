@@ -42,6 +42,7 @@ final class RealityRenderer: RendererPort {
     private let magnetMesh: MeshResource
     private let doublerMesh: MeshResource   // twin octahedron (coin-doubler pickup, see makeEntity)
     private let chronoMesh: MeshResource    // hourglass (chrono slow-mo pickup)
+    private let shieldMesh: MeshResource    // heater-shield crest (shield pickup, S-009)
     private let splitBarSegmentMesh: MeshResource   // one-lane bar segment (two per splitBar)
     private let ringMesh: MeshResource      // prism-ring gate torus (hole faces the camera, +Z)
     private let padMesh: MeshResource       // overdrive-pad floor chevron strip (flat, XZ plane)
@@ -166,6 +167,9 @@ final class RealityRenderer: RendererPort {
         magnetMesh = ProceduralMesh.torus(major: 0.30, minor: 0.12)
         doublerMesh = ProceduralMesh.twinOctahedron(0.26, offset: 0.34)
         chronoMesh = ProceduralMesh.hourglass(halfBase: 0.3, halfHeight: 0.42)
+        // Sized to the old sphere's 0.42 footprint so spacing, pickup radius and the pooled
+        // entity's scale are all unchanged — only the silhouette differs.
+        shieldMesh = ProceduralMesh.shieldCrest(halfWidth: 0.34, height: 0.42, halfDepth: 0.07)
         splitBarSegmentMesh = .generateBox(width: 2.5, height: 0.7, depth: 0.7, cornerRadius: 0.04)
         // Ring gate: hole radius 0.79 vs body radius 0.62 — threading reads true to the ±0.9
         // pass window without looking trivially wide. Same generator as the magnet torus.
@@ -1074,7 +1078,10 @@ final class RealityRenderer: RendererPort {
         case .bar:        return boxEntity(7.6, 0.7, 0.7, .magenta)
         case .splitBar:   return splitBarEntity()
         case .gem:        return ModelEntity(mesh: gemMesh, materials: [matGemGold])
-        case .shield:     return sphereEntity(0.42, cWhite)
+        // An actual shield crest, not a ball (owner, S-009). A sphere was the one pickup silhouette
+        // in the set that carried no meaning, and it collided with the gems — the other small round
+        // bright thing on the deck. See `ProceduralMesh.shieldCrest`.
+        case .shield:     return ModelEntity(mesh: shieldMesh, materials: [UnlitMaterial(color: cWhite)])
         case .magnet:     return ModelEntity(mesh: magnetMesh, materials: [UnlitMaterial(color: .cyan)])
         case .doubler:    return ModelEntity(mesh: doublerMesh, materials: [UnlitMaterial(color: uiHex(0x00FF88))])
         case .chrono:     return ModelEntity(mesh: chronoMesh, materials: [UnlitMaterial(color: uiHex(0x9BF0FF))])

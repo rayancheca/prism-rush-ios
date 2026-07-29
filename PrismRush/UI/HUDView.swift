@@ -78,19 +78,13 @@ struct HUDView: View {
     private func chargeMeter(_ snap: GameSnapshot) -> some View {
         if snap.wardenCharge > 0.001 {
             let full = snap.wardenCharge >= 0.999
-            VStack(alignment: .trailing, spacing: 3) {
-                Text(full ? "CHARGED" : "CHARGE")
-                    .font(.system(size: 9, weight: .heavy, design: .rounded))
-                    .tracking(0.8)
-                    .foregroundStyle((full ? Self.hazard : .white).opacity(full ? 0.95 : 0.5))
-                Capsule()
-                    .fill(.white.opacity(0.16))
-                    .frame(width: 76, height: 4)
-                    .overlay(alignment: .leading) {
-                        Capsule()
-                            .fill(full ? Self.hazard : Self.shieldHue)
-                            .frame(width: 76 * snap.wardenCharge, height: 4)
-                    }
+            StatusChip(tint: full ? Self.hazard : Self.shieldHue,
+                       label: full ? "CHARGED" : "CHARGE",
+                       progress: snap.wardenCharge) {
+                Image(systemName: "bolt.fill").font(.system(size: 12, weight: .black))
+            } value: {
+                Text("\(Int(snap.wardenCharge * 100))%")
+                    .font(.system(size: 13, weight: .black, design: .rounded)).monospacedDigit()
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Warden charge \(Int(snap.wardenCharge * 100)) percent")
@@ -206,30 +200,30 @@ struct HUDView: View {
 
     // MARK: merged gem / multiplier pill — `◆ 23 ×4`
 
+    /// The multiplier takes the LABEL slot, so it reads as *what this chip is* rather than as a third
+    /// element appended after the count — which is what used to make this the one chip that changed
+    /// width mid-run (`23` → `798`). "GEMS" holds the slot when there is no multiplier, so the slot
+    /// is never empty and nothing ever reflows.
+    ///
+    /// The multiplier lost its black-on-gold capsule badge in the process. That is a deliberate
+    /// trade: the badge was emphasis-by-decoration on the one chip that already had the most going
+    /// on, and the whole point of this stack is that emphasis comes from colour and glyph, not from
+    /// one element being louder than its neighbours.
     private func gemMultPill(_ snap: GameSnapshot) -> some View {
-        HStack(spacing: 7) {
+        let gold = Color(red: 1, green: 0.82, blue: 0.24)
+        return StatusChip(tint: gold, label: snap.mult > 1 ? "×\(snap.mult)" : "GEMS") {
             RoundedRectangle(cornerRadius: 2)
-                .fill(Color(red: 1, green: 0.82, blue: 0.24))
+                .fill(gold)
                 .frame(width: 11, height: 11)
                 .rotationEffect(.degrees(45))
-                .shadow(color: Color(red: 1, green: 0.82, blue: 0.24), radius: 6)
+                .shadow(color: gold, radius: 5)
+        } value: {
             Text("\(snap.gems)")
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .monospacedDigit()
-            if snap.mult > 1 {
-                Text("×\(snap.mult)")
-                    .font(.system(size: 14, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 7).padding(.vertical, 2)
-                    .background(Capsule().fill(Color(red: 1, green: 0.82, blue: 0.24)))
-                    .transition(.scale)
-                    .id(snap.mult)
-            }
         }
-        .pillBackground()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(snap.gems) gems\(snap.mult > 1 ? ", times \(snap.mult) multiplier" : "")")
+        .accessibilityLabel("\(snap.gems) gems\(snap.mult > 1 ? ", times \(snap.mult) score multiplier" : "")")
         .accessibilityAddTraits(.updatesFrequently)
     }
 
@@ -276,37 +270,23 @@ struct HUDView: View {
         // System Reduce Motion suppresses the last-3s blink too, not just the custom Reduce Flash.
         let reduceFlash = ProfileStore.shared.profile.reduceFlash || reduceMotion
         let warning = (remaining ?? .infinity) < 3
-        let pulse = !warning || reduceFlash || Int((remaining ?? 0) * 4) % 2 == 0
-        let progress = remaining != nil && duration > 0 ? max(0.03, min(1, remaining! / duration)) : 1
-        return VStack(alignment: .trailing, spacing: 3) {
-            HStack(spacing: 6) {
-                PowerUpGlyph(kind: kind, size: 15, tint: color)
-                Text(name).font(.system(size: 11, weight: .heavy, design: .rounded)).tracking(0.5)
-                if let r = remaining {
-                    Text("\(Int(r.rounded(.up)))s")
-                        .font(.system(size: 14, weight: .black, design: .rounded)).monospacedDigit()
-                } else {
-                    Text("ACTIVE").font(.system(size: 11, weight: .heavy, design: .rounded)).tracking(0.5)
-                }
+        let blinkOff = warning && !reduceFlash && Int((remaining ?? 0) * 4) % 2 != 0
+        // A held power-up (shield) has no duration, so it draws no bar at all rather than a
+        // permanently-full one — a full bar that never moves reads as a timer that is stuck.
+        let progress = remaining.flatMap { duration > 0 ? max(0.03, min(1, $0 / duration)) : nil }
+        return StatusChip(tint: color, label: name, progress: progress, dimmed: blinkOff) {
+            PowerUpGlyph(kind: kind, size: 15, tint: color)
+        } value: {
+            if let r = remaining {
+                Text("\(Int(r.rounded(.up)))s")
+                    .font(.system(size: 14, weight: .black, design: .rounded)).monospacedDigit()
+            } else {
+                Text("HELD").font(.system(size: 11, weight: .heavy, design: .rounded)).tracking(0.5)
             }
-            .foregroundStyle(color)
-            // Depletion bar in the power-up's own colour (held power-ups show a full bar).
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.14))
-                    Capsule().fill(color).frame(width: max(3, geo.size.width * progress))
-                }
-            }
-            .frame(width: 88, height: 4)
         }
-        .opacity(pulse ? 1 : 0.45)
-        .padding(.horizontal, 11).padding(.vertical, 7)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(color.opacity(0.55), lineWidth: 1))
-        .shadow(color: color.opacity(0.45), radius: 7)
         .transition(.scale.combined(with: .opacity))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(remaining == nil ? "\(name) active"
+        .accessibilityLabel(remaining == nil ? "\(name) held"
                             : "\(name), \(Int((remaining ?? 0).rounded(.up))) seconds left")
     }
 
@@ -318,11 +298,9 @@ struct HUDView: View {
         if snap.flowStreak > 0, filled > 0 {
             // Labelled so the dots aren't a mystery (owner: "what the fuck is that?"): a FLOW meter
             // that fills as you chain near-misses (CLOSE/SLICK) — completing it pops a gem fountain.
-            HStack(spacing: 7) {
-                Text("FLOW")
-                    .font(.system(size: 9, weight: .heavy, design: .rounded))
-                    .tracking(1)
-                    .foregroundStyle(Theme.Role.interactive)
+            StatusChip(tint: Theme.Role.interactive, label: "FLOW") {
+                Image(systemName: "wind").font(.system(size: 11, weight: .black))
+            } value: {
                 HStack(spacing: 5) {
                     ForEach(0..<Tuning.flowPerSurge, id: \.self) { i in
                         Circle()
@@ -332,7 +310,6 @@ struct HUDView: View {
                     }
                 }
             }
-            .pillBackground()
             .transition(.opacity)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Flow meter, \(filled) of \(Tuning.flowPerSurge) near-misses to a gem fountain")
@@ -340,16 +317,76 @@ struct HUDView: View {
     }
 }
 
-/// Glassy pill chrome shared by HUD chips.
-private struct PillBackground: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .padding(.horizontal, 12).padding(.vertical, 7)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 13))
-            .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(.white.opacity(0.14)))
-    }
-}
+/// The in-run status stack's one and only chip (S-009).
+///
+/// **What this replaces, and why.** The top-right column had grown four unrelated geometries: the
+/// gem pill hugged its content (so it visibly *changed width* as the count went 23 → 798), the
+/// charge meter was a bare label with no container at all, power-up chips hugged their own name
+/// length and carried an extra colour glow, and the flow pips were a third chrome. Five things
+/// stacked in a right-aligned column, no two the same size — the owner's *"i really dont like this
+/// being different sizes"*.
+///
+/// Ragged is the visible symptom; the real cost is that SIZE was accidentally carrying meaning.
+/// `SHIELD ACTIVE` was the widest and most heavily glowing element on screen, so it read as the
+/// most urgent thing in the run merely because its label was long. Decree 6 says clarity beats
+/// spectacle and the UI stays calm with role-based colour — so size and chrome are now constant
+/// across every chip, and **colour is the only channel that varies**. What a chip means comes from
+/// its hue and its glyph, never from how big it is.
+///
+/// The layout is a fixed three-slot row — `[glyph] [label] [value]` — with the value trailing and
+/// monospaced, so digits never shift the chip's internals either. A chip with a duration draws a
+/// depletion hairline; one without simply centres its row in the same fixed height, so the column
+/// stays on a single rhythm whether one power-up is live or all six are.
+private struct StatusChip<Glyph: View, Value: View>: View {
+    let tint: Color
+    let label: String
+    /// 0…1 depletion, or `nil` for a chip that is held or has no duration.
+    var progress: Double? = nil
+    /// Dims the whole chip without blinking — the last-3s warning under Reduce Flash.
+    var dimmed = false
+    @ViewBuilder var glyph: () -> Glyph
+    @ViewBuilder var value: () -> Value
 
-extension View {
-    func pillBackground() -> some View { modifier(PillBackground()) }
+    /// One width for the whole column, sized so that NO chip is ever the exception — the widest
+    /// combination in the set is `CHARGE` beside a three-character `100%`, which truncated at 146.
+    /// Verified on the simulator rather than estimated; `OVERDRIVE 12s` and `SHIELD HELD` both clear
+    /// it with room. A chip that has to truncate is a chip that will be redesigned separately, which
+    /// is how the column became four different sizes in the first place.
+    static var width: CGFloat { 162 }
+    static var height: CGFloat { 38 }
+    private static var radius: CGFloat { 12 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 7) {
+                glyph().frame(width: 15, height: 15)
+                Text(label)
+                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                    .tracking(0.5)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                value()
+            }
+            .foregroundStyle(tint)
+            if let progress {
+                Capsule().fill(.white.opacity(0.14))
+                    .frame(height: 3)
+                    .overlay(alignment: .leading) {
+                        GeometryReader { geo in
+                            Capsule().fill(tint)
+                                .frame(width: max(3, geo.size.width * min(1, max(0, progress))))
+                        }
+                    }
+                    .frame(height: 3)
+            }
+        }
+        .padding(.horizontal, 11)
+        .frame(width: Self.width, height: Self.height)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.radius))
+        .overlay(RoundedRectangle(cornerRadius: Self.radius).strokeBorder(tint.opacity(0.45)))
+        // One shadow budget for every chip. The power-up chips used to carry a bigger bloom than
+        // their neighbours, which is the same mistake as the width: emphasis by accident.
+        .shadow(color: tint.opacity(0.28), radius: 5)
+        .opacity(dimmed ? 0.45 : 1)
+    }
 }
