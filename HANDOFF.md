@@ -25,6 +25,10 @@ UnlockPanel and the revive offer both show "NEED N MORE" plus a route to coins. 
 "use the pattern you already wrote." Items: PR-0302 / 0304 / 0305 / 0306 / 0308 / 0311 / 0314 /
 0315, and read PR-0304 first (a 0/N mission board that says "ALL CLEAR" at first launch).
 
+Rayan confirmed this goal directly at the end of session 006, so it is a standing instruction, not
+an inherited guess. He ALSO asked for a full audio pass (PR-0456) — that is queued BEHIND this one,
+for session 008. Do not start it instead; do read it if you finish early.
+
 Build and RUN the app before you claim anything works. That rule is six for six at catching things
 static reading missed — session 006 shipped a chasm that was invisible on the simulator TWICE
 before it read. `swift test` green is NOT the app working: it compiles Core/, seven Meta/ files and
@@ -164,6 +168,23 @@ ceiling** — there is a 15th pattern behind a sixth tier, carrying the first ne
 and took two owner fixes on audio and character identity. Backlog is 262 items, 14 DONE. Five audits
 remain unrun; the phase gate is gone, so fixes and audits interleave, and polish outranks compliance
 until Rayan says otherwise.
+
+# Queued behind session 007 — PR-0456, the full audio pass
+
+Rayan asked for this at the end of S-006, after the slide fix, when asked whether the layer needed
+a pass. It is a **standing owner request**, and in this program those have outranked the backlog
+every time (S-004 act two, S-005 hub, S-006 audio + character). Expect it to be session 008's goal.
+
+It does not start cold — S-006 measured the ground: **27 SFX, 13 `noise()` calls, and 12 of them
+still have no attack ramp** (only `slide()` has one). `Synth.noise` already takes `attack:` and
+`poles:`; they have exactly one caller. The loudest suspects by the slide's own criteria are
+`crash()` (`vol 0.5, cutoff 900`), the L138 "crack" (`vol 0.32, cutoff 9000`), and `deathSweep()`.
+**Death cues are allowed to be harsh on purpose** — decide that per cue rather than sweeping.
+
+The hard constraint: **nothing in this program can hear audio.** Every change is DSP reasoning plus
+`SynthTests` bounds, and it is not done until Rayan says so. Prefer a few well-argued changes over
+a sweep nobody can audition. PR-0040 (the 1.82 s music loop) is in scope but needs his direction
+FIRST — it has been an open question for three sessions.
 
 # Rayan action items (surface them; do not try to do them)
 

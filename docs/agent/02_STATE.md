@@ -275,6 +275,10 @@ Carried forward every session until done.
   is the 3,200 m step noticeable? Do the swung moving walls past ~6,800 m read, or do they feel
   cheap? Is the greed line legible at speed — can you *see* the two coin lines diverge in time to
   choose? Is the choice worth making, or is the safe line obviously correct?
+- **PR-0456 — a FULL AUDIO PASS is a standing owner request (S-006).** He was asked whether the
+  slide was a one-off or whether the layer needed a pass, and chose the pass. Queued behind the
+  S-007 failure-state sweep. 12 of the 13 `noise()` calls still have no attack ramp; the tools to
+  fix them (`attack:`, `poles:`) exist and have one caller. Nothing here can hear the result.
 - **PR-0454 — the retuned slide SFX. THE most device-dependent item in the program:** no agent here
   can hear audio, so the fix is DSP reasoning (no attack ramp; a 6 dB/oct filter at 600 Hz) plus
   sanity tests. He asked for it directly; he has to confirm it directly.

@@ -1851,3 +1851,32 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
   so a gradient was never available. Bands split by equal HEIGHT in both layers, which is what makes
   decree 2 hold by construction. Verified in-run, on the hub hero and on the detail card:
   `docs/agent/scratch/s006/prism_run_2_crop.png`, `prism_hub_crop.png`, `prism_chars_crop.png`.
+
+
+## PR-0456 · SEV2 · Full audio pass — the layer with the least attention in the game
+- Area:        Audio/Synth · Audio/SynthEngine · Audio/Music
+- Found by:    **Rayan, directly, S-006.** He flagged the slide (PR-0454); asked whether the rest
+               needed the same treatment, he chose a **full pass**.
+- Status:      OPEN — **standing owner request, queued behind the S-007 failure-state sweep.**
+- Why it is real, not housekeeping: the slide was not a matter of taste. It had two structural
+               defects (a burst at full amplitude on sample 0 — an instantaneous broadband onset is
+               a click; and a 6 dB/oct filter at 600 Hz leaving hiss in the 2–5 kHz band the ear is
+               most sensitive to). **The same two defects are available to every other cue**, and
+               PR-0320 proves this layer is under-inspected: a `swell:` parameter was read at four
+               call sites and did nothing at all, through several sessions, with a green suite.
+- Starting material (measured S-006, so the pass does not start cold):
+  - **27 SFX; 13 `noise()` calls, and 12 of them still have NO attack ramp.** Only `slide()` has
+    one. `Synth.noise` already takes `attack:` and `poles:` (added in S-006, both defaulted so
+    nothing changed) — the tools exist, they just have one caller.
+  - The loudest suspects by the slide's own criteria are the wide-open bursts:
+    `crash()` L116 (`vol 0.5, cutoff 900`), the L138 "crack" (`vol 0.32, cutoff 9000` highpass),
+    and `deathSweep()` L212 (`dur 0.88, vol 0.24`). Death cues can be harsh ON PURPOSE — decide
+    that deliberately per cue rather than sweeping them all soft.
+  - Everything highpassed at 2,400–6,000 Hz is a candidate for `poles: 2`: one pole barely filters.
+- Also in scope: **PR-0040**, the 1.82 s music loop. It is pinned to world 0 by an earlier owner
+               decree, so long-form structure inside that constraint needs his direction before any
+               work — ask before building, it has been open three sessions.
+- Constraint:  **No agent in this program can hear the output.** Every change is DSP reasoning plus
+               `SynthTests` sanity bounds, and every change needs Rayan's ears before it is called
+               done. Prefer few, well-argued changes over a sweep nobody can audition.
+- Verification: `SynthTests` bounds per cue; then HIM.
