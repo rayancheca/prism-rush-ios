@@ -67,22 +67,41 @@ enum Collisions {
         abs(z) < Tuning.chasmHalfLength && playerY < Tuning.chasmClearance
     }
 
-    /// Warden beam (v1.9): the strike resolves the instant the beam fires, against the player's real
-    /// x rather than their committed lane — so a lane change that has been tapped but not yet
-    /// travelled does not teleport them clear.
+    /// Warden strike: resolves the instant the shape fires, against the player's real x and their
+    /// real body extent rather than their committed lane — so a lane change that has been tapped but
+    /// not yet travelled does not teleport them clear, and neither does a jump still leaving the
+    /// ground.
     ///
-    /// There is no `z` term: the beam is a vertical column dropped on a lane for one instant, not an
-    /// object arriving down the track. Height is deliberately absent too — jumping does not clear it
-    /// and sliding does not duck it, which is what keeps the answer a single unambiguous input
-    /// (change lane) and the read a single frame (decree 6).
+    /// There is no `z` term for any shape: a strike is dropped on the player's own plane for one
+    /// instant, not an object arriving down the track.
     ///
-    /// An empty `mask` means no beam is in flight, and must never register as a hit.
-    static func wardenBeamHit(playerX: Double, mask: UInt8) -> Bool {
-        guard mask != 0 else { return false }
-        for lane in 0..<Tuning.laneX.count where mask & (1 << UInt8(lane)) != 0 {
-            if abs(playerX - Tuning.laneX[lane]) < Tuning.wardenBeamHalfWidth { return true }
+    /// One shape per strike, and each is answered by exactly one verb (S-009):
+    ///
+    /// - `.lance`   — per-lane columns, full height. Answered laterally. This is v1.9's only shape
+    ///                and its rule is unchanged, so a lance behaves byte-for-byte as it always did.
+    /// - `.floor`   — a slab across every lane, lethal to anything whose underside is below
+    ///                `wardenFloorKillTop`. Answered by jumping. Note a *slide* does not clear it:
+    ///                sliding lowers the body's underside, so it is strictly worse here.
+    /// - `.curtain` — a wall across every lane hanging from the sky with NO ceiling, lethal to
+    ///                anything whose top is above `wardenCurtainKillBottom`. Answered by sliding
+    ///                only — see `Tuning.wardenCurtainKillBottom` for why it cannot have a top.
+    ///
+    /// An empty `mask` means no lance is in flight and must never register as a hit; the full-width
+    /// shapes ignore the mask entirely.
+    static func wardenStrikeHit(playerX: Double, playerTop: Double, playerBottom: Double,
+                                mask: UInt8, band: WardenBand) -> Bool {
+        switch band {
+        case .lance:
+            guard mask != 0 else { return false }
+            for lane in 0..<Tuning.laneX.count where mask & (1 << UInt8(lane)) != 0 {
+                if abs(playerX - Tuning.laneX[lane]) < Tuning.wardenBeamHalfWidth { return true }
+            }
+            return false
+        case .floor:
+            return playerBottom < Tuning.wardenFloorKillTop
+        case .curtain:
+            return playerTop > Tuning.wardenCurtainKillBottom
         }
-        return false
     }
 
     /// Gem pickup window (uses the gem's *base* Y, before cosmetic bob).

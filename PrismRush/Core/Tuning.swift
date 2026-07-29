@@ -239,10 +239,19 @@ enum Tuning {
     ///
     /// Must outlast the longest possible encounter in DISTANCE, since the encounter is timed and the
     /// arena is not. Sized from the crudest bound that is still provable, so no run can defeat it:
-    /// `wardenArmWindow` (60) + `wardenMaxSeconds` (16) × `boostSpeedMax` (36) = 636 m, against 660.
+    ///
+    ///   `wardenArmWindow` + (`wardenMaxSeconds` + `wardenDieTime` + `wardenLeaveTime`) × `boostSpeedMax`
+    ///   = 60 + (14.5 + 1.0 + 0.9) × 36 = 650.4 m, against 660.
+    ///
+    /// **The `dying`/`leaving` terms matter and the v1.9 comment omitted them** (S-009): the cap at
+    /// `WardenEncounter.step` deliberately exempts those two phases, so the craft's exit runs PAST
+    /// `wardenMaxSeconds`. At the old cap of 16 s the honest worst case was 704.4 m — 44 m outside
+    /// its own arena. It never bit because `deployOverdrive` needs banked Speed Ups to hold 36 m/s,
+    /// but it was reachable, so the cap was lowered rather than the comment corrected.
+    ///
     /// Using `boostSpeedMax` rather than `speedCap` is deliberate — pads are suppressed inside the
-    /// arena, but a player can enter one already boosting. Measured worst case across 24 seeded bot
-    /// runs is 438 m, so the bound is conservative by design. Pinned by
+    /// arena, but a player can enter one already boosting, and banked Speed Ups chain every 3 s.
+    /// Measured worst case across 24 seeded bot runs is 438 m, so the bound is conservative. Pinned by
     /// `WardenTests.testAnEncounterCanNeverOutrunItsArena` and `…testEveryEncounterFinishesInsideItsArena`.
     ///
     /// This is the feature's biggest tuning lever and the first thing to revisit after playtesting:
@@ -250,15 +259,43 @@ enum Tuning {
     /// Shrinking it means shortening `wardenShieldWindow`, which moves the charge threshold below.
     static let wardenArenaLength: Double = 660
 
-    // Encounter timings. The whole set is bounded by construction: three fixed core hits, a fixed
+    // Encounter timings. The whole set is bounded by construction: a fixed core-hit count, a fixed
     // shield window, and a fixed number of seconds — a Warden can never become a war of attrition.
     static let wardenArriveTime: Double = 0.9    // craft drops into view; nothing is lethal yet
-    static let wardenShieldWindow: Double = 9.0  // break the shield inside this or it breaks off
-    static let wardenTelegraphTime: Double = 0.85 // wind-up before a beam fires — the read
+    static let wardenShieldWindow: Double = 7.0  // break the shield inside this or it breaks off
     static let wardenStrikeShowTime: Double = 0.30 // the fired beam stays lit this long
-    static let wardenAttackRecover: Double = 0.55  // gap after a strike before the next telegraph
     static let wardenDieTime: Double = 1.0
     static let wardenLeaveTime: Double = 0.9
+
+    // MARK: rank — the same Warden gets harder the deeper you meet it (S-009)
+
+    /// A Warden's difficulty rank: `min(wardenRankCap, world / wardenEveryWorlds)`, so worlds 3/6/9
+    /// are ranks 1/2/3 and everything past world 9 fights the rank-3 case.
+    ///
+    /// v1.9 shipped `world` used for nothing but the RNG derivation — every Warden in the game was
+    /// literally the same fight, which is half of why the owner's verdict was "takes no effort".
+    /// It flattens at 3 rather than climbing forever because the rest of the game's escalation
+    /// saturates there too (`actTwoFullAt` 9,600 m) and an endless ladder eventually stops being
+    /// beatable, which would breach the owner's "not impossible" bar.
+    static let wardenRankCap = 3
+    static func wardenRank(world: Int) -> Int { min(wardenRankCap, max(1, world / wardenEveryWorlds)) }
+
+    /// Indexed by `wardenRank - 1`. The wind-up shortens and the recovery tightens with rank, so a
+    /// late Warden is read under real time pressure while the first one is still teachable.
+    ///
+    /// **0.70 s is a floor, not a starting point.** Below roughly that the fight gets harder for a
+    /// human and not at all for the bot — perfect-information dodging is unaffected by wind-up
+    /// length — so the difficulty would stop being testable. `LaggedAutopilotTests` is the two-sided
+    /// gate that keeps this honest: a human-latency bot must survive, a sluggish one must not.
+    static let wardenTelegraphByRank: [Double] = [0.80, 0.75, 0.70]
+    static let wardenRecoverByRank: [Double]   = [0.40, 0.40, 0.35]
+    /// Clean dodges needed to kill, by rank. Fixed and small at every rank: the fight is the fun
+    /// part, never a grind, and the count is what keeps the encounter bounded.
+    static let wardenCoreHitsByRank: [Int]     = [4, 5, 6]
+
+    static func wardenTelegraphTime(rank: Int) -> Double { wardenTelegraphByRank[rank - 1] }
+    static func wardenAttackRecover(rank: Int) -> Double { wardenRecoverByRank[rank - 1] }
+    static func wardenCoreHits(rank: Int) -> Int { wardenCoreHitsByRank[rank - 1] }
 
     /// Hard ceiling on a whole encounter, from arrival to the craft clearing the sky.
     ///
@@ -269,26 +306,34 @@ enum Tuning {
     /// combination the arena exists to prevent, so the encounter is capped outright: at the cap it
     /// breaks off exactly as it would on a held shield. Pinned by
     /// `WardenTests.testAnEncounterCanNeverOutrunItsArena`.
-    static let wardenMaxSeconds: Double = 16.0
+    ///
+    /// 14.5 rather than 16.0 (S-009): the cap exempts `.dying` and `.leaving`, so the true distance
+    /// cost is `(cap + wardenDieTime + wardenLeaveTime) × boostSpeedMax`. See `wardenArenaLength`.
+    /// It still clears the longest *designed* encounter — rank 3 at the charge threshold is 14.20 s
+    /// — and clears every real (full-charge) encounter by 2.6 s.
+    static let wardenMaxSeconds: Double = 14.5
 
     /// A Warden only arms in the first stretch of its arena. Without this, a checkpoint run that
     /// began 80 m from the arena's end would summon a Warden with no room to fight it.
     static let wardenArmWindow: Double = 60
-
-    /// Clean dodges needed to kill. Fixed and small: the fight is the fun part, not the grind.
-    static let wardenCoreHits = 3
 
     // The gun. Fire rate is the player's charge bank, spent as it burns — a timer they earned before
     // the fight started, never a win button (it cannot kill; only dodging can).
     //
     // Damage is `wardenBaseDPS + charge × wardenChargeDPS` while charge drains at
     // `wardenChargeDrain`/s, so the integral to break `wardenShieldHP` inside `wardenShieldWindow`
-    // solves to a threshold at charge ≈ 0.80:
-    //   charge 1.00 → shield falls at 6.25 s ✓   charge 0.85 → 8.02 s ✓
-    //   charge 0.80 → 9.13 s ✗ (just past the window)   charge ≤ 0.75 → never
+    // solves to a threshold at charge ≈ 0.744:
+    //   charge 1.00 → shield falls at 4.71 s ✓   charge 0.85 → 5.75 s ✓
+    //   charge 0.75 → 6.94 s ✓ (only just)       charge ≤ 0.70 → never
     // A player who banked nothing fires at `wardenBaseDPS` and mathematically cannot break it,
     // which is the point. Pinned by `WardenTests.testTheChargeThresholdIsWhereTheArithmeticSaysItIs`.
-    static let wardenShieldHP: Double = 100
+    //
+    // **HP 80 / window 7.0, down from 100 / 9.0 (S-009).** The shield phase is the one stretch of a
+    // Warden with nothing to *do* in it, and at full charge it ran 6.25 s. Cutting both terms
+    // together takes that to 4.71 s while leaving the threshold in the same place it always was —
+    // the point of the gate is that ignoring gems loses you the fight, not that watching a bar is
+    // the fight.
+    static let wardenShieldHP: Double = 80
     static let wardenBaseDPS: Double = 4
     static let wardenChargeDPS: Double = 16
     static let wardenChargeDrain: Double = 0.08
@@ -309,16 +354,64 @@ enum Tuning {
     /// was being scored as a dodge. It isn't one.
     ///
     /// This much of the time a second lane closes too, leaving exactly one safe lane — so answering
-    /// every telegraph with a blind sidestep is punished about half the time, and the wind-up has to
-    /// actually be READ. At most two of three lanes ever close, so a safe answer always exists and
-    /// every attack resolves in exactly one cycle: the fight stays bounded at `wardenCoreHits`
-    /// exchanges and can never outrun its arena.
-    static let wardenDoubleBeamChance: Double = 0.4
+    /// every telegraph with a blind sidestep is punished, and the wind-up has to actually be READ.
+    /// At most two of three lanes ever close, so a safe answer always exists and every attack
+    /// resolves in exactly one cycle: the fight stays bounded and can never outrun its arena.
+    ///
+    /// **It climbs, rather than sitting flat at 0.4 (S-009).** A flat 0.4 meant 60% of every lance
+    /// left TWO safe lanes, i.e. most attacks were answered by "press either direction". The chance
+    /// now starts higher, rises with each landed core hit, and caps below 1.0 — so the last exchange
+    /// of every fight is a genuine read, while the first one still forgives a guess. The cap keeps a
+    /// blind sidestep from becoming *strictly* wrong, which would make the lance a pure memory test.
+    static let wardenDoubleBeamBase: [Double] = [0.45, 0.55, 0.65]   // by rank
+    static let wardenDoubleBeamStep: Double = 0.12                   // per landed core hit
+    static let wardenDoubleBeamCap: Double = 0.90
+
+    static func wardenDoubleBeamChance(rank: Int, coreHits: Int) -> Double {
+        min(wardenDoubleBeamCap, wardenDoubleBeamBase[rank - 1] + Double(coreHits) * wardenDoubleBeamStep)
+    }
 
     /// Half-width of the beam column. Same value as `laneHitHalfWidth`, deliberately: a beam is as
     /// wide as a wall, so the lane you are safe in is the lane you would be safe in for anything
     /// else, and mid-transit between two lanes is exposed to both — exactly as it already is.
     static let wardenBeamHalfWidth: Double = laneHitHalfWidth
+
+    // MARK: the three shapes (S-009) — the fix for "the fight only ever asks for one verb"
+
+    /// v1.9's beam tested the player's X and nothing else, so jump and slide were provably inert
+    /// inside an encounter: a boss that ignores three of the player's four verbs cannot be hard
+    /// without being unfair. A strike now comes in one of three shapes, each answered by a different
+    /// verb the deck has already spent hours teaching:
+    ///
+    ///   LANCE   — per-lane columns, as before.        answer: change lane
+    ///   FLOOR   — a full-width slab ON the deck.      answer: jump
+    ///   CURTAIN — a full-width wall hanging from the sky, stopping above the deck. answer: slide
+    ///
+    /// **The single most load-bearing number here is that the curtain has NO top.** The obvious
+    /// implementation reuses `barKillBottom`/`barKillTop` (0.95/1.65) for a hanging bar — and that is
+    /// broken, because clearing 1.65 requires `jumpY ≥ 1.55` and clearing the floor's 0.85 requires
+    /// only `jumpY ≥ 0.75`, so the bar's airborne window is a strict *subset* of the floor's. One
+    /// jump would answer both shapes, slide would be optional everywhere, and the verb ladder would
+    /// collapse straight back to a binary — with the solvability bot certifying the degenerate
+    /// strategy, because "jump on any vertical band" clears both.
+    ///
+    /// Unbounded above, the curtain cannot be jumped from ANY state: the player's apex is 2.1608 m,
+    /// so even sliding at the top of a jump the body's top is 2.607 — far above 0.95. The only clear
+    /// is to be low, and from the apex the air-slam reaches curtain-safe height in 0.108 s. So the
+    /// two shapes have genuinely disjoint answers and no fixed motor pattern survives a fight.
+    /// Pinned by `WardenTests.testTheCurtainCannotBeJumpedFromAnyState`.
+    static let wardenCurtainKillBottom: Double = 0.95
+    /// The floor kills anything whose underside is below this. Reused verbatim from `lowKillTop`
+    /// rather than given its own value: a floor IS a low obstacle, spanning every lane, so the
+    /// clearance a player has already learned transfers exactly.
+    static let wardenFloorKillTop: Double = lowKillTop
+
+    // Where the bot commits to each vertical answer, in seconds before the strike. Both are centred
+    // in their windows so the proof is not sitting on an edge:
+    //   jump  — clears the floor for t ∈ [0.078, 0.737] after launch (centre 0.408)
+    //   slide — worst-case slam from apex takes 0.108 s; `slideDuration` holds it 0.55 s
+    static let wardenBotJumpLead: Double = 0.42
+    static let wardenBotSlideLead: Double = 0.30
 
     // Where the craft hangs. Far enough forward to read as a thing in the sky ahead rather than an
     // obstacle arriving, low enough to sit inside the camera's frustum above the vanishing point.

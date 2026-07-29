@@ -157,8 +157,10 @@ enum FXEvent: Sendable, Equatable {
     // MARK: Wardens (v1.9)
     case wardenArrived(world: Int)              // the craft drops in — the arena has begun
     case wardenShieldBroke                      // auto-fire won: the core is open, attacks start
-    case wardenTelegraph(mask: UInt8)           // a beam locked these lanes; the wind-up is the read
-    case wardenStruck(mask: UInt8, caught: Bool) // it fired; `caught` = it landed on the player
+    // `band` is the shape, and therefore the verb that answers it — the renderer, the audio cue and
+    // the haptic all key off it, so adding a shape is a compile error everywhere it must be handled.
+    case wardenTelegraph(mask: UInt8, band: WardenBand)  // a strike locked; the wind-up is the read
+    case wardenStruck(mask: UInt8, band: WardenBand, caught: Bool) // it fired; `caught` = it landed
     case wardenCoreHit(hits: Int)               // a clean dodge damaged the open core (1-based)
     case wardenDefeated(world: Int, bounty: Int)
     case wardenBrokeOff                         // the shield held out the window — it leaves, you live

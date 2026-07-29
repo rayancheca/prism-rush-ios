@@ -591,12 +591,18 @@ final class GameModel {
             addPopup("WARDEN", color: Theme.color(0xFF3355), worldX: 0)
             synth.play(.worldSweep)
             flash(0.4)
-        case .wardenTelegraph:
-            synth.play(.laneTick)   // short warning blip under the descending column
-        case let .wardenStruck(_, caught):
+        case let .wardenTelegraph(_, band):
+            // One cue per shape, and the pitch direction names the verb (Synth §Warden telegraphs).
+            switch band {
+            case .floor:   synth.play(.wardenFloorCue)
+            case .curtain: synth.play(.wardenCurtainCue)
+            case .lance:   synth.play(.wardenLanceCue)
+            }
+        case let .wardenStruck(_, _, caught):
             synth.play(caught ? .crash : .close)
         case let .wardenCoreHit(hits):
-            addPopup("HIT \(hits)/\(Tuning.wardenCoreHits)", color: Theme.color(0xFF3355), worldX: 0)
+            let needed = core.warden?.coreHitsNeeded ?? hits
+            addPopup("HIT \(hits)/\(needed)", color: Theme.color(0xFF3355), worldX: 0)
             synth.play(.ringPerfect)
         case .wardenShieldBroke:
             addPopup("SHIELD DOWN", color: Theme.color(0x66E0FF), worldX: 0)

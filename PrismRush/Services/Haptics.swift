@@ -62,9 +62,12 @@ final class Haptics {
         // must act on, and a cue they can feel means they can start moving before their eyes have
         // finished parsing which lanes are lit. Arrival and defeat are announcements, so they get
         // the same double-tap grammar as a world change.
-        case .wardenTelegraph:
-            rigid.impactOccurred(intensity: 0.65)
-        case let .wardenStruck(_, caught):
+        case let .wardenTelegraph(_, band):
+            // Intensity separates the two channels rather than announcing which shape it is: a
+            // vertical demand (jump/slide) has less time to be answered than a lateral one, so it
+            // taps harder. The picture on screen is the read; this is the nudge to look at it.
+            rigid.impactOccurred(intensity: band.isLateral ? 0.65 : 0.85)
+        case let .wardenStruck(_, _, caught):
             if caught {
                 notify.notificationOccurred(.error)
                 heavy.impactOccurred()

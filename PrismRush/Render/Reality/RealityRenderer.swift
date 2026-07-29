@@ -572,12 +572,25 @@ final class RealityRenderer: RendererPort {
             particles.burst(x: 0, y: 5.2, z: -26, color: cWardenShield,
                             count: 70, power: 8.0, spread: 0.6, life: 0.9)
             if !reduceMotion { shake = max(shake, 0.5) }
-        case let .wardenStruck(mask, caught):
-            // Fire a slam at the foot of every lane the beam actually closed.
-            for lane in 0..<3 where mask & (1 << UInt8(lane)) != 0 {
-                particles.burst(x: Float(Tuning.laneX[lane]), y: 0.2, z: -5,
-                                color: cWardenHazard, count: caught ? 40 : 22,
-                                power: 5.0, spread: 0.5, life: 0.55)
+        case let .wardenStruck(mask, band, caught):
+            // The slam fires where the shape actually landed, so the impact confirms the read the
+            // player just made: at the foot of each closed lane for a lance, and along the full
+            // width of the deck for the two shapes that span it — at deck level for a floor, at the
+            // curtain's hem for a curtain.
+            switch band {
+            case .lance:
+                for lane in 0..<3 where mask & (1 << UInt8(lane)) != 0 {
+                    particles.burst(x: Float(Tuning.laneX[lane]), y: 0.2, z: -5,
+                                    color: cWardenHazard, count: caught ? 40 : 22,
+                                    power: 5.0, spread: 0.5, life: 0.55)
+                }
+            case .floor, .curtain:
+                let y: Float = band == .floor ? 0.2 : Float(Tuning.wardenCurtainKillBottom)
+                for lane in 0..<3 {
+                    particles.burst(x: Float(Tuning.laneX[lane]), y: y, z: -5,
+                                    color: cWardenHazard, count: caught ? 30 : 16,
+                                    power: 5.0, spread: 0.5, life: 0.55)
+                }
             }
             if !reduceMotion { shake = max(shake, caught ? 1.0 : 0.35) }
         case .wardenCoreHit:

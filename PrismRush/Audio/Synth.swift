@@ -169,6 +169,41 @@ enum Synth {
         var b = blank(0.04); tone(&b, 300, 360, dur: 0.04, .sine, vol: 0.08); return b
     }
 
+    // MARK: Warden telegraphs (S-009) — the sound tells you WHICH VERB, not merely "something"
+    //
+    // v1.9 played `laneTick` for every wind-up: a 40 ms blip at volume 0.08 that is *the same sound
+    // as the player's own lane change*, and one of the few SFX excluded from `ducksMusic`. The one
+    // moment in the fight the player must act on was the quietest, most ambiguous cue in the game.
+    //
+    // The three cues carry the same information the geometry does, in the same grammar, so a player
+    // can begin the answer before their eyes have finished parsing the shape. Pitch direction maps
+    // to the shape's motion, which maps to the verb:
+    //   FLOOR   — rising: the slab climbs out of the deck.  You go up.
+    //   CURTAIN — falling: the wall comes down from the sky. You go down.
+    //   LANCE   — flat, doubled: neither. Move sideways.
+    // Louder and longer than a lane tick, and all three duck the music.
+
+    static func wardenFloorCue() -> [Float] {         // rising two-tone — jump
+        var b = blank(0.34)
+        tone(&b, 240, 300, dur: 0.14, .triangle, vol: 0.17)
+        tone(&b, 420, 560, dur: 0.20, .triangle, vol: 0.19, offset: Int(0.13 * sampleRate))
+        return b
+    }
+
+    static func wardenCurtainCue() -> [Float] {       // descending two-tone — slide
+        var b = blank(0.34)
+        tone(&b, 620, 520, dur: 0.14, .triangle, vol: 0.17)
+        tone(&b, 330, 210, dur: 0.20, .triangle, vol: 0.19, offset: Int(0.13 * sampleRate))
+        return b
+    }
+
+    static func wardenLanceCue() -> [Float] {         // flat doubled tick — change lane
+        var b = blank(0.24)
+        tone(&b, 330, 330, dur: 0.06, .square, vol: 0.13)
+        tone(&b, 330, 330, dur: 0.06, .square, vol: 0.13, offset: Int(0.09 * sampleRate))
+        return b
+    }
+
     static func landThud() -> [Float] {               // hard-landing thump: pitch-drop + dust tick
         var b = blank(0.14)
         tone(&b, 150, 46, dur: 0.13, .sine, vol: 0.30)
@@ -388,6 +423,8 @@ extension Synth {
         case ringPass, ringPerfect, boostStart, boostEnd, flowSurge, levelUp
         // v1.6: Super Sneakers gets its own spring-loaded leap (was reusing `boostStart`).
         case sneakersPickup
+        // v1.9/S-009: one telegraph cue per Warden shape — the sound names the verb.
+        case wardenFloorCue, wardenCurtainCue, wardenLanceCue
 
         /// Gem repeats its pitch ladder every 26 streaks — collapse so the cache stays bounded.
         var normalized: SFX {
@@ -400,7 +437,10 @@ extension Synth {
             switch self {
             case .crash, .deathSweep, .worldSweep, .shieldPickup, .shieldBreak, .magnetPickup, .doublerPickup,
                  .frenzyStart, .frenzyEnd, .newBestFanfare,
-                 .boostStart, .boostEnd, .flowSurge, .levelUp, .sneakersPickup:   // rings too frequent to duck
+                 .boostStart, .boostEnd, .flowSurge, .levelUp, .sneakersPickup,   // rings too frequent to duck
+                 // A Warden telegraph is the most time-critical cue in the game; it must not be
+                 // competing with the music bed, which is exactly what the old `laneTick` did.
+                 .wardenFloorCue, .wardenCurtainCue, .wardenLanceCue:
                 return true
             default:
                 return false
@@ -422,6 +462,9 @@ extension Synth {
             case .close: return Synth.close()
             case .startChime: return Synth.startChime()
             case .laneTick: return Synth.laneTick()
+            case .wardenFloorCue: return Synth.wardenFloorCue()
+            case .wardenCurtainCue: return Synth.wardenCurtainCue()
+            case .wardenLanceCue: return Synth.wardenLanceCue()
             case .landThud: return Synth.landThud()
             case .purchaseChime: return Synth.purchaseChime()
             case .equipClick: return Synth.equipClick()

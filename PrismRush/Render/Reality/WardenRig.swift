@@ -30,6 +30,25 @@ final class WardenRig {
     /// coming out of the sky rather than sprouting from the deck.
     private static let columnTop: Double = 7.5
 
+    /// How far the full-width shapes reach across the deck. Wider than the three lanes so the slab
+    /// and the wall visibly run off both edges of the track — that is what says "there is no lane to
+    /// move to" without the player having to check three lanes and infer it.
+    private static let fullWidth: Float = 12
+
+    /// **Height magnitude is not the read.** The scouts measured ~96 px per world unit of height
+    /// against a 214 px lane step at the strike plane, so at 33 m/s a player cannot judge "is that
+    /// red band at 0.85 or at 0.95". The discriminator has to be a binary, and the codebase already
+    /// knows which one works: the chasm reads because it INTERRUPTS the neon grid.
+    ///
+    /// So the two full-width shapes are told apart by whether the grid survives under them:
+    ///   FLOOR   — sits ON the deck. The grid is gone edge to edge. Nothing to run under → jump.
+    ///   CURTAIN — hangs from the sky and stops at 0.95, leaving a clean strip of lit grid running
+    ///             beneath it. Something to run under → slide.
+    /// Reinforced by opposite motion (the slab grows up, the wall comes down) and by opposite pitch
+    /// direction in the audio cue. Colour is NOT a channel — everything lethal stays one fixed
+    /// world-blind red, because `accent2` goes pure white in two palettes.
+    private static let curtainHem: Float = 0.95
+
     /// The whole rig. `craft` moves with the Warden; `beams` stays in world space, because the deck
     /// plates belong on the deck in front of the PLAYER — parenting them to a craft hovering five
     /// units up and twenty-six ahead would float the one element that has to read as floor.
@@ -39,8 +58,10 @@ final class WardenRig {
     private let hull: ModelEntity
     private let halo: ModelEntity        // the shield, scaled by what is left of it
     private let core: ModelEntity        // only visible once the shield is down
-    private var panels: [ModelEntity] = []   // one per lane, flat on the deck
+    private var panels: [ModelEntity] = []   // one per lane, flat on the deck (LANCE only)
     private var columns: [ModelEntity] = []  // one per lane, descending as the beam winds up
+    private let floorSlab: ModelEntity       // full width, grows UP out of the deck — jump it
+    private let curtainWall: ModelEntity     // full width, descends from the sky and STOPS — slide it
 
     private let matHazard: UnlitMaterial
     private let matHazardDim: UnlitMaterial
@@ -63,11 +84,23 @@ final class WardenRig {
         core.position = SIMD3<Float>(0, -0.95, 0)
         core.isEnabled = false
 
+        // The two full-width shapes. Both are deep (13) so they read as a band the player is running
+        // INTO rather than a line they are crossing, and both are scaled in `sync` rather than
+        // rebuilt — a unit box scaled on one axis costs nothing per frame.
+        floorSlab = ModelEntity(mesh: .generateBox(width: Self.fullWidth, height: 1, depth: 13),
+                                materials: [matHazardDim])
+        floorSlab.isEnabled = false
+        curtainWall = ModelEntity(mesh: .generateBox(width: Self.fullWidth, height: 1, depth: 13),
+                                  materials: [matHazardDim])
+        curtainWall.isEnabled = false
+
         craft.addChild(hull)
         craft.addChild(halo)
         craft.addChild(core)
         group.addChild(craft)
         group.addChild(beams)
+        beams.addChild(floorSlab)
+        beams.addChild(curtainWall)
 
         for lane in 0..<3 {
             let x = Float(Tuning.laneX[lane])
@@ -129,28 +162,35 @@ final class WardenRig {
             halo.isEnabled = false
             // Exposed: the core is lit, and each hit shrinks it — three strikes and it is gone.
             core.isEnabled = w.phase != .leaving
-            let left = Float(Tuning.wardenCoreHits - w.coreHits) / Float(Tuning.wardenCoreHits)
+            let left = Float(w.coreHitsNeeded - w.coreHits) / Float(max(1, w.coreHitsNeeded))
             core.scale = SIMD3<Float>(repeating: max(0.25, left))
         }
 
-        // The beams.
+        // The strike. Exactly ONE shape is ever drawn, and the other two are switched off — a lance
+        // and a curtain on screen together would put two contradictory verbs in the same frame,
+        // which is the decree-6 failure the whole shape system exists to avoid.
         let t = Float(w.telegraphProgress)
+        let hot = w.striking
+        let live = w.telegraphProgress > 0 || hot
+        let mat = hot ? matHazard : matHazardDim
+
+        // The per-lane plates are the LANCE's read and only the lance's. They occlude the grid
+        // unconditionally, so leaving them on under a curtain would erase the strip of lit grid that
+        // is the *entire* discriminator between "run under it" and "jump it".
+        let lanceLive = live && w.band == .lance
         for lane in 0..<3 {
-            let closed = w.closes(lane)
             let panel = panels[lane], column = columns[lane]
-            guard closed else {
+            guard lanceLive, w.closes(lane) else {
                 if panel.isEnabled { panel.isEnabled = false; column.isEnabled = false }
                 continue
             }
             panel.isEnabled = true
             column.isEnabled = true
-            let hot = w.striking
-            panel.model?.materials = [hot ? matHazard : matHazardDim]
-            column.model?.materials = [hot ? matHazard : matHazardDim]
+            panel.model?.materials = [mat]
+            column.model?.materials = [mat]
             // Widen the plate as the shot charges, so peripheral vision catches it even when the
             // player is watching the deck rather than the sky.
-            let grow = hot ? 1.0 : (0.45 + 0.55 * t)
-            panel.scale = SIMD3<Float>(grow, 1, 1)
+            panel.scale = SIMD3<Float>(hot ? 1.0 : (0.45 + 0.55 * t), 1, 1)
 
             // The column descends from the craft's altitude to the deck. Its unit box is 1 high, so
             // scaling y by the remaining reach and sitting it at half that keeps its TOP pinned up
@@ -160,6 +200,32 @@ final class WardenRig {
             column.scale = SIMD3<Float>(hot ? 1 : 0.55, max(0.01, reach), hot ? 1 : 0.55)
             column.position = SIMD3<Float>(Float(Tuning.laneX[lane]),
                                            drop - reach / 2, Float(Self.strikeZ))
+        }
+
+        // FLOOR — grows UP out of the deck to its lethal height, blotting out the grid edge to edge.
+        // Its bottom stays pinned at 0 so the growth reads as the deck itself rising.
+        let floorLive = live && w.band == .floor
+        floorSlab.isEnabled = floorLive
+        if floorLive {
+            let full = Float(Tuning.wardenFloorKillTop)
+            let h = max(0.02, hot ? full : full * min(1, t))
+            floorSlab.model?.materials = [mat]
+            floorSlab.scale = SIMD3<Float>(1, h, 1)
+            floorSlab.position = SIMD3<Float>(0, h / 2, Float(Self.strikeZ))
+        }
+
+        // CURTAIN — descends from the sky and STOPS at the hem, leaving lit grid running underneath.
+        // Its top stays pinned in the sky while the hem falls, the exact inverse of the floor, so
+        // the two shapes are opposite motion as well as opposite occlusion.
+        let curtainLive = live && w.band == .curtain
+        curtainWall.isEnabled = curtainLive
+        if curtainLive {
+            let top = Float(Self.columnTop)
+            let hem = hot ? Self.curtainHem : top - (top - Self.curtainHem) * min(1, t)
+            let h = max(0.02, top - hem)
+            curtainWall.model?.materials = [mat]
+            curtainWall.scale = SIMD3<Float>(1, h, 1)
+            curtainWall.position = SIMD3<Float>(0, hem + h / 2, Float(Self.strikeZ))
         }
     }
 

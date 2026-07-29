@@ -113,8 +113,11 @@ struct HUDView: View {
                 if broken {
                     // Three pips, not a bar: the kill is a fixed count of clean dodges, so the
                     // readout should be countable at a glance rather than estimated off a length.
+                    // Count comes from the ENCOUNTER, never from a constant: a rank-3 Warden needs
+                    // six clean answers where a rank-1 needs four, and a HUD that pinned the old
+                    // flat value would quietly under-report the fight the player is actually in.
                     HStack(spacing: 5) {
-                        ForEach(0..<Tuning.wardenCoreHits, id: \.self) { i in
+                        ForEach(0..<w.coreHitsNeeded, id: \.self) { i in
                             Capsule()
                                 .fill(i < w.coreHits ? Self.hazard : .white.opacity(0.22))
                                 .frame(width: 22, height: 5)
@@ -134,7 +137,7 @@ struct HUDView: View {
             .padding(.top, 6)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(broken
-                ? "Warden core exposed, \(w.coreHits) of \(Tuning.wardenCoreHits) hits landed"
+                ? "Warden core exposed, \(w.coreHits) of \(w.coreHitsNeeded) hits landed"
                 : "Warden shielded, \(Int(w.shieldFraction * 100)) percent")
             .transition(.opacity)
         }

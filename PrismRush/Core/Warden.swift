@@ -11,6 +11,25 @@ enum WardenPhase: Sendable, Equatable {
     case leaving    // broke off (the shield never fell), or finished dying
 }
 
+/// The shape a strike takes, and therefore the verb that answers it (S-009).
+///
+/// v1.9 had exactly one shape, tested against the player's X alone, so jump and slide were inert
+/// inside a fight and the encounter asked for one of the player's four verbs. Three shapes with
+/// disjoint answers is the fix — see `Tuning.wardenCurtainKillBottom` for why the curtain has no
+/// ceiling, which is the property that keeps a single jump from answering everything.
+///
+/// The renderer draws these as one binary the neon deck already answers — *is the red ON the grid
+/// or hanging OVER it* — rather than as a height the player has to judge.
+enum WardenBand: Sendable, Equatable, CaseIterable {
+    case lance    // per-lane columns → change lane
+    case floor    // full-width slab on the deck → jump
+    case curtain  // full-width wall from the sky, stopping above the deck → slide
+
+    /// Whether this shape closes lanes individually. Only a lance does; the other two span the deck,
+    /// which is exactly why they cannot be answered laterally.
+    var isLateral: Bool { self == .lance }
+}
+
 /// Immutable per-frame view of an encounter, carried inside `GameSnapshot`.
 ///
 /// `z` follows the same convention as `EntityState`: negative is AHEAD of the player. The Warden
@@ -20,18 +39,22 @@ enum WardenPhase: Sendable, Equatable {
 struct WardenState: Sendable, Equatable {
     var phase: WardenPhase
     var world: Int                 // the world ordinal this Warden belongs to (3, 6, 9, …)
+    var rank: Int                  // 1…wardenRankCap — how hard this one fights
     var z: Double                  // stand-off ahead of the player (negative = ahead)
     var y: Double                  // hover height above the deck
     var shieldFraction: Double     // 1 → 0 across the shield phase; 0 once exposed
-    var coreHits: Int              // 0 ..< Tuning.wardenCoreHits
+    var coreHits: Int              // 0 ..< coreHitsNeeded
+    var coreHitsNeeded: Int        // rank-dependent, so the HUD must read THIS, never the constant
     var charge: Double             // the player's bank, 0…1 — drives fire rate, drains while firing
-    var beamMask: UInt8            // bit per closed lane; 0 when no attack is in flight
+    var band: WardenBand           // the shape of the strike in flight — the renderer's whole read
+    var beamMask: UInt8            // bit per closed lane; 0 when no attack is in flight (lance only)
     var telegraphProgress: Double  // 0 → 1 across the wind-up; 0 outside a telegraph
     var striking: Bool             // the beam is actually firing this tick
     var secondsRemaining: Double   // what is left of the shield window (`.shielded` only)
 
     /// Whether `lane` is closed by the beam currently in flight. A mask rather than an array so
-    /// building this every frame allocates nothing.
+    /// building this every frame allocates nothing. A floor or a curtain closes no *lane* — it spans
+    /// them all — so this is meaningful only for `.lance`.
     func closes(_ lane: Int) -> Bool { beamMask & (1 << UInt8(lane)) != 0 }
 }
 
@@ -43,10 +66,12 @@ struct WardenTick: Equatable {
     var justArmed = false      // the craft finished arriving and the shield phase began
     var shieldBroke = false    // the shield fell this tick — the core is open
     var telegraphBegan = false // a new attack wound up this tick (renderer/audio cue)
+    var telegraphBand: WardenBand = .lance   // …and the shape it wound up as
     var struck = false         // the beam fired this tick
-    var struckMask: UInt8 = 0  // the lanes it closed
-    var caughtPlayer = false   // the player was standing in one of them
-    var coreHit = false        // the player was clear — the open core took a hit
+    var struckMask: UInt8 = 0  // the lanes it closed (lance only)
+    var struckBand: WardenBand = .lance      // the shape that fired
+    var caughtPlayer = false   // the player failed to answer it
+    var coreHit = false        // the player answered it — the open core took a hit
     var killed = false         // that hit was the last one
     var brokeOff = false       // the shield window expired with the shield still up
     var finished = false       // the encounter is over; the core may clear it
@@ -70,9 +95,12 @@ struct WardenTick: Equatable {
 struct WardenEncounter {
     private(set) var phase: WardenPhase = .arriving
     private(set) var world: Int
+    private(set) var rank: Int
     private(set) var shield: Double = Tuning.wardenShieldHP
     private(set) var coreHits: Int = 0
     private(set) var beamMask: UInt8 = 0
+    /// The shape of the strike in flight. Meaningless outside a telegraph or its afterglow.
+    private(set) var band: WardenBand = .lance
 
     private var phaseT: Double = 0     // seconds inside the current phase
     private var windowT: Double = 0    // seconds since the shield phase opened
@@ -80,25 +108,40 @@ struct WardenEncounter {
     private var attacking = false      // inside a telegraph → strike → recover cycle
     private var strikeShow: Double = 0 // the beam stays lit this long AFTER it fires, so the hit is
                                        // something the player sees rather than infers
+    private var attackIndex = 0        // how many telegraphs have begun — indexes the script
     private var rng: SplitMix64
 
     /// `runSeed` and `world` fully determine the attack order — no `Date()`, no `Double.random`.
     init(world: Int, runSeed: UInt64) {
         self.world = world
+        self.rank = Tuning.wardenRank(world: world)
         // Mix the ordinal in rather than adding it, so consecutive worlds get unrelated streams.
         rng = SplitMix64(seed: runSeed ^ (UInt64(bitPattern: Int64(world)) &* 0x9E37_79B9_7F4A_7C15))
     }
 
+    /// Clean answers still needed to kill it. Rank-dependent, so nothing may read the old constant.
+    var coreHitsNeeded: Int { Tuning.wardenCoreHits(rank: rank) }
+
     /// Fraction of the shield still standing, 1 → 0.
     var shieldFraction: Double { max(0, shield / Tuning.wardenShieldHP) }
 
-    /// A beam is winding up RIGHT NOW and `beamMask` is the set of lanes it will close.
+    /// A strike is winding up RIGHT NOW. `band` is its shape and, for a lance, `beamMask` is the set
+    /// of lanes it will close.
     ///
-    /// False during the `strikeShow` afterglow, when `beamMask` is still set but the shot is spent —
-    /// so nothing (the Autopilot included) dodges a beam that has already fired.
+    /// False during the `strikeShow` afterglow, when the shape is still lit but the shot is spent —
+    /// so nothing (the Autopilot included) dodges a strike that has already fired.
     var isTelegraphing: Bool { phase == .exposed && attacking }
 
-    /// Whether the beam in flight closes `lane`.
+    /// The shape winding up right now, or `nil` if nothing is. The Autopilot's whole read.
+    var pendingBand: WardenBand? { isTelegraphing ? band : nil }
+
+    /// Seconds until the strike in flight resolves, or `.infinity` if none is. Lets the bot commit
+    /// to a jump or a slide at a lead rather than guessing from phase state.
+    var secondsToStrike: Double {
+        isTelegraphing ? max(0, Tuning.wardenTelegraphTime(rank: rank) - phaseT) : .infinity
+    }
+
+    /// Whether the strike in flight closes `lane` (lance only — the other shapes span the deck).
     func closes(_ lane: Int) -> Bool { beamMask & (1 << UInt8(lane)) != 0 }
 
     /// Advance one fixed step.
@@ -108,7 +151,15 @@ struct WardenEncounter {
     /// `playerX` is where the body actually is and is what the strike tests against — the same
     /// split the rest of the game uses, so a lane change that has been input but not yet travelled
     /// does not teleport you out of a beam.
+    ///
+    /// The vertical terms are the S-009 addition. `top`/`bottom` are the player's body extent at the
+    /// instant of the strike and are what a floor or a curtain tests; `jumpY`/`vy`/`grounded` are
+    /// read at telegraph LOCK to decide whether a floor is answerable from where the player already
+    /// is. All of them are final for the tick, because `GameCore.stepWarden` runs after
+    /// `stepPlayer` — a strike always resolves against where the body actually ended up.
     mutating func step(_ dt: Double, playerLane: Int, playerX: Double,
+                       playerTop: Double, playerBottom: Double,
+                       jumpY: Double, vy: Double, grounded: Bool,
                        charge: inout Double) -> WardenTick {
         var out = WardenTick()
         phaseT += dt
@@ -152,29 +203,35 @@ struct WardenEncounter {
             }
 
         case .exposed:
-            // The fired beam lingers briefly. `wardenAttackRecover` is longer than this, so the
-            // lit lane has always cleared before the next telegraph locks a new one.
+            // The fired strike lingers briefly. `wardenAttackRecover` is longer than this at every
+            // rank, so the lit shape has always cleared before the next telegraph locks a new one.
             if strikeShow > 0 {
                 strikeShow = max(0, strikeShow - dt)
                 if strikeShow == 0 { beamMask = 0 }
             }
             if !attacking {
-                if phaseT >= Tuning.wardenAttackRecover {
+                if phaseT >= Tuning.wardenAttackRecover(rank: rank) {
                     attacking = true; phaseT = 0
-                    beamMask = pickBeamMask(playerLane: playerLane)
+                    band = pickBand(jumpY: jumpY, vy: vy, grounded: grounded)
+                    beamMask = band.isLateral ? pickBeamMask(playerLane: playerLane) : 0b111
+                    attackIndex += 1
                     out.telegraphBegan = true
+                    out.telegraphBand = band
                 }
-            } else if phaseT >= Tuning.wardenTelegraphTime {
-                // The strike resolves on one tick: overlap a lit lane and it catches you, be clear
-                // of them all and the open core eats the shot.
+            } else if phaseT >= Tuning.wardenTelegraphTime(rank: rank) {
+                // The strike resolves on one tick: fail to answer its shape and it catches you,
+                // answer it and the open core eats the shot.
                 out.struck = true
                 out.struckMask = beamMask
-                if Collisions.wardenBeamHit(playerX: playerX, mask: beamMask) {
+                out.struckBand = band
+                if Collisions.wardenStrikeHit(playerX: playerX, playerTop: playerTop,
+                                              playerBottom: playerBottom, mask: beamMask,
+                                              band: band) {
                     out.caughtPlayer = true
                 } else {
                     coreHits += 1
                     out.coreHit = true
-                    if coreHits >= Tuning.wardenCoreHits {
+                    if coreHits >= coreHitsNeeded {
                         out.killed = true
                         phase = .dying
                     }
@@ -194,28 +251,93 @@ struct WardenEncounter {
         return out
     }
 
-    /// The lanes the next beam closes.
+    /// The lanes the next lance closes.
     ///
     /// It ALWAYS closes the lane the player is standing in as the telegraph begins, so standing
-    /// still is always fatal and the gun can never win a fight by itself. Some of the time it also
+    /// still is always fatal and the gun can never win a fight by itself. Increasingly often it also
     /// closes one other lane, leaving exactly one safe answer — which is what forces the wind-up to
-    /// be *read* rather than answered with a reflex sidestep.
+    /// be *read* rather than answered with a reflex sidestep. The chance climbs with every landed
+    /// core hit, so the last lance of a fight is a real read even though the first one forgives.
     ///
     /// Never more than two of three lanes, so a safe answer always exists and the attack always
     /// resolves in one cycle. One lane to move to, one input to give: decree 6 holds.
     private mutating func pickBeamMask(playerLane: Int) -> UInt8 {
         var mask: UInt8 = 1 << UInt8(playerLane)
-        if rng.chance(Tuning.wardenDoubleBeamChance) {
+        if rng.chance(Tuning.wardenDoubleBeamChance(rank: rank, coreHits: coreHits)) {
             let others = (0..<3).filter { $0 != playerLane }
             mask |= 1 << UInt8(others[rng.int(0, others.count - 1)])
         }
         return mask
     }
 
+    /// The shape of the next strike.
+    ///
+    /// **The order is scripted, not rolled**, and consumes zero RNG. Two reasons, both deliberate:
+    /// every player's first Warden is then the same designed introduction (lance to establish the
+    /// grammar, then the two new shapes, then a lance again), and a fight's difficulty stops being
+    /// a dice roll — nobody draws three curtains in a row and nobody draws none. The RNG is spent
+    /// only on *which lanes* a lance closes, which is the one place variety is worth entropy.
+    ///
+    /// The reachability substitution is the fairness term. A floor demands a jump, and a player who
+    /// is already airborne and descending may have no way to be high enough when it lands — an
+    /// unanswerable frame, which would breach the owner's "not impossible" bar. So if the script
+    /// says floor and a floor is not reachable from where the player already is, a CURTAIN fires
+    /// instead: answerable from every vertical state, always, so the function is total.
+    ///
+    /// This cannot be farmed. Jumping to dodge a floor you were going to be given anyway buys you a
+    /// curtain you must slam and slide under — a strictly *harder* demand, bought with an input you
+    /// did not need. Pinned by `WardenTests.testDodgingIntoTheSubstitutionIsNeverAnEasierFight`.
+    private func pickBand(jumpY: Double, vy: Double, grounded: Bool) -> WardenBand {
+        let scripted = Self.script(rank: rank)[attackIndex % Self.script(rank: rank).count]
+        guard scripted == .floor else { return scripted }
+        return Self.floorIsReachable(jumpY: jumpY, vy: vy, grounded: grounded,
+                                     secondsToStrike: Tuning.wardenTelegraphTime(rank: rank))
+            ? .floor : .curtain
+    }
+
+    /// The fixed shape order per rank. Rank 1 opens with a lance — the shape v1.9 already taught —
+    /// before asking for anything new, and every rank alternates channels so no two consecutive
+    /// strikes are answered by the same verb.
+    static func script(rank: Int) -> [WardenBand] {
+        switch rank {
+        case 1:  return [.lance, .floor, .curtain, .lance]
+        case 2:  return [.lance, .floor, .curtain, .lance, .floor]
+        default: return [.floor, .curtain, .lance, .floor, .curtain, .lance]
+        }
+    }
+
+    /// Whether the player can be clear of a full-width floor `T` seconds from now.
+    ///
+    /// Pure function of the player's vertical state — no simulation state, no RNG, Foundation only,
+    /// so the encounter, the bot and the tests all agree by construction.
+    ///
+    /// Clearing a floor means the body's underside is at or above `wardenFloorKillTop` (0.85), which
+    /// standing needs `jumpY ≥ 0.75`. From the ground that is any launch inside [0.078, 0.737] s of
+    /// the strike. Airborne there are two ways: the arc the player is already on is high enough when
+    /// it lands, or they touch down early enough to launch a fresh one. The second branch uses the
+    /// NATURAL landing time, never the air-slam — the rule must never depend on an input the player
+    /// might not give.
+    static func floorIsReachable(jumpY: Double, vy: Double, grounded: Bool,
+                                 secondsToStrike T: Double) -> Bool {
+        // Height the body must reach for its underside to clear the slab, standing.
+        let need = Tuning.wardenFloorKillTop - (Tuning.groundedCenterY - Tuning.bodyRadius) - 0.06
+        // Shortest time from a standing launch until the arc is above `need`.
+        let disc = Tuning.jumpV0 * Tuning.jumpV0 - 2 * Tuning.gravity * need
+        guard disc > 0 else { return false }   // unreachable even by a perfect jump — cannot happen
+        let riseT = (Tuning.jumpV0 - disc.squareRoot()) / Tuning.gravity
+        if grounded { return T >= riseT }
+
+        // Already airborne: is this arc high enough at the moment of the strike?
+        if jumpY + vy * T - 0.5 * Tuning.gravity * T * T >= need { return true }
+        // Otherwise, does it land early enough to leave room for a fresh jump?
+        let land = (vy + (vy * vy + 2 * Tuning.gravity * jumpY).squareRoot()) / Tuning.gravity
+        return land <= T - riseT
+    }
+
     /// The renderable view of this encounter.
     func state(charge: Double) -> WardenState {
         let telegraph: Double = (phase == .exposed && attacking)
-            ? min(1, phaseT / Tuning.wardenTelegraphTime) : 0
+            ? min(1, phaseT / Tuning.wardenTelegraphTime(rank: rank)) : 0
         let firing = phase == .exposed && strikeShow > 0
         // The craft closes in as it arrives and climbs away as it leaves, so entrance and exit read
         // as movement rather than a pop. `z` is negative = ahead, matching `EntityState`.
@@ -224,12 +346,15 @@ struct WardenEncounter {
         return WardenState(
             phase: phase,
             world: world,
+            rank: rank,
             z: -Tuning.wardenStandOff,
             y: Tuning.wardenHoverY + (1 - arrive) * Tuning.wardenArriveRise
                                    + leave * Tuning.wardenLeaveRise,
             shieldFraction: shieldFraction,
             coreHits: coreHits,
+            coreHitsNeeded: coreHitsNeeded,
             charge: charge,
+            band: band,
             beamMask: beamMask,
             telegraphProgress: telegraph,
             striking: firing,

@@ -68,11 +68,32 @@ final class WardenTests: XCTestCase {
     /// `wardenChargeDrain` must break `wardenShieldHP` inside `wardenShieldWindow` at charge 0.85
     /// and fail at 0.75. If a tuning edit moves that threshold, this says so.
     func testTheChargeThresholdIsWhereTheArithmeticSaysItIs() async {
+        // S-009 moved HP 100→80 and the window 9.0→7.0 together, which re-solves the threshold from
+        // 0.804 to 0.744. Derived in Python from the closed form c = (HP/W + 0.64W − 4)/16, having
+        // first reproduced the OLD pins with the same model so the model itself is trusted.
         XCTAssertTrue(breaksShield(startingCharge: 1.00), "a full bank must win the shield race")
         XCTAssertTrue(breaksShield(startingCharge: 0.85))
-        XCTAssertFalse(breaksShield(startingCharge: 0.75))
+        XCTAssertTrue(breaksShield(startingCharge: 0.75), "just above the threshold")
+        XCTAssertFalse(breaksShield(startingCharge: 0.70), "just below it")
         XCTAssertFalse(breaksShield(startingCharge: 0.00),
                        "a player who banked nothing must not be able to break a shield at all")
+    }
+
+    /// The shield phase is the one stretch of an encounter with nothing to DO in it, and the owner's
+    /// verdict on v1.9 was that the fight takes no effort. Watching a bar is not effort, so the
+    /// bar-watch is pinned SHORT — if a future retune quietly lengthens it, this says so.
+    func testTheShieldPhaseIsNotAnAgencyFreeMinute() async {
+        var enc = WardenEncounter(world: 3, runSeed: 1)
+        var charge = 1.0
+        var t = 0.0
+        for _ in 0..<(120 * 30) {
+            let ev = step(&enc, .standing, charge: &charge)
+            t += Tuning.tickDt
+            if ev.shieldBroke { break }
+        }
+        // 0.9 s of arrival + the shield race. Was 7.15 s in v1.9; must stay comfortably under 6.
+        XCTAssertLessThan(t, 6.0, "the fully-charged shield race must not become a bar-watch again")
+        XCTAssertGreaterThan(t, 3.0, "…but it must still be long enough to be a phase, not a blink")
     }
 
     /// The design's safety valve, and the single property that keeps a Warden from ever costing a
@@ -83,7 +104,7 @@ final class WardenTests: XCTestCase {
         var charge = 0.0
         var brokeOff = false, finished = false
         for _ in 0..<(120 * 30) {
-            let ev = enc.step(Tuning.tickDt, playerLane: 1, playerX: 0, charge: &charge)
+            let ev = step(&enc, .standing, charge: &charge)
             if ev.brokeOff { brokeOff = true }
             if ev.caughtPlayer { XCTFail("an unbroken shield must never produce an attack") }
             if ev.finished { finished = true; break }
@@ -92,43 +113,173 @@ final class WardenTests: XCTestCase {
         XCTAssertTrue(finished, "and the encounter must then end rather than hang")
     }
 
-    /// Auto-fire alone can never kill. A player who stands perfectly still, fully charged, breaks
-    /// the shield and is then caught by the first beam that stalks them — the gun opens the fight,
-    /// dodging is the only thing that finishes it.
-    func testTheGunAloneCanNeverKill() async {
-        var killed = 0, caught = 0
-        for seed in UInt64(1)...40 {
-            var enc = WardenEncounter(world: 3, runSeed: seed)
-            var charge = 1.0
-            for _ in 0..<(120 * 40) {
-                // Parked in lane 1 and never moving — the player does nothing but shoot.
-                let ev = enc.step(Tuning.tickDt, playerLane: 1, playerX: Tuning.laneX[1],
-                                  charge: &charge)
-                if ev.caughtPlayer { caught += 1; break }
-                if ev.killed { killed += 1; break }
-                if ev.finished { break }
+    /// **THE test for the owner's verdict: "it takes no effort to pass."**
+    ///
+    /// No fixed stance survives a fight. v1.9 asked for one verb — change lane — so a player had a
+    /// single motor pattern and three chances to use it. With three shapes whose answers are
+    /// disjoint, every posture a player could hold is killed by something:
+    ///
+    ///   standing still → the lance always closes your lane, and the floor is under you
+    ///   holding a slide → clears the curtain, but a slide LOWERS you into the floor
+    ///   jumping every beat → clears the floor, but nothing clears a curtain from the air
+    ///
+    /// If a future edit ever makes one posture answer everything, the fight silently collapses back
+    /// to what the owner rejected. This is the guard for that, and it is deliberately expressed as
+    /// "each of these must die" rather than as a hit count.
+    func testNoFixedStanceCanSurviveAFight() async {
+        let postures: [(String, Stance)] = [
+            ("standing still", .standing),
+            ("holding a slide", .sliding),
+            ("parked at the apex of a jump", .atApex),
+        ]
+        for (name, posture) in postures {
+            var caught = 0, killed = 0
+            for seed in UInt64(1)...40 {
+                var enc = WardenEncounter(world: 3, runSeed: seed)
+                var charge = 1.0
+                for _ in 0..<(120 * 40) {
+                    let ev = step(&enc, posture, charge: &charge)
+                    if ev.caughtPlayer { caught += 1; break }
+                    if ev.killed { killed += 1; break }
+                    if ev.finished { break }
+                }
             }
+            XCTAssertEqual(killed, 0, "\(name) must never win a fight — the gun is not a win button")
+            XCTAssertEqual(caught, 40, "\(name) must be punished in every single fight")
         }
-        XCTAssertEqual(killed, 0, "the gun must never be a win button")
-        XCTAssertGreaterThan(caught, 0, "and standing still must be punished")
     }
 
-    /// Three clean dodges kill it — never more, never a war of attrition.
-    func testThreeCleanDodgesKillAndNoMore() async {
-        var enc = WardenEncounter(world: 3, runSeed: 7)
-        var charge = 1.0
-        var cores = 0, killed = false
-        for _ in 0..<(120 * 40) {
-            // Always stand clear of every lane the beam has closed.
-            let dodge = (0..<3).first { !enc.closes($0) } ?? 1
-            let ev = enc.step(Tuning.tickDt, playerLane: dodge, playerX: Tuning.laneX[dodge],
-                              charge: &charge)
-            if ev.coreHit { cores += 1 }
-            XCTAssertFalse(ev.caughtPlayer, "a player standing clear must never be caught")
-            if ev.killed { killed = true; break }
+    /// A player who answers every shape correctly always wins, in exactly the number of clean
+    /// answers the rank asks for — never more, never a war of attrition.
+    func testAnsweringEveryShapeKillsItInExactlyTheRankedCount() async {
+        for (world, rank) in [(3, 1), (6, 2), (9, 3), (12, 3), (300, 3)] {
+            let r = try! XCTUnwrap(Optional(rank))
+            let out = runPerfectFight(world: world, seed: 7)
+            XCTAssertTrue(out.killed, "world \(world): a perfect answer set must kill it")
+            XCTAssertFalse(out.caught, "world \(world): a correct answer must never be caught")
+            XCTAssertEqual(out.cores, Tuning.wardenCoreHits(rank: r),
+                           "world \(world) is rank \(r)")
+            XCTAssertLessThan(out.seconds, Tuning.wardenMaxSeconds,
+                              "world \(world): a won fight must finish well inside the cap")
         }
-        XCTAssertTrue(killed)
-        XCTAssertEqual(cores, Tuning.wardenCoreHits)
+    }
+
+    /// The fight gets harder the deeper you meet it — v1.9 used `world` for nothing but the RNG
+    /// seed, so every Warden in the game was literally the same encounter.
+    func testALaterWardenIsAHarderWarden() async {
+        let r1 = runPerfectFight(world: 3, seed: 11)
+        let r2 = runPerfectFight(world: 6, seed: 11)
+        let r3 = runPerfectFight(world: 9, seed: 11)
+        XCTAssertLessThan(r1.cores, r2.cores)
+        XCTAssertLessThan(r2.cores, r3.cores)
+        XCTAssertLessThan(Tuning.wardenTelegraphTime(rank: 3), Tuning.wardenTelegraphTime(rank: 1),
+                          "a rank-3 wind-up must be tighter than a rank-1")
+        // …and it must flatten, or it eventually stops being beatable ("not impossible").
+        XCTAssertEqual(Tuning.wardenRank(world: 12), Tuning.wardenRank(world: 300))
+    }
+
+    /// Every shape must be answerable from EVERY vertical state, or some frame is unwinnable — the
+    /// owner's "not impossible" bar. Checked directly against the predicate rather than through a
+    /// simulation, so a geometry change is caught even if no seed happens to produce the case.
+    func testEveryShapeHasAnAnswerAndTheAnswersAreDisjoint() async {
+        func hit(_ s: Stance, _ band: WardenBand, mask: UInt8 = 0b111) -> Bool {
+            let b = s.bounds
+            return Collisions.wardenStrikeHit(playerX: s.x, playerTop: b.top,
+                                              playerBottom: b.bottom, mask: mask, band: band)
+        }
+        // Each shape HAS an answer.
+        XCTAssertFalse(hit(.jumping, .floor), "a jump must clear a floor")
+        XCTAssertFalse(hit(.sliding, .curtain), "a slide must clear a curtain")
+
+        // …and the answers are DISJOINT, which is what stops one input answering everything.
+        XCTAssertTrue(hit(.sliding, .floor),
+                      "sliding must NOT clear a floor — it lowers you into it")
+        XCTAssertTrue(hit(.jumping, .curtain),
+                      "jumping must NOT clear a curtain")
+        XCTAssertTrue(hit(.standing, .floor))
+        XCTAssertTrue(hit(.standing, .curtain))
+    }
+
+    /// **The single most load-bearing property in the redesign.**
+    ///
+    /// The curtain has no ceiling, so it cannot be jumped from any height the player can reach. If
+    /// someone ever gives it a top — the obvious "reuse `barKillTop`" edit — the floor's clearance
+    /// window becomes a superset of the curtain's, one jump answers both shapes, slide becomes
+    /// optional and the verb ladder collapses straight back to the binary the owner rejected.
+    /// The bot would then certify the degenerate strategy, because "jump on any band" clears both.
+    func testTheCurtainCannotBeJumpedFromAnyState() async {
+        let apex = Tuning.jumpV0 * Tuning.jumpV0 / (2 * Tuning.gravity)
+        for step in 0...100 {
+            let jumpY = apex * Double(step) / 100
+            for sy in [1.0, Tuning.slideScaleY] {
+                let b = Collisions.playerBounds(jumpY: jumpY, scaleY: sy)
+                if sy == 1.0 || jumpY > 0.51 {
+                    XCTAssertTrue(
+                        Collisions.wardenStrikeHit(playerX: 0, playerTop: b.top,
+                                                   playerBottom: b.bottom, mask: 0b111,
+                                                   band: .curtain),
+                        "a curtain must catch a player at jumpY \(jumpY), scaleY \(sy)")
+                }
+            }
+        }
+        // Being AIRBORNE AND SLIDING at the apex — the most favourable jump state there is — must
+        // still be caught, or the curtain is jumpable after all.
+        let b = Stance(jumpY: apex, sy: Tuning.slideScaleY, grounded: false).bounds
+        XCTAssertGreaterThan(b.top, Tuning.wardenCurtainKillBottom)
+    }
+
+    /// The reachability substitution must never be a free ride. If a player is airborne when a floor
+    /// would have locked, they get a CURTAIN instead — and a curtain is a strictly *harder* demand
+    /// (it must be answered from a state they have to slam out of), bought with a jump they did not
+    /// need. If the substitution ever became the easier branch, jumping on the beat would be a
+    /// degenerate strategy that farms it.
+    func testDodgingIntoTheSubstitutionIsNeverAnEasierFight() async {
+        // Grounded with time to spare: a floor is reachable, so the script stands.
+        XCTAssertTrue(WardenEncounter.floorIsReachable(jumpY: 0, vy: 0, grounded: true,
+                                                       secondsToStrike: 0.80))
+        // Grounded but far too late to complete a launch: not reachable.
+        XCTAssertFalse(WardenEncounter.floorIsReachable(jumpY: 0, vy: 0, grounded: true,
+                                                        secondsToStrike: 0.05))
+        // LOW and falling fast with no time to land and re-jump: the genuine unwinnable case, and
+        // the only reason the substitution exists.
+        XCTAssertFalse(WardenEncounter.floorIsReachable(jumpY: 0.30, vy: -8, grounded: false,
+                                                        secondsToStrike: 0.10))
+        // High and descending, but still above the clearance height when the strike lands — that is
+        // reachable and must NOT substitute, or a player who jumped early would be handed a softer
+        // shape for free.
+        XCTAssertTrue(WardenEncounter.floorIsReachable(jumpY: 2.0, vy: -6, grounded: false,
+                                                       secondsToStrike: 0.10))
+        // Low, but with a full wind-up to land and launch again: reachable.
+        XCTAssertTrue(WardenEncounter.floorIsReachable(jumpY: 0.5, vy: -5, grounded: false,
+                                                       secondsToStrike: 0.60))
+        // The substitution's answer (slide) does not also clear the floor it replaced — that is
+        // what makes it a harder demand rather than a softer one.
+        let sliding = Stance.sliding.bounds
+        XCTAssertTrue(Collisions.wardenStrikeHit(playerX: 0, playerTop: sliding.top,
+                                                 playerBottom: sliding.bottom, mask: 0b111,
+                                                 band: .floor))
+    }
+
+    /// A spent strike must always clear before the next telegraph locks, at every rank — otherwise
+    /// `beamMask` means two things at once and the lit shape on screen is a lie. This was only a
+    /// comment in v1.9; the per-rank recover table makes it one edit away from being false.
+    func testASpentStrikeAlwaysClearsBeforeTheNextTelegraphLocks() async {
+        for rank in 1...Tuning.wardenRankCap {
+            XCTAssertLessThan(Tuning.wardenStrikeShowTime, Tuning.wardenAttackRecover(rank: rank),
+                              "rank \(rank): the afterglow outlasts the recovery")
+        }
+    }
+
+    /// The shape ORDER is scripted and consumes no RNG, so every player's first Warden is the same
+    /// designed introduction rather than a dice roll that might open with the hardest shape.
+    func testTheShapeOrderIsDesignedNotRolled() async {
+        let a = runPerfectFight(world: 3, seed: 1).bands
+        let b = runPerfectFight(world: 3, seed: 999_999).bands
+        XCTAssertEqual(a, b, "two different seeds must meet the same rank-1 shape order")
+        XCTAssertEqual(a.first, .lance,
+                       "the first shape a player ever sees must be the one v1.9 already taught")
+        XCTAssertTrue(a.contains(.floor) && a.contains(.curtain),
+                      "…and the first fight must still introduce both new shapes")
     }
 
     // MARK: - determinism (iron rule 2)
@@ -213,10 +364,28 @@ final class WardenTests: XCTestCase {
     /// `wardenMaxSeconds` is the term that makes this provable — without it a player trading
     /// shields could extend a fight indefinitely.
     func testAnEncounterCanNeverOutrunItsArena() async {
-        let worstCaseMetres = Tuning.wardenMaxSeconds * Tuning.boostSpeedMax
-        XCTAssertLessThanOrEqual(worstCaseMetres, Tuning.wardenArenaLength, String(format:
-            "%.0f s at %.0f m/s = %.0f m of fight inside a %.0f m arena",
-            Tuning.wardenMaxSeconds, Tuning.boostSpeedMax, worstCaseMetres, Tuning.wardenArenaLength))
+        // **The v1.9 form of this test was wrong and passed anyway (S-009).** It computed
+        // `wardenMaxSeconds × boostSpeedMax` alone, omitting both the arm window (a Warden can arm
+        // up to 60 m into the arena) and the `.dying`/`.leaving` phases, which the cap in
+        // `WardenEncounter.step` explicitly exempts. The honest worst case at the old 16 s cap was
+        // 704.4 m inside a 660 m arena — reachable by a player chaining banked Speed Ups, since
+        // `deployOverdrive` guards only `boostT <= 0`. Lowering the cap to 14.5 closes it for real.
+        let exitSeconds = Tuning.wardenMaxSeconds + Tuning.wardenDieTime + Tuning.wardenLeaveTime
+        let worst = Tuning.wardenArmWindow + exitSeconds * Tuning.boostSpeedMax
+        XCTAssertLessThanOrEqual(worst, Tuning.wardenArenaLength, String(format:
+            "%.0f m arm window + %.1f s at %.0f m/s = %.1f m of fight inside a %.0f m arena",
+            Tuning.wardenArmWindow, exitSeconds, Tuning.boostSpeedMax, worst,
+            Tuning.wardenArenaLength))
+
+        // And the cap must still clear the longest DESIGNED encounter, or a fight the player is
+        // winning could be cut off by the ceiling — which would read as the game giving up.
+        for rank in 1...Tuning.wardenRankCap {
+            let longest = Tuning.wardenArriveTime + Tuning.wardenShieldWindow
+                + Double(Tuning.wardenCoreHits(rank: rank))
+                * (Tuning.wardenTelegraphTime(rank: rank) + Tuning.wardenAttackRecover(rank: rank))
+            XCTAssertLessThanOrEqual(longest, Tuning.wardenMaxSeconds,
+                "rank \(rank)'s longest winnable fight is \(longest) s against a \(Tuning.wardenMaxSeconds) s cap")
+        }
     }
 
     /// A checkpoint run that begins deep inside an arena must not summon a Warden it has no room to
@@ -239,6 +408,7 @@ final class WardenTests: XCTestCase {
     /// green and mean nothing; this turns red instead.
     func testTheSoakActuallyDrivesTheBotThroughWardens() async {
         var armed = 0, killed = 0, strikes = 0, deaths = 0
+        var byBand: [WardenBand: Int] = [:]
         for s in 0..<24 {
             let seed = UInt64(s) &* 0x9E37_79B9_7F4A_7C15 &+ 0x1234_5678
             let core = GameCore(seed: 1)
@@ -246,7 +416,7 @@ final class WardenTests: XCTestCase {
                 switch fx {
                 case .wardenArrived: armed += 1
                 case .wardenDefeated: killed += 1
-                case .wardenStruck: strikes += 1
+                case let .wardenStruck(_, band, _): strikes += 1; byBand[band, default: 0] += 1
                 default: break
                 }
             }
@@ -262,33 +432,126 @@ final class WardenTests: XCTestCase {
         // 6,000 m crosses worlds 3 and 6, so every seed must meet exactly two.
         XCTAssertEqual(armed, 24 * 2, "every 6,000 m run must meet both Wardens")
         XCTAssertEqual(deaths, 0, "the bot must survive every encounter it is driven through")
-        XCTAssertGreaterThanOrEqual(strikes, armed * Tuning.wardenCoreHits,
-                                    "each kill takes at least \(Tuning.wardenCoreHits) beams")
-        XCTAssertEqual(killed, armed, "a fully-charged bot that dodges cleanly must win every fight")
+        // 6,000 m crosses worlds 3 (rank 1, 4 hits) and 6 (rank 2, 5 hits).
+        let perRun = Tuning.wardenCoreHits(rank: 1) + Tuning.wardenCoreHits(rank: 2)
+        XCTAssertGreaterThanOrEqual(strikes, 24 * perRun,
+                                    "each pair of kills takes at least \(perRun) strikes")
+        XCTAssertEqual(killed, armed, "a fully-charged bot that answers cleanly must win every fight")
+
+        // **The guard that keeps the proof honest**, and the reason this test exists at all: a green
+        // 200-seed soak means nothing if the bot never actually MET the hazard. If a future edit
+        // stopped the vertical shapes ever firing — or quietly substituted every floor away — every
+        // assertion above would stay green while the fight silently reverted to the one-verb
+        // encounter the owner rejected. Same guard as the chasm's, for the same reason.
+        for band in WardenBand.allCases {
+            XCTAssertGreaterThan(byBand[band, default: 0], 0,
+                "the soak never fired a \(band) — the bot is not being tested on that verb")
+        }
+        let vertical = byBand[.floor, default: 0] + byBand[.curtain, default: 0]
+        XCTAssertGreaterThan(vertical, strikes / 3,
+            "vertical shapes are \(vertical)/\(strikes) of all strikes — the fight has drifted back "
+            + "toward being answerable with lane changes alone")
     }
 
     // MARK: - helpers
+
+    /// A player's whole tick-relevant state, so a test can express "standing", "at the top of a
+    /// jump" or "sliding" without threading six arguments through every call.
+    struct Stance {
+        var lane = 1
+        var jumpY = 0.0
+        var sy = 1.0          // 1 standing, `Tuning.slideScaleY` sliding
+        var vy = 0.0
+        var grounded = true
+
+        var x: Double { Tuning.laneX[lane] }
+        var bounds: (bottom: Double, top: Double) {
+            Collisions.playerBounds(jumpY: jumpY, scaleY: sy)
+        }
+
+        static let standing = Stance()
+        /// High enough for the body's underside to clear a floor slab.
+        static let jumping = Stance(jumpY: 0.9, sy: 1.0, vy: 1.0, grounded: false)
+        /// Low enough for the body's top to pass under a curtain.
+        static let sliding = Stance(jumpY: 0, sy: Tuning.slideScaleY, grounded: true)
+        /// At the apex of a jump — the worst case for a curtain, and the case that proves it is
+        /// un-jumpable rather than merely hard to jump.
+        static let atApex = Stance(jumpY: Tuning.jumpV0 * Tuning.jumpV0 / (2 * Tuning.gravity),
+                                   sy: 1.0, vy: 0, grounded: false)
+
+        /// The stance that correctly answers `band` — the thing a perfect player would be in.
+        static func answering(_ band: WardenBand, safeLane: Int) -> Stance {
+            switch band {
+            case .lance:   return Stance(lane: safeLane)
+            case .floor:   return jumping
+            case .curtain: return sliding
+            }
+        }
+    }
+
+    /// One tick of an encounter with the player in `stance`.
+    @discardableResult
+    private func step(_ enc: inout WardenEncounter, _ stance: Stance,
+                      charge: inout Double) -> WardenTick {
+        let b = stance.bounds
+        return enc.step(Tuning.tickDt, playerLane: stance.lane, playerX: stance.x,
+                        playerTop: b.top, playerBottom: b.bottom,
+                        jumpY: stance.jumpY, vy: stance.vy, grounded: stance.grounded,
+                        charge: &charge)
+    }
+
+    /// Drive an encounter with a player who answers every strike correctly, and report what
+    /// happened. The stance is chosen from the band the moment it locks, which is exactly the
+    /// information a human has.
+    private func runPerfectFight(world: Int, seed: UInt64, startingCharge: Double = 1.0)
+        -> (killed: Bool, caught: Bool, cores: Int, bands: [WardenBand], seconds: Double) {
+        var enc = WardenEncounter(world: world, runSeed: seed)
+        var charge = startingCharge
+        var stance = Stance.standing
+        var bands: [WardenBand] = []
+        var cores = 0, ticks = 0
+        var killed = false, caught = false
+        while ticks < 120 * 40 {
+            let ev = step(&enc, stance, charge: &charge)
+            ticks += 1
+            if ev.telegraphBegan {
+                bands.append(ev.telegraphBand)
+                let safe = (0..<3).first { !enc.closes($0) } ?? stance.lane
+                stance = .answering(ev.telegraphBand, safeLane: safe)
+            }
+            if ev.coreHit { cores += 1 }
+            if ev.caughtPlayer { caught = true }
+            if ev.killed { killed = true }
+            if ev.finished { break }
+        }
+        return (killed, caught, cores, bands, Double(ticks) * Tuning.tickDt)
+    }
 
     /// Run an encounter to its conclusion with a fixed starting bank; true if the shield fell.
     private func breaksShield(startingCharge: Double) -> Bool {
         var enc = WardenEncounter(world: 3, runSeed: 1)
         var charge = startingCharge
         for _ in 0..<(120 * 30) {
-            let ev = enc.step(Tuning.tickDt, playerLane: 1, playerX: 0, charge: &charge)
+            let ev = step(&enc, .standing, charge: &charge)
             if ev.shieldBroke { return true }
             if ev.brokeOff || ev.finished { return false }
         }
         return false
     }
 
-    /// The sequence of lane masks an encounter's beams take, given a player who never moves.
+    /// The sequence of (shape, lane mask) an encounter's strikes take, given a player who never
+    /// moves. Off in lane-space so a lance always locks the same lane and only the RNG varies.
     private func beamTrace(seed: UInt64, world: Int) -> [UInt8] {
         var enc = WardenEncounter(world: world, runSeed: seed)
         var charge = 1.0
         var masks: [UInt8] = []
+        var stance = Stance.standing
+        stance.lane = 1
         for _ in 0..<(120 * 40) {
-            let ev = enc.step(Tuning.tickDt, playerLane: 1, playerX: 9_999, charge: &charge)
-            if ev.telegraphBegan { masks.append(enc.beamMask) }
+            let ev = enc.step(Tuning.tickDt, playerLane: 1, playerX: 9_999,
+                              playerTop: 9_999, playerBottom: 9_999,
+                              jumpY: 0, vy: 0, grounded: true, charge: &charge)
+            if ev.telegraphBegan, ev.telegraphBand == .lance { masks.append(enc.beamMask) }
             if ev.finished { break }
         }
         return masks

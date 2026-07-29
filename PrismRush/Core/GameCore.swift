@@ -385,13 +385,19 @@ final class GameCore {
             emit(.wardenArrived(world: w))
         }
         guard var w = warden else { return }
-        let ev = w.step(dt, playerLane: laneIndex, playerX: px, charge: &wardenCharge)
+        // Body extent at THIS instant — `stepPlayer` has already run, so a floor or a curtain
+        // resolves against where the player actually ended up, exactly as a wall does.
+        let pb = Collisions.playerBounds(jumpY: jumpY, scaleY: sy)
+        let ev = w.step(dt, playerLane: laneIndex, playerX: px,
+                        playerTop: pb.top, playerBottom: pb.bottom,
+                        jumpY: jumpY, vy: vy, grounded: grounded,
+                        charge: &wardenCharge)
         warden = w
 
         if ev.shieldBroke { emit(.wardenShieldBroke) }
-        if ev.telegraphBegan { emit(.wardenTelegraph(mask: w.beamMask)) }
+        if ev.telegraphBegan { emit(.wardenTelegraph(mask: w.beamMask, band: ev.telegraphBand)) }
         if ev.struck {
-            emit(.wardenStruck(mask: ev.struckMask, caught: ev.caughtPlayer))
+            emit(.wardenStruck(mask: ev.struckMask, band: ev.struckBand, caught: ev.caughtPlayer))
             if ev.caughtPlayer && invulnT <= 0 {
                 // A landed beam is exactly as lethal as a wall, and a held shield eats it exactly
                 // as it eats a wall. It does NOT count as a dodge — absorbing is surviving, not
