@@ -4,34 +4,38 @@
 > wins** and the other file gets fixed. That includes `state.md` and `README.md` at the repo root,
 > which are the project's human-facing history, not the agent's source of truth.
 
-- **Last written by:** session 008 (2026-07-29) — **THE WARDENS, phase 1**: the encounter is built,
-  playable and verified on the simulator. Owner picked it over the audio pass when asked.
-- **Program phase:** audits 2 of 7 done, phase gate gone (D-005). S-004/005/007/008 were fix/build
-  sessions; five audits remain unrun.
-- **Next session:** 009 — see `HANDOFF.md`. The owner's playtest gates what comes next
-  (`10_WARDENS.md §9` sets that deliberately). If he says the fight feels good, phase 2 (abduction)
-  then **phase 3 (Countermeasures, the part that actually closes PR-0401)**. If not, retune first.
-  **PR-0456, the full audio pass, is still unstarted and is still a standing owner request.**
-- **PR-0457 phase 1 is DONE.** A Warden guards every third world (2,400 m) inside a 660 m arena
-  swept clear of obstacles but NOT gems — gems are the ammunition. Shield broken by auto-fire whose
-  rate is a charge bank earned from gems; beams then telegraph and always close the player's lane
-  (40% a second one too); three clean dodges kill it. Caught = death; failing to damage = it leaves
-  and you keep the run. **209 SPM + 228 Xcode tests green** (was 196/215).
-- **PR-0401 IS STILL OPEN.** The coin sink still buys nothing that alters play — Countermeasures are
-  phase 3. Phase 1 deliberately shipped the *fight*, not the *economy*, because the design doc gates
-  further building on the owner playing it.
-- **`DailyChallenge.layoutVersion` is 10** as of S-008. Arming a Warden costs ZERO spawn-stream
-  draws (own derived RNG; arena filtered at `apply` after `fill` has drawn), but the entity set on
-  the deck changes, so the bump is for the layout promise, not the RNG. A v11 pin is pre-armed.
-- **The chasm guard was repaired, not relaxed.** An arena eats tier six's highest-frequency band, so
-  a per-eligible-km rate is tied to `wardenArenaLength` and is the wrong instrument. Frequency now
-  belongs to `DifficultyCurveTests` (unchanged: 1.84/1.06/1.41/2.20 per km); the bot test guards
-  presence. A/B with suppression off: **0.92/km either way — the Wardens are rate-neutral.**
-- **Everything is pushed to GitHub.** Sessions 006 and 007 had never been pushed; `origin/main` was
-  12 commits behind at the start of S-008 and is now current.
-- **The hub was redesigned in S-005** and its failure states swept in S-007; see those logs.
-- **Decree 1 covers TIME as well as space (D-009/D-011).** No skin changes colour with the world or
-  as it runs; Prism's rainbow is static.
+- **Last written by:** session 009 (2026-07-30) — the owner rejected the Warden TWICE, on two
+  different axes, and both were answered. Round 1 "its too easy… three hits and takes no effort":
+  the fight now demands all four verbs. Round 2 "it really makes no sense… no animations… same every
+  time": a presentation pass, because the encounter was built in the SIMULATION and only sketched on
+  SCREEN.
+- **218 SPM tests green** (was 209). `./Tools/build.sh` green. Five commits: `7331d1e`, `7d99d12`,
+  `b6b9ba0`, `21dacc8`, `2185c18`.
+- **`DailyChallenge.layoutVersion` is STILL 10.** S-009 spent its difficulty on the fight, not the
+  deck: nothing touched the spawner, the patterns, the arena geometry or RNG consumption. The
+  pre-armed v11 golden is UNSPENT, and the post-kill dead-air fix is the one thing that would spend it.
+- **Three attack shapes with DISJOINT answers** — LANCE (lane), FLOOR (jump), CURTAIN (slide). The
+  load-bearing constant is `wardenCurtainKillBottom` with NO ceiling: reusing `barKillTop` would make
+  the floor's clearance window a strict superset of the bar's, one jump would answer both, and the
+  bot would certify the degenerate strategy. Pinned by `testTheCurtainCannotBeJumpedFromAnyState`.
+- **`LaggedAutopilotTests` is the gate that can actually fail.** The Autopilot has perfect
+  information and zero latency, so it finds a 0.70 s wind-up as easy as 0.85 — every assertion in
+  this program stayed green while the owner called the fight effortless. A 0.40 s human reaction must
+  now survive every encounter; a 0.75 s one must die. Both directions pass.
+- **Rank exists.** `world` previously drove nothing but the RNG seed, so every Warden in the game was
+  literally the same fight. Worlds 3/6/9 are now telegraph 0.80/0.75/0.70, hits 4/5/6, flattening at
+  rank 3 so it never stops being beatable.
+- **Owner decisions on record (2026-07-30):** a Warden EXPLODES rather than peeling away; the shield
+  phase STAYS but must be visibly drawn; a beam STUMBLES first and KILLS second; per-world
+  antagonists are wanted.
+- **NEXT SESSION'S WORK IS ALREADY SPECIFIED** in gitignored scratch: `s009b_BRIEF.md` (the decision
+  brief the owner answered), `s009c_SPEC.md` (the identity/presence implementation spec),
+  `s009b_probe_stumble.md` (stumble geometry, measured), `s009b_probe_pacing.md` (dead-air arithmetic).
+- **PR-0401 IS STILL OPEN** — Countermeasures unbuilt. The shield-absorb fix does deliver the design
+  doc's "Ion Shield" using a pickup that already exists.
+- **Coin income is uncapped and the score multiplier is NOT the cause** — it multiplies `bonus` only
+  and never touches coins, which are four independent components. The owner read "×5" inside the gem
+  chip and reasonably concluded otherwise; that was a HUD legibility bug.
 - **Rayan's standing instruction (2026-07-28):** *"never be limited by arbitrary rules — just work
   however you think is best."* Read D-005 before reinstating any process.
 - **Direction:** submission IS the goal, timing is open. **Polish first, publish at the end.**

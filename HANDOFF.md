@@ -1,54 +1,46 @@
-# HANDOFF → Session 009
+# HANDOFF → Session 010
 
 ## Paste this to start the next session
 
 ```
-You are session 009 of a long-running program to finish and ship Prism Rush, a neon three-lane
+You are session 010 of a long-running program to finish and ship Prism Rush, a neon three-lane
 endless runner for iPhone (Swift 6, SwiftUI, RealityKit, zero dependencies, zero binary assets).
 
 Read docs/agent/01_RULES.md, then docs/agent/02_STATE.md, then this file.
 
-You may and should change code. 01_RULES.md is split into judgment (advisory) and nine invariants
-(damage prevention). Rayan's standing instruction is "never be limited by arbitrary rules, just
-work however you think is best." Do not reinstate ceremony. Do not ask permission to fix something
-you can verify.
+You may and should change code. Rayan's standing instruction is "never be limited by arbitrary
+rules, just work however you think is best." Do not ask permission to fix something you can verify.
 
-Direction: App Store submission IS the goal, timing is open, and Rayan wants the app POLISHED
-before publishing. Design and feel outrank compliance right now.
+Direction: App Store submission IS the goal, timing is open, and Rayan wants the app POLISHED first.
+Design and feel outrank compliance right now.
 
-ASK RAYAN FIRST, in your opening message — ONE question, because his answer splits the session:
+YOUR JOB, in priority order. Rayan has ALREADY ANSWERED the design questions — do not re-ask:
 
-  Has he PLAYED the Warden yet, and does the fight feel good?
+  1. THE STUMBLE. He asked for it directly: "functionality like subway surfers where you basically
+     have two lives. if you half hit a wall you slow down for a sec... not two lives per say more
+     like 1.5." Design + measured numbers are in docs/agent/audits/scratch/s009b_BRIEF.md §5 and
+     s009b_probe_stumble.md. His rulings: a Warden beam STUMBLES the first time and KILLS the second
+     ("stumble first then kill"), and a stumble RESETS the multiplier.
+  2. THE WARDEN IDENTITY PASS. Full implementation spec, already written and adversarially checked:
+     docs/agent/audits/scratch/s009c_SPEC.md. It answers his verdict verbatim — "its just a basic
+     triangle. no animations. nothing to tell you what it is or what it does. no screen shake. no
+     effects. same every time. same functionality every time." Build order is in §6 of that spec;
+     the first two steps alone fix four of his six complaints.
+  3. THE POST-KILL DEAD AIR. Measured: 5.4–10.4 s of empty deck after the fight, and the LONGEST
+     hole belongs to the WEAKEST player. Structural, not a tuning miss — a variable-length fight
+     inside a fixed-length arena. Options and costs in s009b_BRIEF.md §1 item 5 and
+     s009b_probe_pacing.md. This is the ONE item that costs a layoutVersion bump. Get his call
+     before spending it.
 
-  - If YES -> build phase 2 (abduction: caught = struggle-to-escape, then death) and then
-    PHASE 3, THE COUNTERMEASURES. Phase 3 is the one that actually closes PR-0401 — the coin sink
-    that buys nothing altering play — which is the largest structural gap left in the game. Phase 1
-    shipped the FIGHT, not the ECONOMY, on purpose.
-  - If NO / not yet -> do NOT build more on top of it. docs/agent/10_WARDENS.md section 9 gates
-    phase 2 on him playing phase 1, deliberately, because a Warden that reads badly at speed is
-    worse than no Warden. Offer PR-0456, the FULL AUDIO PASS, instead — a standing owner request
-    from S-006, still unstarted, and independent of the Wardens.
-
-To let him play it in ten seconds:
-  ./Tools/build.sh
-  xcrun simctl boot 10C15FE0-3D9A-40D5-9E45-C0702E906DF3
-  xcrun simctl install 10C15FE0-3D9A-40D5-9E45-C0702E906DF3 \
-    .dd/Build/Products/Debug-iphonesimulator/PrismRush.app
-  SIMCTL_CHILD_PR_WARDEN=1 xcrun simctl launch 10C15FE0-3D9A-40D5-9E45-C0702E906DF3 \
-    com.rayancheca.prismrush
-PR_WARDEN=1 starts the run at the mouth of the first arena with a full charge bank. Tap the splash
-FAST — the run advances behind it.
-
-Build and RUN the app before you claim anything works. That rule is now eight for eight. Session 008
-shipped a beam render that looked right in code and read as terrain on screen; only a screenshot
-caught it. `swift test` green is NOT the app working: it compiles Core/, seven Meta/ files and
-Audio/Synth.swift, and none of UI/, Render/, IAP/, StoreKit or GameKit.
+READ THESE FOUR SCRATCH FILES FIRST — ~200 KB of already-done work, and they are gitignored:
+  docs/agent/audits/scratch/s009b_BRIEF.md          the decision brief he answered
+  docs/agent/audits/scratch/s009c_SPEC.md           the identity/presence implementation spec
+  docs/agent/audits/scratch/s009b_probe_stumble.md  the stumble geometry, measured
+  docs/agent/audits/scratch/s009b_probe_pacing.md   the dead-air arithmetic
 
 FIRST COMMAND, before anything else. docs/agent/scratch/ and docs/agent/audits/scratch/ are
-gitignored and hold ~200 MB of working detail from eight sessions, including S-008's Warden
-screenshots and the seven scout reports + integration map the build was planned from. Git does NOT
-move them between worktrees. This copies them from wherever they still exist and is a no-op if you
-already have them:
+gitignored and hold ~200 MB from nine sessions. Git does NOT move them between worktrees. No-op if
+you already have them:
 
   for w in "" .claude/worktrees/prism-rush-spawn-path-c7d88a \
            .claude/worktrees/prism-rush-design-audit-562d27 \
@@ -60,123 +52,117 @@ already have them:
 
 If both are empty, say so in your report rather than working blind.
 
+BUILD AND RUN THE APP BEFORE YOU CLAIM ANYTHING WORKS. That rule is now nine for nine, and S-009 is
+the sharpest example yet: it shipped a gun beam that compiled, was wired, passed 218 tests, and
+rendered as a sliver pointing at nothing — because a comment asserted a mesh's axis without reading
+the six lines it described. `swift test` compiles Core/, seven Meta/ files and Audio/Synth.swift.
+It does NOT compile UI/, Render/, IAP/, StoreKit or GameKit.
+
 Report back in three lines.
 This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/projects/prism-rush-ios/HANDOFF.md
 ```
 
 ---
 
-# What session 008 did
+# What session 009 did
 
-**THE WARDENS, phase 1 — built, playable, verified on the simulator, pushed.**
-209 SPM tests green (was 196), 228 Xcode tests green (was 215).
+Rayan played the Warden and rejected it twice, on two different axes. Both were answered.
 
-Rayan chose the Wardens over the audio pass when asked at the top of the session. He also asked
-mid-session that everything be pushed to GitHub — it is, including sessions 006 and 007, which had
-never been pushed (`origin/main` was 12 commits behind).
+**Round 1 — "its too easy. its just three hits and takes no effort to pass."**
+The cause was structural: `Collisions.wardenBeamHit` took no Y parameter, so jump and slide were
+*provably inert* inside a fight. The boss asked for one of the player's four verbs, three times,
+with an 0.85 s wind-up, and 60% of the time left two safe lanes.
 
-Full account: `docs/agent/sessions/SESSION_008.md`. Design, corrected against the build:
-`docs/agent/10_WARDENS.md`. Decisions: **D-015** (a Warden is not an `EntityKind`), **D-016** (every
-beam closes the player's own lane), **D-017** (the arena is a pure function of distance, and costs a
-layoutVersion bump).
+A strike now takes one of three shapes with **disjoint** answers — LANCE (change lane), FLOOR (jump),
+CURTAIN (slide). The load-bearing decision is that **the curtain has no ceiling**: the obvious build
+reuses `barKillTop`, and that makes the floor's clearance window a strict *superset* of the bar's, so
+one jump answers both, slide becomes optional, and the ladder collapses back to the binary the owner
+rejected — with the solvability bot certifying the degenerate strategy. Unbounded above it cannot be
+jumped from any state (apex 2.1608; sliding at apex the body top is still 2.607).
 
-## The shape of it
+Plus rank (worlds 3/6/9 → telegraph 0.80/0.75/0.70, hits 4/5/6 — `world` previously drove nothing but
+the RNG seed), an escalating double-lance (measured 70.8%, was a flat 40%), and bar-watch cut from
+6.25 s to 4.71 s. `LaggedAutopilotTests` is the new two-sided gate: a 0.40 s human reaction must
+survive every encounter, a 0.75 s one must die. Both directions pass.
 
-Every third world (2,400 m), inside a **660 m arena swept clear of obstacles but NOT of gems** —
-gems are the ammunition, so the shield phase is something you *do* with verbs you already own.
-Auto-fire breaks the shield at a rate set by a **charge bank earned from gems and spent as it
-burns**; a player who banked nothing mathematically cannot break it. Shield down → telegraph→strike
-beams that **always** close the player's lane, and 40% of the time a second one. Three clean dodges
-kill it. Caught = death; **failing to damage ≠ failing to survive** — it breaks off and you keep the
-run. Zero new inputs, so decree 6 holds.
+**Round 2 — "it really makes no sense... no animations... same every time."**
+A 14-agent brainstorm reframed it: **the encounter was fully built in the simulation and only
+sketched in the presentation.** Every causal link existed in code; almost none existed on screen.
+Three of the four proposed reconceptions were killed by the stress pass — the recommendation was a
+presentation pass, not a redesign, and that is what shipped (eleven fixes, `21dacc8`).
 
-## Two defects the tests found that reading would not have
+**Also done, both owner-raised mid-session:** the splash's diffused box → the shared stage ring
+(`CharacterStageRing`, now one implementation shared with the hub hero), and the in-run HUD's four
+different chip geometries → one `StatusChip` at a single fixed width.
 
-- **The gun could win on its own.** A beam that merely *usually* stalked let a player who never
-  moved win outright whenever three beams happened to pick empty lanes — "wasn't in the beam" was
-  being scored as a dodge. Caught at 1 kill in 40 seeds. Fixed by D-016.
-- **A fight was unbounded.** An absorbed beam is spent without landing a core hit, and shields stay
-  collectable in the arena, so shield-trading could drag a fight past its own arena into resuming
-  obstacles. Capped by `wardenMaxSeconds`; the arena is sized from a provable bound.
-
-## The chasm guard was repaired, not relaxed
-
-It went red (53 crossings vs a floor of 72) because the first arena lands on tier six's debut at
-2,560 m. Re-expressing it per eligible kilometre looked like the fix and is also wrong — an arena
-eats the highest-frequency band, so that average moves with `wardenArenaLength`. Frequency now
-belongs to `DifficultyCurveTests` (which measures the spawner and is unchanged); the bot test guards
-presence. An A/B with suppression toggled off settled it: **0.92/km either way.**
+Tests: **209 → 218 SPM, 0 failures.**
+Commits: `7331d1e`, `7d99d12`, `b6b9ba0`, `21dacc8`, `2185c18`.
 
 ---
 
 # Things you would otherwise rediscover the hard way
 
-- **The run advances BEHIND the splash screen.** Launch, then screenshot, and you land *after* the
-  fight is over. Tap fast, or use `PR_AUTOPLAY` and let the bot survive so there is no game-over
-  panel covering the evidence.
-- **`xcrun simctl io screenshot` throttles the simulator hard** — a few metres of travel per shot.
-  That is a feature: it lets you step through a 4-second fight almost frame by frame. It is far
-  finer-grained than the MCP screenshot tool, which advances hundreds of metres per call.
-- **iCloud created a `GameCore 2.swift` conflict copy mid-session and broke the build.** This repo
-  lives under iCloud-synced `~/Desktop`. `.gitignore` already carries a `* [0-9].swift` rule from an
-  earlier session, but gitignore does not stop SPM/xcodegen compiling it — `Package.swift` globs the
-  whole `Core` directory. If you get `invalid redeclaration of GameCore`, look for `* 2.swift`.
-- **SourceKit in this checkout resolves against macOS.** `Theme`/`GameCore`/`UIKit`/`Warden` "errors"
-  are noise — it was wrong on every file this session too. Believe `./Tools/build.sh`.
-- **Adding an FXEvent case is the good kind of breaking change.** Three exhaustive switches
-  (renderer `fire`, `Haptics.handle`, `GameView.handleFX`) refuse to compile until each new event
-  has a reaction. That is exactly why D-015 keeps the Warden out of `EntityKind`, where six
-  `default:` arms would have swallowed it silently.
-- **Derive layoutVersion goldens in Python and reproduce the existing pins FIRST.** The independent
-  agent that cross-checked mine reported its own first attempt failed all eight pins from a
-  transposed tag constant. A v11 pin is already armed.
-- **Never drive the simulator while `xcodebuild test` runs** — concurrent installs crash the host.
+- **`ProceduralMesh.beam` fans along +Y in the XY plane, with every vertex at z 0.** It is for
+  camera-facing decor cards. Scaling it on Z does nothing. Use `beamAlongTrack` for anything running
+  down the track. S-009 got this wrong and shipped it for one commit.
+- **The Warden fight is over before a shell-driven screenshot lands.** `PR_WARDEN=1` starts the run
+  in `onAppear`, so the ~12 s encounter resolves behind the splash. `simctl io screenshot` throttles
+  the sim hard — useful for stepping *through* a fight, useless for *reaching* one. The reliable
+  capture is `PR_AUTOPLAY=1`, tap once, then **sleep ~95 s untouched** before screenshotting: the bot
+  survives, so no game-over panel covers the evidence.
+- **`swift test` compiles neither `UI/` nor `Render/`.** Every S-009 render bug was invisible to a
+  green 218-test run. Only `./Tools/build.sh` plus eyes catches them.
+- **Adding a `Mission.Metric` case is the good kind of breaking change** — three exhaustive switches
+  (`MissionsView`, `MissionsTests`, `ProgressionTests`) refuse to compile until each handles it.
+- **SourceKit in this checkout resolves against macOS.** `Theme` / `GameCore` / `UIKit` /
+  `PowerUpKind` "errors" are noise. Believe `./Tools/build.sh`.
+- **Derive layoutVersion goldens in Python and reproduce the EXISTING pins first.** S-009 did this
+  for the charge threshold — the old model reproduced 0.804 with 0.85 ✓ and 0.75 ✗ before the new
+  0.744 was trusted. That reproduction is the only reason the new number is believable.
+- Never drive the simulator while `xcodebuild test` runs — concurrent installs crash the host.
 - `state.md` (58 KB) and `README.md` (35 KB) at the repo root are history, not truth.
 
 ---
 
 # Current state in one paragraph
 
-Prism Rush is a v1.9, feature-complete iPhone game that has never been submitted: ~98 Swift files,
-zero dependencies, zero binary assets but a generated icon, **228 Xcode and 209 SPM tests green**,
-and a genuinely deterministic core behind a clean `RendererPort` seam. Session 002 found only ~13 of
-59 features cleared the owner's six decrees and that every failure state was unfinished; **S-007
-closed that entire class.** S-004 and S-006 closed the structural half of session 003's verdict
-(act two to 9,600 m; tier six and the chasm). **S-008 built the fight that is designed to close the
-economy half — but did not close it.** `PR-0401` (the coin sink buys nothing that alters play) is
-**still open**, because Countermeasures are Warden phase 3 and phase 1 was gated on the owner
-playing it first. Backlog is 263 items, 25 DONE. Five audits remain unrun.
+Prism Rush is a v1.9 feature-complete iPhone game that has never been submitted: ~100 Swift files,
+zero dependencies, zero binary assets but a generated icon, **218 SPM tests green**, and a genuinely
+deterministic core behind a clean `RendererPort` seam. `DailyChallenge.layoutVersion` is **still 10**
+— S-009 spent its difficulty on the fight and not on the deck, deliberately, so the pre-armed v11
+golden is **unspent**. `PR-0401` (the coin sink buys nothing that alters play) is **still open**:
+Countermeasures remain unbuilt, though the shield-absorb fix delivers the design doc's "Ion Shield"
+using a pickup that already exists. Backlog 263 items, 25 DONE. Five audits remain unrun.
 
 # Rayan action items (surface them; do not try to do them)
 
-1. **PLAY THE WARDEN.** This is the one that unblocks everything else — `10_WARDENS.md §9` gates
-   phase 2 on it, and nothing in this program can judge whether a fight feels good. Specifically:
-   does the telegraph read at speed? Is one safe lane out of three the right amount of pressure? Is
-   the arena going quiet a welcome punctuation, or does it feel like the game stopped?
-2. **Is 660 m of clear deck every 2,400 m too much?** That is ~27% of the track past the first
-   encounter. It is sized from the crudest *provable* bound against a measured worst case of 438 m,
-   so there is real slack — but shrinking it means shortening the shield window, which moves the
-   charge threshold. His call after playing.
-3. **Is the first Warden too easy?** The bot arrives at FULL charge every time and wins every fight.
-   That is the safe direction for a first playtest, but it means charge is not yet a real choice.
-   One constant (`wardenChargeFullGems`, currently 520 against ~637 banked) moves it.
-4. **The slide SFX — does it actually sound better?** Carried from S-006, still unanswered.
-5. **Audio pass or Warden phases 2–3 next?** See the top of this file.
-6. **Does act two feel right? Does the chasm? Does the hub?** All carried, all need his thumbs.
-7. **The `Double Coins` IAP description in App Store Connect** — if already created with "Earn 2x
-   coins, forever", correct it to `Every run pays 2× coins. Forever.` before submission.
+1. **PLAY IT AGAIN.** The fight now demands all four verbs, the craft is ~4× bigger and clear of the
+   horizon, its shots come from it, and damage visibly leaves the player. Does it read at speed?
+2. **The gun beam has never been seen working.** It was broken, then fixed, and the shield phase is
+   4.7 s — shorter than a tap-to-screenshot round trip. Ten seconds of his eyes settles it.
+3. **The post-kill dead air needs his call** — the only change here that costs a layoutVersion bump.
+4. **Is the first Warden hard enough now?** Rank 1 is 4 answers; `wardenCoreHitsByRank` is one edit.
+5. Carried: the slide SFX (S-006), act two, the chasm, the hub redesign. All still need his thumbs.
+6. **The `Double Coins` IAP description in App Store Connect** — correct it to
+   `Every run pays 2× coins. Forever.` before submission.
 
 # Open questions for Rayan (carried until answered)
 
-- **PR-0040** — the music is a 1.82 s loop for the whole session, pinned to world 0 by his own
-  decree. Long-form structure inside that constraint needs sign-off. **In scope for the audio pass.**
-- **PR-0052** — is the Daily Challenge a layout guarantee or an identical-experience guarantee?
-  **S-008 leaned on the layout reading** when it made the arena a pure function of distance rather
-  than of how the fight goes. Worth confirming that was right.
+- **PR-0040** — the music is a 1.82 s loop for the whole session, pinned to world 0 by his decree.
+- **PR-0052** — is the Daily Challenge a *layout* guarantee or an *identical-experience* guarantee?
+  The dead-air fix in action item 3 turns on this answer.
 - **PR-0010** — `Store/metadata.md` sells a three-world game; the binary ships twelve families.
 - **PR-0254** — should a run that used a paid revive be leaderboard-eligible? S-003 recommends
   counting it for missions/XP but not the leaderboard. Needs a yes/no.
+- **Coin income is uncapped** — four independent components, none of them the score multiplier. He
+  said "infinite coins" and was right about the symptom; the multiplier was the wrong suspect (it
+  multiplies `bonus` only and never touches coins). If he wants income slowed, the levers are gem
+  density, the distance divisor, or the style-coin rate.
 
-# Resolved in session 008
+# Resolved in session 009
 
-**PR-0457 phase 1** (the Wardens). New decisions **D-015**, **D-016**, **D-017**.
+Warden difficulty (three shapes / rank / escalating lance), the splash ring, the HUD chip system,
+the shield pickup mesh, eleven Warden coherence fixes, and three staging bugs found by the identity
+design pass. **Owner decisions on record this session:** a Warden EXPLODES rather than peeling away;
+the shield phase STAYS but must be drawn; a beam STUMBLES first and KILLS second; per-world
+antagonists are wanted.
