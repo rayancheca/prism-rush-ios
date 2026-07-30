@@ -1922,3 +1922,47 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
                lever and is sized from the crudest provable bound against a measured worst case of
                438 m. Shrinking it means shortening `wardenShieldWindow`, which moves the charge
                threshold (currently ~0.80). Owner playtest first.
+
+---
+
+### PR-0470 · SEV3 · The spawner's inter-pattern gap is player-distance-derived, not cursor-pure
+- **Area:** `Core/Spawner.swift` / `Core/GameCore.swift:spawn`
+- **Status:** OPEN (documented, not a defect in effect — see D-021)
+- **Symptom:** `GameCore.spawn` passes the player's LIVE `distance` to `Spawner.fill(to:dist:)`, and
+  `gapFor(dist)` / `maxIndex(dist)` derive from it. So the inter-pattern gap depends on where the
+  player was standing when a pattern was emitted, not on the cursor — and any speed change nudges
+  every later spawn `d`.
+- **Repro:** `StumbleTests.testStumblingPerturbsTheTrackNoMoreThanAShippedPowerUpDoes`.
+- **Impact:** Measured 0.0002 m at 184 m — one part in a million, three orders of magnitude below
+  `obstacleZHalf`, below the 0.14 m a single tick covers. It cannot change an answer, a lane or a
+  verb. Pattern identity, order and lane are exactly equal.
+- **Why it is filed anyway:** it is the reason the daily challenge cannot promise an identical
+  *experience* (PR-0052), and a future session that assumes cursor-purity — as `s009b_probe_stumble`
+  §6 did — will draw a wrong conclusion from it.
+- **Fix sketch:** pass `spawner.cursor` rather than `distance` as `dist`. **Do not do this casually:**
+  it changes the realised track for every seed and costs a `layoutVersion` bump with goldens repinned
+  in two places. Only worth it if the owner wants the stronger daily-challenge promise.
+
+### PR-0471 · SEV2 · The `×N` multiplier badge still lives inside the gold GEM chip
+- **Area:** `UI/HUDView.swift` `gemMultPill`
+- **Status:** OPEN
+- **Symptom:** when `mult > 1` the badge REPLACES the word "GEMS" inside a gold, coin-coloured chip,
+  with a `×2 COINS` power-up chip directly beneath it. It reads as "gems, times four".
+- **Impact:** this is the display that made the owner report "infinite coins". `mult` multiplies the
+  `bonus` component of SCORE only and touches `gemCount` nowhere. Decree-2 adjacent: the display
+  lies about what the number does. Still visible in every S-010 capture.
+- **Fix sketch:** move the `×N` onto the SCORE chip, or restyle it in the score's colour. Small and
+  safe; `HUDView` layout is the one place the file warns about reflow.
+- **Verification:** simulator capture with a live multiplier; the ×N must not be adjacent to a
+  gold/coin-coloured number.
+
+### PR-0472 · SEV3 · Super Sneakers' near-vault is not forgiven by the stumble
+- **Area:** `Core/Collisions.swift` `grazes`
+- **Status:** OPEN (deliberate, filed so the asymmetry is a decision and not an oversight)
+- **Symptom:** `tall`/`movingTall` graze laterally only. While Super Sneakers is held a tall CAN be
+  answered vertically (`tallVaultClearance` 2.9), so a player who almost cleared a wall on the buff's
+  own axis dies where the equivalent lateral near-miss would have staggered them.
+- **Why it was left:** making a rescue depend on holding a buff teaches an inconsistent rule, and the
+  vault window is already generous.
+- **Fix sketch:** add `playerBottom >= tallVaultClearance - stumbleGrazeDY` to the tall arm, gated on
+  `canVault`. One line plus one boundary test.

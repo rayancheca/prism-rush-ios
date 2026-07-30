@@ -427,3 +427,102 @@ encounter running deliberately clear. The length is set by the crudest *provable
 (`wardenArmWindow` + `wardenMaxSeconds` × `boostSpeedMax`), against a measured worst case of 438 m,
 so there is real slack to reclaim — but shrinking it means shortening `wardenShieldWindow`, which
 moves the charge threshold. This is the feature's first tuning lever after playtesting.
+
+---
+
+## D-020 · The stumble is one rescue from a near-miss, not a second life (S-010, 2026-07-30)
+
+**Owner's words:** *"functionality like subway surfers where you basically have two lives. if you
+half hit a wall you slow down for a sec… not two lives per say more like 1.5."*
+Plus, on the Warden: *"stumble first then kill"*, and a stumble *resets the multiplier*.
+
+**The rule, stated once.** A contact is a stumble when the smallest move that would have made it a
+clean pass is shallow, measured on the axis whose VERB answers that obstacle, at the instant the
+overlap begins. Deep on every applicable axis → death.
+
+**Where the "0.5" actually lives.** Not in an accounting rule and not in a HUD pip. It is that the
+rescue is *conditional* (only from a mistake that was nearly right) and *non-repeating*
+(`stumbleRecover` 0.90 s of full vulnerability, in which any further contact — including one that
+would otherwise stumble — is lethal). No counter, no resource, no hoarding.
+
+**Why the kill line moved inward rather than the near-miss band being eaten.** The band that *looks*
+like a half-hit (dx 1.25–1.57) is already the bottom third of CLOSE, the game's flagship reward.
+Paying for the stumble out of that would have converted a bonus into a penalty. Instead the lethal
+threshold moves 1.25 → 0.90 and CLOSE is untouched: nothing that used to pay now costs.
+
+**`stumbleGrazeDX = 0.35`, and honestly what it buys.** Half the CLOSE band, so it derives from a
+shipped constant. `px` eases at `laneLerpRate`, so crossing it takes ~21 ms against 30–80 ms of human
+timing jitter: it converts roughly a quarter of "I swiped and it wasn't quite enough" deaths. **It
+will be rarer than Subway Surfers.** Widening it is one edit and is a tuning decision, not an
+architectural one — but at 0.90 the body is already 54% buried, and deeper stops reading as *half* a
+hit at all.
+
+**The split bar is why the measure is ESCAPE and not penetration.** A player dead between two covered
+lanes is 0.15 into each — "shallow in both" — and 2.35 units from any safe position. Per-lane
+penetration would hand a free rescue to the worst possible answer.
+
+**Why the Warden's escalation is per-ENCOUNTER and not a timer.** Strikes are 1.05–1.20 s apart, so
+any recovery window short enough to feel like a stagger expires before the next strike can arrive.
+A timer-based "second hit kills" would leave a Warden mathematically incapable of killing anybody,
+taking the fight's own hardness gate permanently red *because the fight got fairer*.
+
+**The slowdown is not only flavour.** It costs ~13 points, which is nothing; the multiplier reset is
+the punishment. But because `stumbleRecover` is a TIME window and the dip cuts speed, the stretch of
+deck that must be survived while vulnerable falls from ~30 m to ~18 m. The stagger and the danger
+window are coupled in the player's favour, which is the right shape.
+
+**The one mandatory test change.** `SolvabilityBotTests` decided "unfair" only by asking whether the
+bot DIED. A survivable contact would have turned an impossible pattern into a green stagger. It now
+asserts **zero contacts** across all 200 seeds and the 12,000 m soak. It passes — the Autopilot never
+enters a graze band, so its trajectories are unchanged.
+
+**Determinism.** `layoutVersion` stays 10. Zero RNG, no `SpawnCmd`, no golden re-pin.
+
+---
+
+## D-021 · The spawner's inter-pattern GAP is player-distance-derived, not cursor-pure (S-010)
+
+**This corrects the record**, and it bears directly on **PR-0052**.
+
+`docs/agent/audits/scratch/s009b_probe_stumble.md` §6 recorded the spawner as fully cursor-driven,
+concluding that a speed change "does not change *what* is placed or *where*". Half right.
+`GameCore.spawn` calls `spawner.fill(to:dist:)` with the player's **live distance**, and
+`Spawner.gapFor(dist)` derives the inter-pattern gap from it — so the gap is a function of where the
+player was standing when a pattern was emitted, not of the cursor.
+
+**Consequence:** any speed change nudges every later `d`. Measured: **0.0002 m at 184 m** — one part
+in a million, three orders of magnitude below `obstacleZHalf`, and below the 0.14 m a single tick
+covers. It cannot change an answer, a lane or a verb.
+
+**This is not new and not the stumble's doing.** `StumbleTests.testStumblingPerturbsTheTrackNoMore
+ThanAShippedPowerUpDoes` proves the identical drift from a chrono pickup and from the overdrive
+boost, both shipped for versions. Pattern identity, order and lane are exactly equal in all cases.
+
+**What it means for PR-0052.** The daily challenge has never been able to promise an *identical
+experience* — only an identical *layout*. Three shipped power-ups already break the stronger reading.
+The question is therefore answered by the code rather than open: `layoutVersion` guards which
+patterns reach the deck, and that is the promise it can keep.
+
+---
+
+## D-022 · Warden presence: what the design spec got wrong, and how (S-010)
+
+`s009c_SPEC.md` is a good document and most of it shipped as written. Three of its numbers did not
+survive contact, and the pattern in how they failed is worth keeping.
+
+1. **Halo clearance — an arithmetic slip.** It priced the rim's outer edge as `major × scale`
+   (4.862) and omitted the torus **minor** radius. The true edge is 5.270, so its halo scale would
+   have cleared the rim by 0.03 u ≈ **2 px** — the cyan ring welded to the hull for the whole
+   7 s window, which is precisely the failure the section existed to prevent. Caught by redoing the
+   sum, not by looking.
+2. **The core's position — a projection failure.** It placed the core level with the hull's
+   underside. The camera sits at y 5.1 looking **down** on a craft at 4.2, so an opaque 8.3-unit
+   disc occluded it completely: the core was invisible for the entire exposed phase while the HUD
+   read "CORE EXPOSED". Caught only by looking.
+3. **Spar colour — a contrast failure.** Near-white spars on a pale hull, inboard of a dome taller
+   than they are. Invisible. Caught only by looking.
+
+**The lesson, which is the program's oldest one restated:** an arithmetic error in a spec is caught
+by redoing the arithmetic, and both of the others were caught by nothing except running the app and
+opening the screenshot. `swift test` compiles neither `UI/` nor `Render/`; 231 green tests said
+nothing about any of the three.
