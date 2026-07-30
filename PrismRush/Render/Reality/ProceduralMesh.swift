@@ -62,6 +62,32 @@ enum ProceduralMesh {
         return build(p, idx, fallback: max(b, h))
     }
 
+    /// A tapered beam running down the track, from the player toward something ahead.
+    ///
+    /// **Distinct from `beam(length:halfWidthNear:halfWidthFar:)`, which is a flat quad fanning
+    /// along +Y in the XY plane** — that one is for the sky/decor cards that face the camera. This
+    /// one runs along −Z (the track's "ahead"), and it is a CROSS of two perpendicular quads rather
+    /// than one, because a single flat quad along the track is seen almost edge-on from a camera
+    /// that looks only 14.6° downward: it would thin to nothing exactly where it needs to read.
+    ///
+    /// Written because S-009 reached for `beam` for the Warden's auto-fire, scaled it on Z, and got
+    /// a zero-thickness quad with no Z extent to scale — the shot rendered as a sliver standing in
+    /// front of the player, pointing at nothing, for the whole shield phase.
+    ///
+    /// Built one unit long so callers scale Z to reach a moving target without re-meshing.
+    static func beamAlongTrack(halfWidthNear n: Float, halfWidthFar f: Float) -> MeshResource {
+        let p: [SIMD3<Float>] = [
+            // horizontal blade (spans X), near end at z 0, far end at z −1
+            [-n, 0, 0], [n, 0, 0], [f, 0, -1], [-f, 0, -1],
+            // vertical blade (spans Y), same taper
+            [0, -n, 0], [0, n, 0], [0, f, -1], [0, -f, -1],
+        ]
+        var idx: [UInt32] = []
+        doubleSidedQuad(0, 1, 2, 3, into: &idx)
+        doubleSidedQuad(4, 5, 6, 7, into: &idx)
+        return build(p, idx, fallback: max(n, f))
+    }
+
     /// The shield pickup: a heater-shield crest — flat shoulders, sides sweeping down to a point.
     ///
     /// It used to be `sphereEntity(0.42, cWhite)`, a plain white ball (owner, S-009: *"i dont like

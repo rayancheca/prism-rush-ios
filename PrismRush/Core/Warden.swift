@@ -112,6 +112,8 @@ struct WardenEncounter {
     private var attackIndex = 0        // how many telegraphs have begun — indexes the script
     /// 1 when the last strike was DODGED (the craft flinches), 0 when it landed (it does not).
     private var hitFlinch: Double = 0
+    /// Whether this encounter ended in a KILL rather than a withdrawal — the two must not look alike.
+    private var wasKilled = false
     private var rng: SplitMix64
 
     /// `runSeed` and `world` fully determine the attack order — no `Date()`, no `Double.random`.
@@ -238,6 +240,7 @@ struct WardenEncounter {
                     hitFlinch = 1
                     if coreHits >= coreHitsNeeded {
                         out.killed = true
+                        wasKilled = true
                         phase = .dying
                     }
                 }
@@ -354,7 +357,14 @@ struct WardenEncounter {
         // `-wardenStandOff` while this comment claimed it closed in; only `y` ever moved. It now
         // approaches on arrival, recoils when the core is hit, and retreats as it leaves.
         let arrive = phase == .arriving ? min(1, phaseT / Tuning.wardenArriveTime) : 1
-        let leave = phase == .leaving ? min(1, phaseT / Tuning.wardenLeaveTime) : 0
+        // **A KILLED Warden does not fly away.** `.dying` falls through to `.leaving`, so applying
+        // the departure rise/retreat unconditionally meant the corpse serenely climbed 14 units and
+        // retreated 26 immediately after detonating — a killed Warden left exactly like one that had
+        // given up, which erased the difference between winning and being ignored. A kill now sinks
+        // instead: it drops and drifts toward the player as the wreck clears.
+        let leave = (phase == .leaving && !wasKilled) ? min(1, phaseT / Tuning.wardenLeaveTime) : 0
+        let fall = (wasKilled && (phase == .dying || phase == .leaving))
+            ? min(1, phaseT / Tuning.wardenDieTime) : 0
         // The recoil decays over the same window the fired shape stays lit, so "I dodged" and "it
         // flinched" are the same beat.
         let recoil = strikeShow > 0 && phase != .dying
@@ -368,10 +378,18 @@ struct WardenEncounter {
                                        + leave * Tuning.wardenLeaveDepth + recoil),
             // Leans toward the player's lane, eased so it never snaps. Zero while dying or leaving:
             // a craft that is finished stops paying attention.
-            x: (phase == .shielded || phase == .exposed)
+            //
+            // **And zero once a strike is committed.** `pickBeamMask` locks the target lane at the
+            // START of a telegraph, so a craft that kept tracking the player through the wind-up
+            // visibly aimed AWAY from the beam it had already committed to — 1.6 units of lateral
+            // motion telling the player the opposite of the truth, in the one window where reading
+            // the attack is the whole game (decree 6). It is also meaningless for a floor or a
+            // curtain, which close every lane and have no direction to point in.
+            x: (phase == .shielded || (phase == .exposed && !attacking))
                 ? (playerX / max(0.001, Tuning.laneX.last ?? 1)) * Tuning.wardenLeanX : 0,
             y: Tuning.wardenHoverY + (1 - arrive) * Tuning.wardenArriveRise
-                                   + leave * Tuning.wardenLeaveRise,
+                                   + leave * Tuning.wardenLeaveRise
+                                   - fall * Tuning.wardenDeathSink,
             shieldFraction: shieldFraction,
             coreHits: coreHits,
             coreHitsNeeded: coreHitsNeeded,

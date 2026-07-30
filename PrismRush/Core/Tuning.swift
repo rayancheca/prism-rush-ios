@@ -458,6 +458,9 @@ enum Tuning {
     static let wardenLeanX: Double = 1.6
     /// How far it recoils backward when the core takes a hit — the visible consequence of a dodge.
     static let wardenHitRecoil: Double = 2.2
+    /// How far a KILLED craft sinks as it detonates. A kill must not look like a withdrawal: the
+    /// one that gave up climbs away (`wardenLeaveRise`), the one you beat comes down.
+    static let wardenDeathSink: Double = 3.4
 
     /// Payout for a kill. Coins are deliberately the SMALLEST reward tier (10_WARDENS.md §4) — this
     /// feature exists to fix the coin sink, not to feed it — but a fight with no payout is not a

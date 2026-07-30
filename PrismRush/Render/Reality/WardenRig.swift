@@ -91,8 +91,8 @@ final class WardenRig {
         // Tapered so it reads as leaving the player and arriving at the craft rather than as a
         // rod. Uses the beam helper that already ships in seven decor files and had never once been
         // pointed at the Warden.
-        gunBeam = ModelEntity(mesh: ProceduralMesh.beam(length: Self.gunBeamUnitLength,
-                                                        halfWidthNear: 0.16, halfWidthFar: 0.05),
+        gunBeam = ModelEntity(mesh: ProceduralMesh.beamAlongTrack(halfWidthNear: 0.16,
+                                                                  halfWidthFar: 0.05),
                               materials: [matShield])
         gunBeam.isEnabled = false
 
@@ -168,15 +168,16 @@ final class WardenRig {
         gunBeam.isEnabled = firingGun
         if firingGun {
             // Reaches from just in front of the player to the hull, so both ends are anchored to
-            // something real. Scaled on Z because `ProceduralMesh.beam` is built along −Z.
+            // something real. `beamAlongTrack` is built ONE UNIT long down −Z, so scaling Z is the
+            // length. (The older `ProceduralMesh.beam` fans along +Y with every vertex at z 0 — S-009
+            // used it here and scaled Z, which does nothing to a zero-thickness quad, and shipped a
+            // sliver standing in front of the player for the entire shield phase.)
             let reach = Float(-w.z) - 2.2
-            gunBeam.scale = SIMD3<Float>(1, 1, max(0.01, reach / Self.gunBeamUnitLength))
             gunBeam.position = SIMD3<Float>(Float(w.x) * 0.35, 1.05, -2.2)
             // Thicker and brighter with charge: the bar the player has been filling all run is now
             // a thing they can see hitting something.
             let power = 0.45 + 0.55 * Float(w.charge)
-            gunBeam.scale.x = power
-            gunBeam.scale.y = power
+            gunBeam.scale = SIMD3<Float>(power, power, max(0.01, reach))
             gunBeam.model?.materials = [w.charge > 0.7 ? matHazard : matShield]
         }
 
