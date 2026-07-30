@@ -634,6 +634,16 @@ final class GameModel {
             synth.play(.frenzyStart)     // rising whoosh: time resumes
         case .sneakersEnded:
             break   // jump height + HUD ring restore are snapshot-driven; the depleting ring is the cue
+        case let .stumbled(x, fromWarden):
+            // The multiplier reset is the cost, so the call-out names it. "CLOSE ONE" would read as
+            // praise — this is the same word the HUD chip uses, and it is a warning.
+            addPopup(fromWarden ? "HIT — ONE MORE ENDS IT" : "STUMBLE  ×1",
+                     color: Theme.color(0xFF3355), worldX: x)
+            // Reuses the shatter, which is what a survivable hard knock already sounds like in this
+            // game. A bespoke stagger voice belongs with the Warden audio pass (PR-0456) — nothing
+            // in this program can hear a sound, so inventing one unheard is guesswork shipped.
+            synth.play(.shieldBreak)
+            flash(0.3)
         case .died:
             flash(0.5)
             synth.play(.crash)

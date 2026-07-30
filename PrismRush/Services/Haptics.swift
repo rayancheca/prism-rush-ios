@@ -52,6 +52,11 @@ final class Haptics {
         case .shieldAbsorbed:
             notify.notificationOccurred(.error)   // a hard knock — the shield just shattered
             heavy.impactOccurred()
+        case let .stumbled(_, fromWarden):
+            // A survivable knock: heavy enough to be unmistakable, but deliberately NOT the
+            // `.error` notification that death and a shattered shield use — the player is still
+            // alive and the hand should say so.
+            heavy.impactOccurred(intensity: fromWarden ? 1.0 : 0.85)
         case .died:
             notify.notificationOccurred(.error)
             heavy.impactOccurred()

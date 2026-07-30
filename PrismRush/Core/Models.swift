@@ -78,6 +78,10 @@ struct GameSnapshot: Sendable {
     var flowStreak: Int             // near-miss count toward flow surges (HUD pips show % flowPerSurge)
     var sliding: Bool
     var grounded: Bool
+    /// Seconds left of the post-stumble recovery, 0 when clean (v2.0). While this is > 0 the NEXT
+    /// contact is fatal, so it is the one piece of state the player must be able to see — the HUD
+    /// tints its frame and the renderer keeps the body flashing for exactly this long.
+    var stumbleRemaining: Double
     var usedCheckpoint: Bool        // run began mid-track — meta layer must skip Game Center submit
     var entities: [EntityState]
     /// The live Warden encounter, or `nil` on open track. Deliberately its own field rather than an
@@ -118,6 +122,7 @@ struct GameSnapshot: Sendable {
         flowStreak: 0,
         sliding: false,
         grounded: true,
+        stumbleRemaining: 0,
         usedCheckpoint: false,
         entities: [],
         warden: nil,
@@ -152,6 +157,10 @@ enum FXEvent: Sendable, Equatable {
     case boostStarted(x: Double)     // overdrive pad triggered (edge)
     case boostEnded                  // boost timer crossed 0 (edge, like chronoEnded)
     case flowSurge(level: Int, x: Double)   // every flowPerSurge-th near-miss; level = surges this run (1-based)
+    /// A contact the player SURVIVED (v2.0). `x` is where it happened; `fromWarden` separates the two
+    /// sources because they sound and read differently — a wall clips you, a boss lands a shot on you
+    /// — and because only one of them is a boss telling you the next one is fatal.
+    case stumbled(x: Double, fromWarden: Bool)
     case died(x: Double)
 
     // MARK: Wardens (v1.9)

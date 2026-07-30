@@ -154,6 +154,12 @@ final class SolvabilityBotTests: XCTestCase {
             XCTAssertTrue(boosted, "seed \(seed): a forced pad must eventually trigger")
             XCTAssertEqual(core.mode, .play,
                            "seed \(seed): bot died within 200 m of a forced boost\n\(Self.dumpWindow(core))")
+            // Same reason as `botSoak`: since v2.0 a contact no longer implies a death, so surviving
+            // is not the claim — going untouched is.
+            XCTAssertEqual(core.stumbles, 0,
+                           "seed \(seed): bot was CONTACTED within 200 m of a forced boost "
+                           + "(survived it, which is exactly why this needs its own assertion)"
+                           + "\n\(Self.dumpWindow(core))")
         }
     }
 
@@ -181,6 +187,23 @@ final class SolvabilityBotTests: XCTestCase {
                     distance: core.distance,
                     lane: core.laneIndex,
                     window: Self.dumpWindow(core)
+                ))
+            } else if core.stumbles > 0 {
+                // **The proof is about CONTACTS, not deaths (v2.0).**
+                //
+                // Before the stumble, death was the only signal this bot could emit, and asking
+                // "did it die" was the same question as "was every pattern answerable". It is not
+                // any more: a shallow contact is now survivable, so an unavoidable pattern that
+                // used to turn this soak red would instead be walked through as a green stagger,
+                // and the 200-seed proof would quietly stop proving anything at all.
+                //
+                // `Autopilot` plays perfectly and never enters a graze band, so its trajectory is
+                // byte-identical to v1.9's and this assertion should hold at zero forever. The day
+                // it doesn't, the spawner has placed something the bot could not answer.
+                failures.append(Failure(
+                    seed: seed, distance: core.distance, lane: core.laneIndex,
+                    window: "STUMBLED \(core.stumbles)× — the bot TOUCHED something. A survivable "
+                          + "contact is still an unanswerable pattern.\n\(Self.dumpWindow(core))"
                 ))
             } else if core.distance < targetDistance {
                 failures.append(Failure(

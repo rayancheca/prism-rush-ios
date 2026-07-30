@@ -48,6 +48,63 @@ enum Tuning {
     // Post-absorb grace: patterns place twin talls at the same `d`, so a mid-lane-change shield hit
     // must not let the second wall kill on the same tick (or the next — it's still in the kill band).
     static let invulnDuration: Double = 0.4
+
+    // MARK: - The stumble (v2.0) — the game's first non-lethal contact
+    //
+    // Until now the game had no vocabulary for HARM: a contact either did nothing or ended the run.
+    // The stumble is the missing middle. It is deliberately NOT a second life; it is one rescue,
+    // available only from a mistake that was nearly right, and only while you are not already
+    // recovering from the last one. That is the owner's "not two lives per say — more like 1.5".
+    //
+    // **The rule, stated once:** a contact is a stumble when the smallest move that would have made
+    // it a clean pass is shallow, measured on the axis whose VERB answers that obstacle, at the
+    // instant the overlap begins. Deep on every applicable axis → death. The chasm is exempt: there
+    // is no shallow overlap in an eight-metre hole, and keeping one obstacle unconditionally fatal
+    // is what stops the catalogue losing its only two-sided timing window.
+
+    /// Lateral forgiveness. The kill line effectively moves 1.25 → 0.90; the CLOSE near-miss band
+    /// ([1.25, 1.95)) is untouched, so no reward is eaten to pay for this.
+    ///
+    /// **Why 0.35 and not more.** It is exactly half the CLOSE band, so it is derived from a shipped
+    /// constant rather than invented, and it is the deepest overlap that still reads as *half* a hit:
+    /// a wall is 1.9 wide and the body 1.24, so contact becomes visible at dx 1.57 and at dx 0.90 the
+    /// body is 0.67 into the wall — 54% buried. Below that you did not half-hit it, you ran through it.
+    ///
+    /// Honest measure of what this buys: `px` eases toward the target lane at `laneLerpRate`, so
+    /// crossing the band takes `ln(1.30/0.95)/15 ≈ 21 ms` against 30–80 ms of human timing jitter.
+    /// It converts roughly a quarter of "I swiped and it wasn't quite enough" deaths. It is a rescue
+    /// from a near-miss, not a safety net — widening it is one edit if play says otherwise.
+    static let stumbleGrazeDX: Double = 0.35
+
+    /// Vertical forgiveness, applied at each edge of a `low` (feet) and both edges of a `bar`
+    /// (slid almost low enough / jumped almost high enough). Widens the 660 ms low-clear window by
+    /// ~23 ms per edge.
+    static let stumbleGrazeDY: Double = 0.20
+
+    /// The stagger. The player has no forward velocity — slowing the WORLD is what the chrono pickup
+    /// does, i.e. a reward — so this cannot be sold as a difficulty penalty and must never be dressed
+    /// like slow-mo (the renderer punches the FOV IN, where chrono pulls it out).
+    ///
+    /// It is worth ~13 points, which is not the punishment; the multiplier reset is. But it is not
+    /// merely flavour either: because `stumbleRecover` is a TIME window and the dip cuts the speed,
+    /// the stretch of deck you must survive while vulnerable shrinks from ~30 m to ~18 m. The
+    /// slowdown and the danger window are coupled in the player's favour, which is the right shape.
+    ///
+    /// No new timer: `stepSpeedAndDistance` already lerps `speed` back toward a DISTANCE-derived
+    /// target at `speedLerp`, so the dip self-heals over ~1.3 s and the difficulty ramp cannot desync.
+    static let stumbleSpeedFactor: Double = 0.62
+
+    /// I-frames immediately after a stumble. Sized off the worst-case paired-wall transit
+    /// (`2 × obstacleZHalf / speedStart` = 112 ms): patterns 3/7/9 place twin talls at the same `d`,
+    /// and without this the partner would convert the rescue into a death on the next tick.
+    static let stumbleGrace: Double = 0.15
+
+    /// How long a stumble leaves you vulnerable. `stumbleGrace` of that is invulnerable; for the rest
+    /// **any** further contact is lethal — including one that would otherwise have been a stumble.
+    /// This is the whole self-limiting mechanism: no counter, no HUD pip, no hoarding. One mistake is
+    /// forgiven, two in a row are not.
+    static let stumbleRecover: Double = 0.90
+
     static let streakPerMult: Int = 5, multCap: Int = 5   // v1.3: ×5 at 20 gems — minute one escalates visibly
     static let spawnHorizon: Double = 115
     // Guaranteed power-up cadence (v1.6): on top of the pattern pickups, drop one power-up every

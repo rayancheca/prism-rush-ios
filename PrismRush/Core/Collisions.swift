@@ -104,6 +104,80 @@ enum Collisions {
         }
     }
 
+    // MARK: - The stumble: how DEEP was the contact? (v2.0)
+    //
+    // Every predicate above answers "did they touch it". These answer "by how much did they miss",
+    // and they are kept strictly separate on purpose: not one line of the kill geometry above
+    // changes, so the 200-seed solvability proof, the daily-challenge goldens and the Autopilot's
+    // world are all byte-identical. A stumble is a second, independent question asked only after a
+    // contact has already registered.
+    //
+    // The measure is always **the smallest displacement that would have made it a clean pass**, on
+    // the axis whose verb answers that obstacle. That framing is what makes the split bar correct:
+    // per-lane penetration would call a player standing dead between two covered lanes "shallow in
+    // both", when in truth they are 2.35 units from any safe position.
+
+    /// Lateral distance still to travel to clear a single-lane obstacle. 0 when already clear.
+    static func lateralEscape(playerX: Double, obstacleX: Double) -> Double {
+        max(0, Tuning.laneHitHalfWidth - abs(playerX - obstacleX))
+    }
+
+    /// Lateral distance still to travel to clear EVERY lane a split bar covers, moving toward the
+    /// open lane (which is always safe — lane pitch 2.2 exceeds `laneHitHalfWidth`). The binding
+    /// lane is the deepest one, not the nearest.
+    static func splitBarEscape(playerX px: Double, openLane: Int) -> Double {
+        let dir: Double = (Tuning.laneX[openLane] >= px) ? 1 : -1
+        var need: Double = 0
+        for l in 0..<Tuning.laneX.count where l != openLane {
+            let xc = Tuning.laneX[l]
+            guard abs(px - xc) < Tuning.laneHitHalfWidth else { continue }
+            let d = dir > 0 ? (xc + Tuning.laneHitHalfWidth - px)
+                            : (px - (xc - Tuning.laneHitHalfWidth))
+            need = max(need, d)
+        }
+        return need
+    }
+
+    /// Height still to gain for the feet to clear a low block. 0 when already clear.
+    static func lowVerticalEscape(playerBottom: Double) -> Double {
+        max(0, Tuning.lowKillTop - playerBottom)
+    }
+
+    /// A bar has TWO answers — duck under it or clear it over the top — so the escape is whichever
+    /// is nearer. Both readings are "you clipped an edge".
+    static func barVerticalEscape(playerTop: Double, playerBottom: Double) -> Double {
+        max(0, min(playerTop - Tuning.barKillBottom, Tuning.barKillTop - playerBottom))
+    }
+
+    /// Whether a registered contact was shallow enough to stagger rather than kill.
+    ///
+    /// `obstacleX` is ignored by the full-span kinds and `openLane` by the single-lane kinds; both
+    /// are passed unconditionally so the call site stays one line and cannot forget one.
+    ///
+    /// `.chasm` never grazes (see `Tuning.stumbleGrazeDX`). `.tall`/`.movingTall` are lateral only:
+    /// their vertical answer exists only while Super Sneakers is held, and making a rescue depend on
+    /// a buff would teach an inconsistent rule.
+    static func grazes(kind: EntityKind, playerX: Double, obstacleX: Double,
+                       playerTop: Double, playerBottom: Double, openLane: Int) -> Bool {
+        let dx = Tuning.stumbleGrazeDX, dy = Tuning.stumbleGrazeDY
+        switch kind {
+        case .tall, .movingTall:
+            return lateralEscape(playerX: playerX, obstacleX: obstacleX) <= dx
+        case .low:
+            return lateralEscape(playerX: playerX, obstacleX: obstacleX) <= dx
+                || lowVerticalEscape(playerBottom: playerBottom) <= dy
+        case .bar:
+            return barVerticalEscape(playerTop: playerTop, playerBottom: playerBottom) <= dy
+        case .splitBar:
+            return splitBarEscape(playerX: playerX, openLane: openLane) <= dx
+                || barVerticalEscape(playerTop: playerTop, playerBottom: playerBottom) <= dy
+        case .chasm:
+            return false
+        default:
+            return false
+        }
+    }
+
     /// Gem pickup window (uses the gem's *base* Y, before cosmetic bob).
     static func gemPickup(playerCenterY pcy: Double, playerX: Double, gemX: Double, gemBaseY: Double, z: Double) -> Bool {
         abs(z) < Tuning.gemPickup.dz

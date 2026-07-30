@@ -147,6 +147,7 @@ final class RealityRenderer: RendererPort {
     // A soft translucent dome around the player while a shield is HELD (no timer — it lasts until a
     // hit, then the glass-shatter FX plays). Snapshot-driven so it can never get stuck on/off.
     private var shieldBubble: ModelEntity!
+    private var stumbleAura: ModelEntity!   // v2.0: lit while a stumble leaves the player vulnerable
     // Live craft position, mirrored from the last synced snapshot so FXEvents can land on it.
     private var wardenX: Float = 0
     private var wardenY: Float = Float(Tuning.wardenHoverY)
@@ -373,6 +374,21 @@ final class RealityRenderer: RendererPort {
         if shieldOn {
             shieldBubble.position = SIMD3<Float>(px, Float(snap.playerY) + 0.66, 0)
             shieldBubble.scale = SIMD3<Float>(repeating: 1 + (reduceMotion ? 0 : 0.05 * Float(sin(elapsed * 3))))
+        }
+
+        // Vulnerability shell: driven from `stumbleRemaining` rather than from the `.stumbled` event,
+        // so it can never be left on by a missed edge and can never be missed on a revive — the same
+        // snapshot-driven rule the boost and sneakers treatments follow.
+        //
+        // It strobes at ~9 Hz and, under Reduce Motion, holds steady instead of flashing (a
+        // photosensitivity-safe constant tint) rather than being switched off: this is a safety
+        // readout, not decoration, and dropping it would leave the accommodation MORE dangerous.
+        let vulnerable = snap.stumbleRemaining > 0 && snap.mode == .play
+        stumbleAura.isEnabled = vulnerable
+        if vulnerable {
+            stumbleAura.position = SIMD3<Float>(px, Float(snap.playerY) + 0.66, 0)
+            let strobe: Float = reduceMotion ? 1 : (0.82 + 0.18 * Float(sin(elapsed * 56)))
+            stumbleAura.scale = SIMD3<Float>(repeating: strobe)
         }
 
         // Dust kicked up during a slide — grounded OR mid air-slam — so it's unmistakable.
@@ -638,6 +654,28 @@ final class RealityRenderer: RendererPort {
             // break-off is the Warden giving up: nothing happened to the player, so nothing fires.
             break
 
+        case let .stumbled(x, fromWarden):
+            // **This must not read as slow-mo.** The player has no forward velocity, so cutting the
+            // world speed is mechanically what the chrono pickup does — a reward. Chrono NARROWS the
+            // FOV by 6° and tints cool; a stumble widens it and throws hot debris, which is the
+            // impact grammar the shield-shatter already uses. Nothing about it is cool-toned.
+            particles.burst(x: Float(x), y: 0.9, z: 0, color: cWardenHazard,
+                            count: 46, power: 6.4, spread: 0.55, life: 0.7, stretchZ: 1.5)
+            particles.burst(x: Float(x), y: 0.9, z: 0, color: cWhite,
+                            count: 18, power: 4.2, spread: 0.35, life: 0.5)
+            // Backward scatter along the deck: the one direction that says "you lost ground".
+            particles.burst(x: Float(x), y: 0.12, z: 0.6, color: skinTrailColor,
+                            count: 16, power: 3.0, spread: 0.4, life: 0.55)
+            if fromWarden {
+                // A boss landing a shot is a bigger event than clipping a wall, and it is also the
+                // moment the player learns the next one is fatal — so it gets its own ring.
+                particles.ring(y: 1.0, z: 0, radius: 1.6, color: cWardenHazard,
+                               count: 22, velZ: 8, life: 0.6)
+            }
+            // 0.70, not the 1.4 of a death: it decays at 2.2/s, so this clears in 0.32 s and cannot
+            // still be shaking the frame while the player reads the obstacle that might kill them.
+            if !reduceMotion { shake = max(shake, 0.70) }
+            kickFOV(5)
         case let .died(x):
             // First (colored) burst shatters in the skin's own color; the white flash stays global.
             particles.burst(x: Float(x), y: 1, z: 0, color: skinTrailColor, count: 120, power: 7.5, spread: 0.55, life: 1.2)
@@ -784,6 +822,7 @@ final class RealityRenderer: RendererPort {
         ringPulseLife = 0
         ringPulse.isEnabled = false
         shieldBubble.isEnabled = false
+        stumbleAura.isEnabled = false
         for i in skids.indices { skidLife[i] = 0; skids[i].isEnabled = false }
         // Re-seed decor around 0. Checkpoint starts (distance > 0) self-heal on the first
         // update: the recycle-while loop walks every slot forward and restyles it once.
@@ -894,6 +933,21 @@ final class RealityRenderer: RendererPort {
         shieldBubble = ModelEntity(mesh: .generateSphere(radius: 0.98), materials: [domeMat])
         shieldBubble.isEnabled = false
         root.addChild(shieldBubble)
+
+        // Vulnerability shell (v2.0). A stumble leaves the player ONE contact from death for
+        // `Tuning.stumbleRecover`, and that is the only state in the game where an ordinary wall is
+        // lethal for a reason the deck does not show. It has to be visible on the body, not only in
+        // the HUD, because the body is where the player's eyes already are.
+        //
+        // Same construction as the shield dome and deliberately its opposite in every channel:
+        // hazard red rather than cyan, a hard 9 Hz strobe rather than a calm 0.5 Hz breathe, and
+        // slightly INSIDE the body radius so it reads as damage clinging to the character rather
+        // than as protection around it.
+        var vulnMat = UnlitMaterial(color: UIColor(red: 1, green: 0.20, blue: 0.33, alpha: 1))
+        vulnMat.blending = .transparent(opacity: .init(floatLiteral: 0.30))
+        stumbleAura = ModelEntity(mesh: .generateSphere(radius: 0.86), materials: [vulnMat])
+        stumbleAura.isEnabled = false
+        root.addChild(stumbleAura)
 
         // The rig itself must live under root — buildCharacter() only parents the body parts to
         // the rig. Without this line the whole character is orphaned and never rendered (this is
@@ -1213,8 +1267,11 @@ final class RealityRenderer: RendererPort {
                 blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
     }
 
-    private func kickFOV() {
-        if !reduceMotion { fovKick = max(fovKick, 3) }
+    /// Transient FOV punch. The default is what every existing call site used, so parameterising it
+    /// changes nothing that already shipped; loud one-off beats (a stumble, a Warden arrival) ask
+    /// for more. Decay is 12°/s, so +5° lasts ~0.42 s.
+    private func kickFOV(_ degrees: Float = 3) {
+        if !reduceMotion { fovKick = max(fovKick, degrees) }
     }
 
     private func dropSkid(at x: Float) {

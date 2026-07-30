@@ -49,6 +49,14 @@ final class GameCore {
     @ObservationIgnored private(set) var worldBlend: Double = 1
     @ObservationIgnored private(set) var shield: Bool = false
     @ObservationIgnored private(set) var invulnT: Double = 0   // post-shield-absorb grace window
+    /// Seconds left of the post-stumble recovery (v2.0). While > 0 the player is **fully vulnerable**
+    /// and the next contact of any kind is fatal — the whole "1.5 lives" limit, held in one Double.
+    @ObservationIgnored private(set) var stumbleT: Double = 0
+    /// Contacts survived this run. Written for one reason that matters more than the stat: the
+    /// solvability bot decides "unfair" by asking whether it DIED, and a survivable contact would
+    /// silently turn an impossible pattern into a green stagger. `SolvabilityBotTests` asserts this
+    /// stays zero, so the 200-seed proof keeps proving what it claims to.
+    @ObservationIgnored private(set) var stumbles: Int = 0
     @ObservationIgnored private(set) var magnetT: Double = 0
     @ObservationIgnored private(set) var doublerT: Double = 0  // gems pay double currency while > 0
     @ObservationIgnored private(set) var chronoT: Double = 0   // slow-mo: distance integrates at × chronoFactor
@@ -73,6 +81,11 @@ final class GameCore {
     @ObservationIgnored private(set) var wardenWorldDone: Int = -1
     /// Charge bank, 0…1: earned one gem at a time, spent breaking a Warden's shield.
     @ObservationIgnored private(set) var wardenCharge: Double = 0
+    /// Whether THIS encounter has already landed a shot on the player. Per-encounter and not a timer,
+    /// which is the only shape that can deliver "stumble first, then kill": strikes are 1.05–1.20 s
+    /// apart and any recovery window short enough to feel like a stagger expires before the next one
+    /// arrives, so a timer-based rule would make a Warden literally unable to kill anybody.
+    @ObservationIgnored private(set) var wardenCaughtOnce: Bool = false
     /// Wardens killed this run — the meta layer banks this once, in `applyRunSummary`.
     @ObservationIgnored private(set) var wardensDefeatedThisRun: Int = 0
     /// Warden bounty coins earned this run. Kept OUT of `gemCount` so a kill never inflates the
@@ -172,6 +185,7 @@ final class GameCore {
         bankZ = 0; jumpBuf = 0
         world = 0; maxWorld = 0; worldFrom = 0; worldTo = 0; worldBlend = 1
         shield = false; invulnT = 0; magnetT = 0; doublerT = 0; chronoT = 0
+        stumbleT = 0; stumbles = 0; wardenCaughtOnce = false
         boostT = 0; superSneakersT = 0; flowStreak = 0; flowSurges = 0
         bonus = 0; score = 0; gemCount = 0; streak = 0; bestStreak = 0; mult = 1; bountyCoins = 0
         activeObstacles.removeAll(keepingCapacity: true)
@@ -221,6 +235,7 @@ final class GameCore {
             if superSneakersT == 0 { emit(.sneakersEnded) }   // edge — rig glow / jump height restore
         }
         if invulnT > 0 { invulnT = max(0, invulnT - dt) }
+        if stumbleT > 0 { stumbleT = max(0, stumbleT - dt) }
         // Score freezes at death: the post-death decel keeps distance climbing, but the run's
         // score must not. `die()` captures the final value; here we only advance it while playing.
         if mode == .play { score = Int(((distance - scoreOffset) * 2).rounded(.down)) + bonus }
@@ -394,6 +409,7 @@ final class GameCore {
         guard mode == .play else { return }
         if warden == nil, let w = Warden.armableWorld(forDistance: distance), w != wardenWorldDone {
             warden = WardenEncounter(world: w, runSeed: runSeed)
+            wardenCaughtOnce = false   // every Warden forgives exactly once, and only its own shot
             emit(.wardenArrived(world: w))
         }
         guard var w = warden else { return }
@@ -413,7 +429,19 @@ final class GameCore {
             if ev.caughtPlayer && invulnT <= 0 {
                 // A landed beam is exactly as lethal as a wall, and a held shield eats it exactly
                 // as it eats a wall. It does NOT count as a dodge — absorbing is surviving, not
-                // damaging. (Phase 2 replaces this branch with the abduction struggle.)
+                // damaging.
+                //
+                // **Stumble first, then kill (v2.0).** The first shot a Warden lands staggers you;
+                // the second one in the same encounter ends the run. The state is per-ENCOUNTER
+                // rather than a recovery timer, and that is not a shortcut: strikes are 1.05–1.20 s
+                // apart, so any window short enough to feel like a stagger expires before the next
+                // strike can arrive, and a timer-based rule would leave the Warden mathematically
+                // incapable of killing anyone — taking the fight's own hardness gate permanently
+                // red *because the fight got fairer*.
+                //
+                // It also settles the coherence risk of teaching "contact staggers" for 2,400 m and
+                // then silently reverting at the boss: the boss uses the same verb, it just only
+                // forgives once.
                 if shield {
                     // A held shield eats the beam and costs the SHIELD — nothing else. It used to
                     // also wipe the streak, the multiplier and the flow chain with nothing on
@@ -424,6 +452,9 @@ final class GameCore {
                     // that already exists rather than a new purchase.)
                     shield = false; invulnT = Tuning.invulnDuration
                     emit(.shieldAbsorbed(x: px))
+                } else if !wardenCaughtOnce && stumbleT <= 0 {
+                    wardenCaughtOnce = true
+                    stumble(fromWarden: true)
                 } else {
                     die()
                 }
@@ -517,6 +548,19 @@ final class GameCore {
                         shield = false; invulnT = Tuning.invulnDuration; streak = 0; mult = 1
                         flowStreak = 0   // taking a hit (even absorbed) breaks the flow
                         emit(.shieldAbsorbed(x: px))
+                        activeObstacles.swapAt(i, activeObstacles.count - 1)
+                        activeObstacles.removeLast()
+                        continue
+                    } else if stumbleT <= 0,
+                              Collisions.grazes(kind: e.kind, playerX: px, obstacleX: ox,
+                                                playerTop: pb.top, playerBottom: pb.bottom,
+                                                openLane: e.lane) {
+                        // Nearly made it, and not already recovering from the last one.
+                        stumble(fromWarden: false)
+                        // The wall MUST go. Left alive it would re-hit on the next tick, and — worse
+                        // — its near-miss scorer fires at the exit plane, where `dx` has grown while
+                        // the player kept escaping: the wall they crashed into would pay them CLOSE,
+                        // +40 × mult, style coins and a flow pip, moments after staggering them.
                         activeObstacles.swapAt(i, activeObstacles.count - 1)
                         activeObstacles.removeLast()
                         continue
@@ -688,6 +732,26 @@ final class GameCore {
         }
     }
 
+    /// Survive a contact (v2.0).
+    ///
+    /// The costs are deliberately asymmetric. The **multiplier reset is the punishment** — it is the
+    /// owner's own word, it is the one existing code path (the shield absorb runs these three lines),
+    /// and until now `mult` could only ever rise in a clean run, so ×5 had no stakes at all. The
+    /// speed dip is what makes it *read* as a stagger; it costs about 13 points.
+    ///
+    /// What it deliberately does NOT take: `wardenCharge` (520 gems of banking, confiscated for one
+    /// wall clip, would punish twice and be nearly invisible), `boostT` and the earned consumable
+    /// timers (decree 5 — advertised bonuses are always delivered), and `bestStreak`, which is a
+    /// high-water mark and is what keeps `run.mult5` and every multiplier mission completable.
+    private func stumble(fromWarden: Bool) {
+        stumbleT = Tuning.stumbleRecover
+        invulnT = max(invulnT, Tuning.stumbleGrace)
+        streak = 0; mult = 1; flowStreak = 0
+        speed *= Tuning.stumbleSpeedFactor
+        stumbles += 1
+        emit(.stumbled(x: px, fromWarden: fromWarden))
+    }
+
     private func die() {
         score = Int(((distance - scoreOffset) * 2).rounded(.down)) + bonus   // final, frozen score
         deathDistance = distance
@@ -740,6 +804,10 @@ final class GameCore {
         // advertised bonuses are always delivered). `magnetT`/`doublerT`/`chronoT` are intentionally
         // left running.
         boostT = 0; flowStreak = 0
+        // A paid continue must never resume INSIDE the fatal recovery window — you would have bought
+        // a run that the next wall ends for free. The counter (`stumbles`) is left standing: it is a
+        // run statistic and the bot's contact detector, not a resource.
+        stumbleT = 0; wardenCaughtOnce = false
         // A Warden that put the player down has done its job: it breaks off rather than resuming
         // over a cleared board, and its world is marked finished so the arena can't re-arm as the
         // player runs the rest of it. The charge bank is deliberately NOT refunded — it was spent.
@@ -860,6 +928,7 @@ final class GameCore {
             chronoRemaining: chronoT,
             boostRemaining: boostT, sneakersRemaining: superSneakersT, flowStreak: flowStreak,
             sliding: slideT > 0, grounded: grounded,
+            stumbleRemaining: stumbleT,
             usedCheckpoint: usedCheckpoint,
             entities: entityScratch,
             warden: warden?.state(charge: wardenCharge, playerX: px),
