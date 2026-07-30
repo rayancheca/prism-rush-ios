@@ -481,7 +481,7 @@ final class RealityRenderer: RendererPort {
 
         // The Warden set piece (v1.9). Driven from its own snapshot field rather than the
         // entity pools, because it is not an obstacle and must never be pooled as one.
-        wardenRig.sync(snap.warden, reduceMotion: reduceMotion)
+        wardenRig.sync(snap.warden, dt: Double(lastDt), reduceMotion: reduceMotion)
         // Remember where the craft actually IS, so one-shot FX land on it. Its position animates now
         // (arrival approach, lane lean, hit recoil, departure), so the old hardcoded (0, 5.2, −26)
         // in the fire() arms would miss it by up to 26 units mid-encounter.

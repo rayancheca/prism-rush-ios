@@ -385,7 +385,12 @@ struct WardenEncounter {
             // motion telling the player the opposite of the truth, in the one window where reading
             // the attack is the whole game (decree 6). It is also meaningless for a floor or a
             // curtain, which close every lane and have no direction to point in.
-            x: (phase == .shielded || (phase == .exposed && !attacking))
+            // **v2.0: zero for ALL of `.exposed`, not just during a wind-up.** Freezing the lean only
+            // while `attacking` left the craft tracking the player through the recover gap and then
+            // SNAPPING 1.6 units to neutral on the tick a telegraph locked — a discontinuity landing
+            // on the exact frame the player starts reading the attack. In `.shielded` there is no
+            // committed target to lie about, so the lean there reads as attention and is kept.
+            x: phase == .shielded
                 ? (playerX / max(0.001, Tuning.laneX.last ?? 1)) * Tuning.wardenLeanX : 0,
             y: Tuning.wardenHoverY + (1 - arrive) * Tuning.wardenArriveRise
                                    + leave * Tuning.wardenLeaveRise
