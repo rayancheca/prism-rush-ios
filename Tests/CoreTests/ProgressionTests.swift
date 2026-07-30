@@ -39,6 +39,7 @@ final class ProgressionTests: XCTestCase {
         case .streakBest: s.bestStreak = Int(value)
         case .worldReached: s.worldsCrossed = Int(value)
         case .chestsOpened: break              // fed by openFreeChest, not runs
+        case .wardensDefeated: s.wardensDefeated = Int(value)
         case .revives: s.revives = Int(value)
         case .multiplierHit: s.bestMult = Int(value)
         }

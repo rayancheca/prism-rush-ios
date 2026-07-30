@@ -147,6 +147,10 @@ final class RealityRenderer: RendererPort {
     // A soft translucent dome around the player while a shield is HELD (no timer — it lasts until a
     // hit, then the glass-shatter FX plays). Snapshot-driven so it can never get stuck on/off.
     private var shieldBubble: ModelEntity!
+    // Live craft position, mirrored from the last synced snapshot so FXEvents can land on it.
+    private var wardenX: Float = 0
+    private var wardenY: Float = Float(Tuning.wardenHoverY)
+    private var wardenZ: Float = Float(Tuning.wardenStandOff)
     private let ringPulseMaxLife: Float = 0.35
 
     // Latest blended obstacle tints, captured for the pools' place closure and particle bursts.
@@ -452,6 +456,12 @@ final class RealityRenderer: RendererPort {
         // The Warden set piece (v1.9). Driven from its own snapshot field rather than the
         // entity pools, because it is not an obstacle and must never be pooled as one.
         wardenRig.sync(snap.warden, reduceMotion: reduceMotion)
+        // Remember where the craft actually IS, so one-shot FX land on it. Its position animates now
+        // (arrival approach, lane lean, hit recoil, departure), so the old hardcoded (0, 5.2, −26)
+        // in the fire() arms would miss it by up to 26 units mid-encounter.
+        if let w = snap.warden {
+            wardenX = Float(w.x); wardenY = Float(w.y); wardenZ = Float(-w.z)
+        }
 
         // Speed trail behind the player — time-based (≈ the old 3/frame at 60 Hz). The emission
         // rate breathes with chrono slow-mo so the trail thins while the world crawls. The wake
@@ -569,11 +579,11 @@ final class RealityRenderer: RendererPort {
         case .wardenArrived:
             // A ring sweeping IN from the horizon, the mirror of the world-change sweep that goes
             // out: something is arriving, and it is not scenery.
-            particles.ring(y: 5.2, z: -26, radius: 7, color: cWardenHazard,
+            particles.ring(y: wardenY, z: -wardenZ, radius: 7, color: cWardenHazard,
                            count: 28, velZ: 14, life: 1.0)
             kickFOV()
         case .wardenShieldBroke:
-            particles.burst(x: 0, y: 5.2, z: -26, color: cWardenShield,
+            particles.burst(x: wardenX, y: wardenY, z: -wardenZ, color: cWardenShield,
                             count: 70, power: 8.0, spread: 0.6, life: 0.9)
             if !reduceMotion { shake = max(shake, 0.5) }
         case let .wardenStruck(mask, band, caught):
@@ -598,15 +608,28 @@ final class RealityRenderer: RendererPort {
             }
             if !reduceMotion { shake = max(shake, caught ? 1.0 : 0.35) }
         case .wardenCoreHit:
-            // The counter-punch reads from the CRAFT, so a clean dodge is visibly damage dealt
-            // rather than merely damage avoided.
-            particles.burst(x: 0, y: 4.3, z: -26, color: cWardenHazard,
+            // **Damage has to visibly LEAVE THE PLAYER.** Bursting only at the craft meant something
+            // exploded 26 units away with nothing having travelled there, which is the whole reason
+            // "why does dodging damage it" reads as arbitrary. It is not arbitrary: the flow surge
+            // has always emitted a forward shimmer in the player's own trail colour that lands at
+            // `fountainLead` — the same distance the Warden hovers at. The game has been teaching
+            // "a clean pass throws something forward to exactly there" for nine versions.
+            //
+            // So the counter-punch reuses that exact grammar: a trail-coloured cascade running from
+            // the player up the track, then the impact at the hull.
+            let reach = wardenZ
+            for k in 1...7 {
+                particles.burst(x: 0, y: 0.9 + Float(k) * 0.42,
+                                z: -Float(k) / 7 * reach,
+                                color: skinTrailColor, count: 4, power: 1.4, spread: 0.22, life: 0.5)
+            }
+            particles.burst(x: wardenX, y: wardenY, z: -reach, color: cWardenHazard,
                             count: 46, power: 7.0, spread: 0.45, life: 0.8)
             if !reduceMotion { shake = max(shake, 0.45) }
         case .wardenDefeated:
-            particles.burst(x: 0, y: 5.2, z: -26, color: cWhite, count: 90, power: 10, spread: 0.5, life: 1.2)
-            particles.burst(x: 0, y: 5.2, z: -26, color: cWardenHazard, count: 120, power: 7.5, spread: 0.7, life: 1.4)
-            particles.ring(y: 5.2, z: -26, radius: 4, color: cWardenShield, count: 30, velZ: 30, life: 1.1)
+            particles.burst(x: wardenX, y: wardenY, z: -wardenZ, color: cWhite, count: 90, power: 10, spread: 0.5, life: 1.2)
+            particles.burst(x: wardenX, y: wardenY, z: -wardenZ, color: cWardenHazard, count: 120, power: 7.5, spread: 0.7, life: 1.4)
+            particles.ring(y: wardenY, z: -wardenZ, radius: 4, color: cWardenShield, count: 30, velZ: 30, life: 1.1)
             if !reduceMotion { shake = max(shake, 1.1) }
             kickFOV()
         case .wardenTelegraph, .wardenBrokeOff:

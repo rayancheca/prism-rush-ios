@@ -26,9 +26,9 @@ final class WardenRig {
     /// player's own plane, so it is drawn just in front of them — far enough to see coming, close
     /// enough that "that column is over my lane" is a single glance.
     private static let strikeZ: Double = -9
-    /// How high the descending column starts. Above the craft's hover height so the shot reads as
-    /// coming out of the sky rather than sprouting from the deck.
-    private static let columnTop: Double = 7.5
+    /// The gun beam's mesh is built one unit long and scaled on Z to reach the hull, so the craft
+    /// closing in does not require rebuilding geometry every frame.
+    private static let gunBeamUnitLength: Float = 1
 
     /// How far the full-width shapes reach across the deck. Wider than the three lanes so the slab
     /// and the wall visibly run off both edges of the track — that is what says "there is no lane to
@@ -60,6 +60,7 @@ final class WardenRig {
     private let core: ModelEntity        // only visible once the shield is down
     private var panels: [ModelEntity] = []   // one per lane, flat on the deck (LANCE only)
     private var columns: [ModelEntity] = []  // one per lane, descending as the beam winds up
+    private let gunBeam: ModelEntity         // the phase-1 auto-fire, drawn for the first time (S-009)
     private let floorSlab: ModelEntity       // full width, grows UP out of the deck — jump it
     private let curtainWall: ModelEntity     // full width, descends from the sky and STOPS — slide it
 
@@ -87,6 +88,14 @@ final class WardenRig {
         // The two full-width shapes. Both are deep (13) so they read as a band the player is running
         // INTO rather than a line they are crossing, and both are scaled in `sync` rather than
         // rebuilt — a unit box scaled on one axis costs nothing per frame.
+        // Tapered so it reads as leaving the player and arriving at the craft rather than as a
+        // rod. Uses the beam helper that already ships in seven decor files and had never once been
+        // pointed at the Warden.
+        gunBeam = ModelEntity(mesh: ProceduralMesh.beam(length: Self.gunBeamUnitLength,
+                                                        halfWidthNear: 0.16, halfWidthFar: 0.05),
+                              materials: [matShield])
+        gunBeam.isEnabled = false
+
         floorSlab = ModelEntity(mesh: .generateBox(width: Self.fullWidth, height: 1, depth: 13),
                                 materials: [matHazardDim])
         floorSlab.isEnabled = false
@@ -99,6 +108,7 @@ final class WardenRig {
         craft.addChild(core)
         group.addChild(craft)
         group.addChild(beams)
+        beams.addChild(gunBeam)
         beams.addChild(floorSlab)
         beams.addChild(curtainWall)
 
@@ -137,11 +147,38 @@ final class WardenRig {
             if group.isEnabled { group.isEnabled = false }
             return
         }
+        _ = reduceMotion
         if !group.isEnabled { group.isEnabled = true }
 
         // `z` is negative-ahead in the core's convention, matching `EntityState`. Only the craft
         // moves; `beams` stays anchored in world space around the player.
-        craft.position = SIMD3<Float>(0, Float(w.y), Float(w.z))
+        //
+        // All three axes are live now (S-009). `z` was a hard constant for the whole of v1.9 despite
+        // a comment claiming otherwise, so the craft never approached, never recoiled and never
+        // retreated — it appeared, hung, and vanished. `x` leans it toward the player's lane.
+        craft.position = SIMD3<Float>(Float(w.x), Float(w.y), Float(w.z))
+
+        // The phase-1 gun, drawn for the first time. The design has always said the character
+        // auto-fires to break the shield, and the HUD has always shown a charge bar — but there was
+        // no emitter anywhere in the renderer (a grep for muzzle/tracer/bullet/projectile returned
+        // two comments and zero code). The player was watching a meter drain and being told it was
+        // a gun. A tapered beam from the player's plane to the hull makes the gem → power link
+        // visible without changing a single rule.
+        let firingGun = w.phase == .shielded
+        gunBeam.isEnabled = firingGun
+        if firingGun {
+            // Reaches from just in front of the player to the hull, so both ends are anchored to
+            // something real. Scaled on Z because `ProceduralMesh.beam` is built along −Z.
+            let reach = Float(-w.z) - 2.2
+            gunBeam.scale = SIMD3<Float>(1, 1, max(0.01, reach / Self.gunBeamUnitLength))
+            gunBeam.position = SIMD3<Float>(Float(w.x) * 0.35, 1.05, -2.2)
+            // Thicker and brighter with charge: the bar the player has been filling all run is now
+            // a thing they can see hitting something.
+            let power = 0.45 + 0.55 * Float(w.charge)
+            gunBeam.scale.x = power
+            gunBeam.scale.y = power
+            gunBeam.model?.materials = [w.charge > 0.7 ? matHazard : matShield]
+        }
 
         // A slow yaw sells "hovering, watching" without moving anything the player must track.
         // Reduce Motion keeps the craft dead still — it is scenery, never a readability cue.
@@ -195,7 +232,13 @@ final class WardenRig {
             // The column descends from the craft's altitude to the deck. Its unit box is 1 high, so
             // scaling y by the remaining reach and sitting it at half that keeps its TOP pinned up
             // in the sky while its bottom edge falls — the shot visibly coming down, not growing up.
-            let drop = Float(Self.columnTop)
+            //
+            // **The top is the CRAFT's height, not a constant (S-009).** It used to be a hardcoded
+            // 7.5 against a craft hovering at 5.2, so a lance's top edge was cut flat 256 px ABOVE
+            // the thing supposedly firing it: the attacks did not come from the attacker. Reading
+            // the craft's live y ties the shot to its source for one line, and keeps doing so now
+            // that the craft's height and depth both animate.
+            let drop = max(1, Float(w.y))
             let reach = hot ? drop : drop * min(1, t)
             column.scale = SIMD3<Float>(hot ? 1 : 0.55, max(0.01, reach), hot ? 1 : 0.55)
             column.position = SIMD3<Float>(Float(Tuning.laneX[lane]),
@@ -220,7 +263,8 @@ final class WardenRig {
         let curtainLive = live && w.band == .curtain
         curtainWall.isEnabled = curtainLive
         if curtainLive {
-            let top = Float(Self.columnTop)
+            // Same rule as the lance: the wall hangs from the craft, not from a constant.
+            let top = max(Self.curtainHem + 0.5, Float(w.y))
             let hem = hot ? Self.curtainHem : top - (top - Self.curtainHem) * min(1, t)
             let h = max(0.02, top - hem)
             curtainWall.model?.materials = [mat]

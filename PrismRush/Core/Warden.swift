@@ -40,7 +40,8 @@ struct WardenState: Sendable, Equatable {
     var phase: WardenPhase
     var world: Int                 // the world ordinal this Warden belongs to (3, 6, 9, …)
     var rank: Int                  // 1…wardenRankCap — how hard this one fights
-    var z: Double                  // stand-off ahead of the player (negative = ahead)
+    var z: Double                  // stand-off ahead of the player (negative = ahead) — ANIMATED
+    var x: Double                  // lateral lean toward the lane the player is in
     var y: Double                  // hover height above the deck
     var shieldFraction: Double     // 1 → 0 across the shield phase; 0 once exposed
     var coreHits: Int              // 0 ..< coreHitsNeeded
@@ -109,6 +110,8 @@ struct WardenEncounter {
     private var strikeShow: Double = 0 // the beam stays lit this long AFTER it fires, so the hit is
                                        // something the player sees rather than infers
     private var attackIndex = 0        // how many telegraphs have begun — indexes the script
+    /// 1 when the last strike was DODGED (the craft flinches), 0 when it landed (it does not).
+    private var hitFlinch: Double = 0
     private var rng: SplitMix64
 
     /// `runSeed` and `world` fully determine the attack order — no `Date()`, no `Double.random`.
@@ -228,9 +231,11 @@ struct WardenEncounter {
                                               playerBottom: playerBottom, mask: beamMask,
                                               band: band) {
                     out.caughtPlayer = true
+                    hitFlinch = 0
                 } else {
                     coreHits += 1
                     out.coreHit = true
+                    hitFlinch = 1
                     if coreHits >= coreHitsNeeded {
                         out.killed = true
                         phase = .dying
@@ -335,19 +340,36 @@ struct WardenEncounter {
     }
 
     /// The renderable view of this encounter.
-    func state(charge: Double) -> WardenState {
+    ///
+    /// `playerX` lets the craft lean toward the lane the player is in. It is presentation only —
+    /// nothing here feeds a collision or a draw — so it cannot affect determinism.
+    func state(charge: Double, playerX: Double = 0) -> WardenState {
         let telegraph: Double = (phase == .exposed && attacking)
             ? min(1, phaseT / Tuning.wardenTelegraphTime(rank: rank)) : 0
         let firing = phase == .exposed && strikeShow > 0
         // The craft closes in as it arrives and climbs away as it leaves, so entrance and exit read
         // as movement rather than a pop. `z` is negative = ahead, matching `EntityState`.
+        //
+        // **Depth genuinely animates now (S-009).** For all of v1.9 `z` was the constant
+        // `-wardenStandOff` while this comment claimed it closed in; only `y` ever moved. It now
+        // approaches on arrival, recoils when the core is hit, and retreats as it leaves.
         let arrive = phase == .arriving ? min(1, phaseT / Tuning.wardenArriveTime) : 1
         let leave = phase == .leaving ? min(1, phaseT / Tuning.wardenLeaveTime) : 0
+        // The recoil decays over the same window the fired shape stays lit, so "I dodged" and "it
+        // flinched" are the same beat.
+        let recoil = strikeShow > 0 && phase != .dying
+            ? (strikeShow / Tuning.wardenStrikeShowTime) * Tuning.wardenHitRecoil * hitFlinch
+            : 0
         return WardenState(
             phase: phase,
             world: world,
             rank: rank,
-            z: -Tuning.wardenStandOff,
+            z: -(Tuning.wardenStandOff + (1 - arrive) * Tuning.wardenArriveDepth
+                                       + leave * Tuning.wardenLeaveDepth + recoil),
+            // Leans toward the player's lane, eased so it never snaps. Zero while dying or leaving:
+            // a craft that is finished stops paying attention.
+            x: (phase == .shielded || phase == .exposed)
+                ? (playerX / max(0.001, Tuning.laneX.last ?? 1)) * Tuning.wardenLeanX : 0,
             y: Tuning.wardenHoverY + (1 - arrive) * Tuning.wardenArriveRise
                                    + leave * Tuning.wardenLeaveRise,
             shieldFraction: shieldFraction,

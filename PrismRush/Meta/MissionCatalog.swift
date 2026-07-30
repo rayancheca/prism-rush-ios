@@ -29,6 +29,10 @@ struct Mission: Identifiable, Sendable {
     enum Metric: String, Sendable, CaseIterable {
         case gems, distance, nearMisses, slides, slickBonuses, runsFinished
         case streakBest, worldReached, chestsOpened, revives, multiplierHit
+        /// Wardens defeated (S-009). `RunSummary.wardensDefeated` has been populated and synced to
+        /// iCloud since v1.9 and was read by NOTHING anywhere in the app — a boss the game never
+        /// acknowledged. This is the first reader.
+        case wardensDefeated
 
         /// Max-style metrics record the best value seen; the rest accumulate by summing.
         var accumulatesByMax: Bool {
@@ -52,6 +56,7 @@ struct Mission: Identifiable, Sendable {
             case .chestsOpened: return 0   // bumped by ProfileStore.openFreeChest, not by runs
             case .revives: return Double(s.revives)
             case .multiplierHit: return Double(s.bestMult)
+            case .wardensDefeated: return Double(s.wardensDefeated)
             }
         }
     }
@@ -83,6 +88,7 @@ enum MissionCatalog {
         Mission(id: "run.gems60",  title: "Collect 60 gems in one run",       metric: .gems,          target: 60,   rewardCoins: 120, scope: .perRun),
         Mission(id: "run.close8",  title: "Thread 8 CLOSE calls in one run",  metric: .nearMisses,    target: 8,    rewardCoins: 150, scope: .perRun),
         Mission(id: "run.dist2k",  title: "Travel 2,000 m in one run",        metric: .distance,      target: 2000, rewardCoins: 200, scope: .perRun),
+        Mission(id: "run.warden1", title: "Defeat a Warden",                  metric: .wardensDefeated, target: 1,  rewardCoins: 250, scope: .perRun),
     ]
 
     /// Daily pool — 3 slots are drawn from this per UTC day (see `dailySlots`).

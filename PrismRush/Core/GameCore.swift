@@ -75,6 +75,9 @@ final class GameCore {
     @ObservationIgnored private(set) var wardenCharge: Double = 0
     /// Wardens killed this run — the meta layer banks this once, in `applyRunSummary`.
     @ObservationIgnored private(set) var wardensDefeatedThisRun: Int = 0
+    /// Warden bounty coins earned this run. Kept OUT of `gemCount` so a kill never inflates the
+    /// run's gem stat, its gem missions or its per-gem XP — see the payout site in `stepWarden`.
+    @ObservationIgnored private(set) var bountyCoins: Int = 0
     /// The run's seed, kept so a Warden can derive its OWN stream from it without ever drawing from
     /// the spawn stream (iron rule 2 — arming a Warden costs zero `rng` calls).
     @ObservationIgnored private(set) var runSeed: UInt64
@@ -122,6 +125,15 @@ final class GameCore {
             let wn = Int((startDistance / Tuning.worldLength).rounded(.down))
             let wi = ((wn % 3) + 3) % 3
             maxWorld = wn; world = wi; worldFrom = wi; worldTo = wi; worldBlend = 1
+            // A checkpoint run starts with an EMPTY charge bank, which is below the threshold that
+            // can break a Warden's shield — so buying a start at world 3, 6, 9 or 12 used to
+            // GUARANTEE that the first Warden you ever saw arrived, hung there, and withdrew.
+            // A paid feature whose first act is a boss giving up on you is decree 3 (no
+            // broken-looking states for expected situations) and decree 5 (advertised bonuses are
+            // always delivered), so a checkpoint start is granted the charge a player would have
+            // banked reaching that distance under their own steam.
+            wardenCharge = min(1, startDistance / Tuning.worldLength
+                                  * Tuning.wardenCheckpointChargePerWorld)
         }
         rebuildSnapshot()
     }
@@ -161,7 +173,7 @@ final class GameCore {
         world = 0; maxWorld = 0; worldFrom = 0; worldTo = 0; worldBlend = 1
         shield = false; invulnT = 0; magnetT = 0; doublerT = 0; chronoT = 0
         boostT = 0; superSneakersT = 0; flowStreak = 0; flowSurges = 0
-        bonus = 0; score = 0; gemCount = 0; streak = 0; bestStreak = 0; mult = 1
+        bonus = 0; score = 0; gemCount = 0; streak = 0; bestStreak = 0; mult = 1; bountyCoins = 0
         activeObstacles.removeAll(keepingCapacity: true)
         activeGems.removeAll(keepingCapacity: true)
         activePickups.removeAll(keepingCapacity: true)
@@ -403,8 +415,14 @@ final class GameCore {
                 // as it eats a wall. It does NOT count as a dodge — absorbing is surviving, not
                 // damaging. (Phase 2 replaces this branch with the abduction struggle.)
                 if shield {
-                    shield = false; invulnT = Tuning.invulnDuration; streak = 0; mult = 1
-                    flowStreak = 0
+                    // A held shield eats the beam and costs the SHIELD — nothing else. It used to
+                    // also wipe the streak, the multiplier and the flow chain with nothing on
+                    // screen explaining why, which made the encounter's only interaction with
+                    // anything the player owns both invisible and purely punitive. Absorbing an
+                    // attack is a success; it should not read as a failure. (This is also the
+                    // "Ion Shield" Countermeasure from 10_WARDENS.md §5, delivered with a pickup
+                    // that already exists rather than a new purchase.)
+                    shield = false; invulnT = Tuning.invulnDuration
                     emit(.shieldAbsorbed(x: px))
                 } else {
                     die()
@@ -416,7 +434,12 @@ final class GameCore {
         if ev.killed {
             wardensDefeatedThisRun += 1
             bonus += Tuning.wardenScoreBonus * mult
-            gemCount += Tuning.wardenCoinBounty   // currency only, like a ring — never streak (rule 9)
+            // Currency only, like a ring — never streak (rule 9). Banked SEPARATELY from `gemCount`
+            // because `gemCount` is not just the coin payout: it is also the run's GEM stat, and
+            // `RunSummary.gems` feeds the "collect 60 gems" mission, the daily/weekly gem missions,
+            // the gem achievement and 2 XP per gem. Filing a 150-coin bounty there meant one kill
+            // silently completed 40% of a gem mission and leaked 300 XP for gems never collected.
+            bountyCoins += Tuning.wardenCoinBounty
             emit(.wardenDefeated(world: w.world, bounty: Tuning.wardenCoinBounty))
         }
         if ev.brokeOff { emit(.wardenBrokeOff) }
@@ -839,7 +862,7 @@ final class GameCore {
             sliding: slideT > 0, grounded: grounded,
             usedCheckpoint: usedCheckpoint,
             entities: entityScratch,
-            warden: warden?.state(charge: wardenCharge),
+            warden: warden?.state(charge: wardenCharge, playerX: px),
             wardenCharge: wardenCharge,
             score: score, gems: gemCount, mult: mult, best: best
         )

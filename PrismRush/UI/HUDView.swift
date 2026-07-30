@@ -49,8 +49,15 @@ struct HUDView: View {
                 // the owner found the old 38 crowded them. Starts the chips ~22pt under the buttons.
                 .padding(.top, 64)
             }
-            wardenPanel(snap)
             Spacer()
+            // The Warden readout sits LOW, just above the XP bar — not under the score row.
+            //
+            // Centred at the top it landed on the craft's exact screen coordinates: "CORE EXPOSED"
+            // was drawn straight through the hull, and at rank 3 the six hit pips were a 471 px row
+            // — 1.6× wider than the entire ship — painted across it in full-saturation red against
+            // the hull's desaturated grey. The player was reading the label instead of the boss.
+            // Down here it is still centred and still unmissable, but the sky it describes is clear.
+            wardenPanel(snap)
             xpBar(snap)
         }
         .foregroundStyle(.white)

@@ -345,6 +345,15 @@ enum Tuning {
     static let wardenChargeFullGems: Double = 520
     static var wardenChargePerGem: Double { 1.0 / wardenChargeFullGems }
 
+    /// Charge granted per world skipped by a checkpoint / purchased start.
+    ///
+    /// A checkpoint run begins with an empty bank, and an empty bank cannot break a shield — so
+    /// buying a start at a Warden world guaranteed that the first encounter withdrew. This grants
+    /// what a player would plausibly have banked reaching that distance: the bot collects ~637 gems
+    /// by world 3, i.e. ~0.41 of a bank per world, rounded up slightly so world 3 clears the ~0.744
+    /// threshold with a little margin rather than landing exactly on it.
+    static let wardenCheckpointChargePerWorld: Double = 0.27
+
     /// How often a beam closes a SECOND lane as well as the player's own.
     ///
     /// Every beam always locks the lane the player is standing in, so standing still is always
@@ -421,10 +430,34 @@ enum Tuning {
     // craft sits 14.7° off that axis: in frame, upper third. At the top of its arrival it is 25.9°
     // off — still inside. `wardenLeaveRise` deliberately takes it PAST the edge, because leaving the
     // frame is what "climbs away" should look like. Well in front of the ~65 u backdrop plane.
-    static let wardenStandOff: Double = 26     // units ahead of the player (rendered at z = −this)
-    static let wardenHoverY: Double = 5.2
+    // **Re-staged in S-009.** Measured on the simulator, the craft was 288 × 91 px — 0.46% of the
+    // frame — with its centre at y 827 against a horizon at y 833. It sat SIX PIXELS above the
+    // vanishing point, in the lowest-contrast band of the image, while its own curtain attack filled
+    // 56% of the screen and an ordinary wall was four times its size. The owner's verdict was
+    // "its just a basic triangle… nothing to tell you what it is or what it does."
+    //
+    // Closer and lower fixes both problems at once: it leaves the vanishing-point band and grows to
+    // roughly 2% of frame. It cannot come much nearer than this without crowding the strike plane
+    // at z −9, where the shapes the player must actually read are drawn (decree 6).
+    static let wardenStandOff: Double = 19     // units ahead of the player (rendered at z = −this)
+    static let wardenHoverY: Double = 4.2
     static let wardenArriveRise: Double = 7.0  // starts this much higher and descends in
     static let wardenLeaveRise: Double = 14.0  // climbs away by this much on the way out
+
+    /// How much FURTHER out the craft sits at the moment of arrival, closing to `wardenStandOff` as
+    /// it drops in. Depth was a hard constant for the whole of v1.9 — the code comment claiming the
+    /// craft "closes in as it arrives" was simply false, and only its height ever animated. An
+    /// approach is the cheapest possible "something is coming".
+    static let wardenArriveDepth: Double = 22
+    /// And how much further out it retreats while leaving, so departure reads as distance rather
+    /// than as a fade.
+    static let wardenLeaveDepth: Double = 26
+
+    /// The craft leans toward the lane the player is in, by this many units of x at full deflection.
+    /// Small on purpose: it must read as attention, not as a dodge the player has to track.
+    static let wardenLeanX: Double = 1.6
+    /// How far it recoils backward when the core takes a hit — the visible consequence of a dodge.
+    static let wardenHitRecoil: Double = 2.2
 
     /// Payout for a kill. Coins are deliberately the SMALLEST reward tier (10_WARDENS.md §4) — this
     /// feature exists to fix the coin sink, not to feed it — but a fight with no payout is not a

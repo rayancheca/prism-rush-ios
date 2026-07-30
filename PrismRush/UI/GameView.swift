@@ -75,10 +75,13 @@ final class GameModel {
     private(set) var lastCoinsFromWorlds = 0
     /// The 4th per-death delta (v1.3): CLOSE/SLICK style coins via `XPCurve.styleCoins` (rule 9).
     private(set) var lastCoinsFromStyle = 0
+    /// Warden bounty coins, tracked separately from gems so a kill never inflates the gem stat.
+    private(set) var lastCoinsFromBounty = 0
     @ObservationIgnored private var gemCoinsAwarded = 0
     @ObservationIgnored private var distCoinsAwarded = 0
     @ObservationIgnored private var worldCoinsAwarded = 0
     @ObservationIgnored private var styleCoinsAwarded = 0
+    @ObservationIgnored private var bountyCoinsAwarded = 0
     /// XP/level outcome of this run, captured ONCE from `applyRunSummary` and held as model state
     /// (G3: the panel must animate the run's result, never a re-derived live-store snapshot).
     private(set) var lastLevelUp: LevelUpResult?
@@ -435,6 +438,7 @@ final class GameModel {
         distCoinsAwarded = 0
         worldCoinsAwarded = 0
         styleCoinsAwarded = 0
+        bountyCoinsAwarded = 0
         lastLevelUp = nil
         lastChallengePayout = 0
         nearMissesThisRun = 0
@@ -787,7 +791,15 @@ final class GameModel {
         lastCoinsFromStyle = max(0, XPCurve.styleCoins(closes: closesThisRun, slicks: slicksThisRun,
                                                        multiplier: mult) - styleCoinsAwarded)
         styleCoinsAwarded += lastCoinsFromStyle
-        let coinsDelta = lastCoinsFromGems + lastCoinsFromDistance + lastCoinsFromWorlds + lastCoinsFromStyle
+        // 5th component (S-009): Warden bounties. Their own watermark, and deliberately NOT folded
+        // into `lastCoinsFromGems` — the bounty is currency the player was paid, not gems they
+        // collected, and `RunSummary.gems` below feeds gem missions, the gem achievement and 2 XP
+        // per gem. It used to land in `core.gemCount`, so one kill silently completed 40% of the
+        // "collect 60 gems" mission and leaked 300 XP.
+        lastCoinsFromBounty = max(0, core.bountyCoins * mult - bountyCoinsAwarded)
+        bountyCoinsAwarded += lastCoinsFromBounty
+        let coinsDelta = lastCoinsFromGems + lastCoinsFromDistance + lastCoinsFromWorlds
+                       + lastCoinsFromStyle + lastCoinsFromBounty
         coinsAwardedThisRun += coinsDelta
         lastCoinsEarned = coinsDelta
 

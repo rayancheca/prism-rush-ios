@@ -522,6 +522,7 @@ private struct MissionCard: View {
         case .streakBest: "flame.fill"
         case .worldReached: "globe"
         case .chestsOpened: "gift.fill"
+        case .wardensDefeated: "shield.lefthalf.filled.slash"
         case .revives: "heart.fill"
         case .multiplierHit: "multiply"
         }
