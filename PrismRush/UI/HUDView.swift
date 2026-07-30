@@ -41,7 +41,6 @@ struct HUDView: View {
                 // Starts below the mute/pause cluster anchored in the top-trailing corner.
                 VStack(alignment: .trailing, spacing: 8) {
                     gemMultPill(snap)
-                    recoveryChip(snap)
                     chargeMeter(snap)
                     powerUpStack(snap)
                     flowPips(snap)
@@ -74,29 +73,6 @@ struct HUDView: View {
 
     private static let hazard = Theme.color(0xFF3355)
     private static let shieldHue = Theme.color(0x66E0FF)
-
-    /// The one moment an ordinary wall is lethal for a reason the deck does not show (v2.0).
-    ///
-    /// It sits directly under the multiplier pill on purpose: the reset the player just took and the
-    /// window it opened are one event, and they should be read together. It borrows the existing
-    /// `StatusChip` geometry rather than inventing a shape, so the HUD's "one chip, one size" rule
-    /// from S-009 survives. Absent entirely when clean — nothing here is decorative (decree 4).
-    @ViewBuilder
-    private func recoveryChip(_ snap: GameSnapshot) -> some View {
-        if snap.stumbleRemaining > 0 {
-            StatusChip(tint: Self.hazard,
-                       label: "EXPOSED",
-                       progress: snap.stumbleRemaining / Tuning.stumbleRecover) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 12, weight: .black))
-            } value: {
-                Text("!").font(.system(size: 13, weight: .black, design: .rounded))
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Exposed — the next hit ends the run")
-            .transition(.opacity)
-        }
-    }
 
     /// The charge bank: gems collected become Warden fire rate.
     ///

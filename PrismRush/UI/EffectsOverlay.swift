@@ -19,6 +19,9 @@ struct EffectsOverlay: View {
                           reduceFlash: ProfileStore.shared.profile.reduceFlash)
                 CrackView(id: model.shieldBreakID,
                           reduceFlash: ProfileStore.shared.profile.reduceFlash)
+                ExposedVignette(remaining: model.core.snapshot.stumbleRemaining,
+                                size: geo.size,
+                                reduceFlash: ProfileStore.shared.profile.reduceFlash)
             }
         }
         .allowsHitTesting(false)
@@ -182,5 +185,56 @@ private struct FlashView: View {
                 opacity = strength * (reduceFlash ? 0.15 : 1)
                 withAnimation(.easeOut(duration: 0.35)) { opacity = 0 }
             }
+    }
+}
+
+/// EXPOSED (v2.0): the screen-edge warning that runs for exactly as long as a stumble leaves the
+/// player one contact from death.
+///
+/// **Why an edge treatment and not a HUD chip.** A chip was built first and rejected on the
+/// simulator for two reasons, both structural rather than cosmetic: it reflowed the whole
+/// top-right stack on and off every 0.9 s, breaking the "one chip, one size" layout discipline
+/// S-009 established; and centred elements like the world banner drew straight across it, so the
+/// one readout that says *the next hit ends the run* was the one readout that could be occluded.
+/// A vignette owns no layout, competes with nothing, and is read peripherally — which matters,
+/// because the player's eyes are on the deck.
+///
+/// Driven by `stumbleRemaining` rather than by the `.stumbled` event, so it can never be left on
+/// by a missed edge and can never survive a revive.
+///
+/// It INTENSIFIES as the window runs out. The natural instinct is to fade it out as the danger
+/// passes; that is backwards. The danger is constant for the whole window and the thing worth
+/// signalling is how much of it is left, so the treatment tightens toward the end and then stops
+/// dead — the stop is the "you're safe" cue, and it is unmissable precisely because it is abrupt.
+private struct ExposedVignette: View {
+    let remaining: Double
+    let size: CGSize
+    let reduceFlash: Bool
+
+    var body: some View {
+        // `stumbleRecover` is the denominator so this can never drift from the mechanic it draws.
+        let t = max(0, min(1, remaining / Tuning.stumbleRecover))
+        if t > 0 {
+            let urgency = 1 - t
+            // **Every radius is derived from the live frame, never from point literals.** A first
+            // pass used fixed 260–620 pt stops; on a 402 pt-wide screen the outer stop lands far
+            // off-frame, so the whole visible area sits mid-ramp and the effect renders as a
+            // full-screen magenta wash that drowns the world palette. Verified on the simulator.
+            let half = min(size.width, size.height) / 2
+            let corner = (size.width * size.width + size.height * size.height).squareRoot() / 2
+            // It must stay a frame, not a filter: the centre third of the screen — where the deck
+            // and the next obstacle are — is left completely untinted at every urgency.
+            let inner = half * (reduceFlash ? 1.00 : 1.10 - 0.22 * urgency)
+            let peak = reduceFlash ? 0.20 : (0.16 + 0.16 * urgency)
+            RadialGradient(
+                colors: [.clear, .clear, Color(red: 1, green: 0.20, blue: 0.33).opacity(peak)],
+                center: .center,
+                startRadius: inner,
+                endRadius: corner
+            )
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 }

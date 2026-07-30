@@ -384,11 +384,21 @@ final class RealityRenderer: RendererPort {
         // photosensitivity-safe constant tint) rather than being switched off: this is a safety
         // readout, not decoration, and dropping it would leave the accommodation MORE dangerous.
         let vulnerable = snap.stumbleRemaining > 0 && snap.mode == .play
-        stumbleAura.isEnabled = vulnerable
         if vulnerable {
             stumbleAura.position = SIMD3<Float>(px, Float(snap.playerY) + 0.66, 0)
-            let strobe: Float = reduceMotion ? 1 : (0.82 + 0.18 * Float(sin(elapsed * 56)))
-            stumbleAura.scale = SIMD3<Float>(repeating: strobe)
+            // Widens as the window runs down, so the ring is at its largest in the last moments of
+            // vulnerability — the shape of the risk, not just its presence.
+            let urgency = 1 - Float(snap.stumbleRemaining / Tuning.stumbleRecover)
+            stumbleAura.scale = SIMD3<Float>(repeating: 1.0 + 0.36 * urgency)
+            // **The strobe is the load-bearing channel, not the colour.** Prism — the default
+            // character — wears a STATIC RAINBOW (D-011), so a steady red ring hugging its body
+            // reads as one more of its own bands; verified on the simulator, where exactly that
+            // happened. Nothing else in the game blinks, so blinking is unambiguous where hue is
+            // not. Reduce Motion holds it solid instead: this is a safety readout, and a player who
+            // cannot have the flicker still needs the ring.
+            stumbleAura.isEnabled = reduceMotion || sin(elapsed * 44) > -0.35
+        } else if stumbleAura.isEnabled {
+            stumbleAura.isEnabled = false
         }
 
         // Dust kicked up during a slide — grounded OR mid air-slam — so it's unmistakable.
@@ -934,18 +944,21 @@ final class RealityRenderer: RendererPort {
         shieldBubble.isEnabled = false
         root.addChild(shieldBubble)
 
-        // Vulnerability shell (v2.0). A stumble leaves the player ONE contact from death for
+        // Vulnerability ring (v2.0). A stumble leaves the player ONE contact from death for
         // `Tuning.stumbleRecover`, and that is the only state in the game where an ordinary wall is
-        // lethal for a reason the deck does not show. It has to be visible on the body, not only in
-        // the HUD, because the body is where the player's eyes already are.
+        // lethal for a reason the deck does not show. It has to read on the BODY, not only in the
+        // HUD, because the body is where the player's eyes already are.
         //
-        // Same construction as the shield dome and deliberately its opposite in every channel:
-        // hazard red rather than cyan, a hard 9 Hz strobe rather than a calm 0.5 Hz breathe, and
-        // slightly INSIDE the body radius so it reads as damage clinging to the character rather
-        // than as protection around it.
-        var vulnMat = UnlitMaterial(color: UIColor(red: 1, green: 0.20, blue: 0.33, alpha: 1))
-        vulnMat.blending = .transparent(opacity: .init(floatLiteral: 0.30))
-        stumbleAura = ModelEntity(mesh: .generateSphere(radius: 0.86), materials: [vulnMat])
+        // **A translucent shell was tried first and is wrong**, verified on the simulator: an unlit
+        // 30%-opacity red sphere over a bright character composites to a muddy dark disc that reads
+        // as a shadow, not a warning — and it dulls the one thing the player is looking at. An
+        // OPAQUE ring at full hazard red cannot do either. It also rhymes with what this game has
+        // already taught: a ring around a thing is that thing's state (the Warden's shield halo,
+        // the prism gate, the legendary aura).
+        stumbleAura = ModelEntity(mesh: ProceduralMesh.torus(major: 1.02, minor: 0.085,
+                                                             majorSeg: 24, minorSeg: 6),
+                                  materials: [UnlitMaterial(color: uiHex(0xFF3355))])
+        stumbleAura.orientation = simd_quatf(angle: .pi / 2, axis: SIMD3<Float>(1, 0, 0))
         stumbleAura.isEnabled = false
         root.addChild(stumbleAura)
 

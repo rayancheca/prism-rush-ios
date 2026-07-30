@@ -105,6 +105,7 @@ final class GameModel {
 
     @ObservationIgnored private let autoplay = ProcessInfo.processInfo.environment["PR_AUTOPLAY"] == "1"
     @ObservationIgnored private let demo = ProcessInfo.processInfo.environment["PR_DEMO"] == "1"
+    @ObservationIgnored private let stumbleDebug = ProcessInfo.processInfo.environment["PR_STUMBLE"] == "1"
 
     // First-run contextual control hints (the just-in-time tutorial): the first time each obstacle
     // type approaches on a brand-new player's first run, a "SWIPE UP/DOWN/SIDE" prompt appears so
@@ -313,6 +314,14 @@ final class GameModel {
                 }
                 if self.autoplay, self.core.mode == .over {
                     self.startRun()
+                }
+                // PR_STUMBLE=1: hold the player permanently staggered so the vulnerability shell,
+                // the EXPOSED chip and the impact FX can be captured. Re-armed as the window
+                // expires rather than fired once, because `Tuning.stumbleRecover` is 0.9 s — far
+                // shorter than a launch-to-screenshot round trip. The Autopilot plays perfectly and
+                // never enters a graze band, so an autoplay capture can never produce one itself.
+                if self.stumbleDebug, self.core.mode == .play, self.core.stumbleT <= 0 {
+                    self.core.debugStumble()
                 }
 
                 self.core.advance(realDt: dt)

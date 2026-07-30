@@ -773,6 +773,13 @@ final class GameCore {
     /// debug activation, so it can never affect a seeded run or the solvability bot.
     func debugFillWardenCharge() { if mode == .play { wardenCharge = 1 } }
 
+    /// Debug/QA hook (`PR_STUMBLE`): stagger the player on demand, so the vulnerability shell, the
+    /// HUD's EXPOSED chip and the impact FX can be screenshotted without hand-flying a half-hit at
+    /// 33 m/s. The Autopilot plays perfectly and never enters a graze band, so an autoplay capture
+    /// can never produce one on its own. Consumes no RNG and is play-gated like every other debug
+    /// activation, so it can never reach a seeded run or the solvability bot.
+    func debugStumble() { if mode == .play { stumble(fromWarden: false) } }
+
     /// Test/diagnostic hook: wipe every live entity and park the spawner so hand-built scenarios
     /// (`debugSpawn`) run with zero procedural interference.
     func debugClearTrack() {
