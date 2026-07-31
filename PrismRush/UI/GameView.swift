@@ -632,18 +632,22 @@ final class GameModel {
             addPopup("WARDEN", color: Theme.color(0xFF3355), worldX: 0)
             synth.play(.worldSweep)
             flash(0.4)
-        case let .wardenTelegraph(_, band):
+        case let .wardenThrew(band, _):
             // One cue per shape, and the pitch direction names the verb (Synth §Warden telegraphs).
+            // The three voices survive the v2.2 rebuild unchanged and are now BETTER placed: they
+            // fire when the hazard leaves the craft, so the sound and the object appear together
+            // instead of the sound announcing a band that was about to be painted over the deck.
             switch band {
             case .floor:   synth.play(.wardenFloorCue)
             case .curtain: synth.play(.wardenCurtainCue)
             case .lance:   synth.play(.wardenLanceCue)
             }
-        case let .wardenStruck(_, _, caught):
-            synth.play(caught ? .crash : .close)
-        case let .wardenCoreHit(hits):
-            let needed = core.warden?.coreHitsNeeded ?? hits
-            addPopup("HIT \(hits)/\(needed)", color: Theme.color(0xFF3355), worldX: 0)
+        case .wardenCoreHit:
+            // **No popup during the fight (v2.2).** `EffectsOverlay` draws popups at row 0.52 of the
+            // frame, which the S-011 audit measured as sitting inside the exact band the player is
+            // reading — and this one fired after every successful answer, in hazard red, 0.40 s
+            // before the next throw. The craft sheds a spar for every hit; that is the readout, it
+            // is where the player's eyes already are, and it does not cover the deck.
             synth.play(.ringPerfect)
         case .wardenShieldBroke:
             addPopup("SHIELD DOWN", color: Theme.color(0x66E0FF), worldX: 0)

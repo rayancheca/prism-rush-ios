@@ -16,6 +16,7 @@ enum EntityKind: Sendable, Equatable {
     case tall       // full-height block: must change lane
     case movingTall // oscillating tall wall (high difficulty), tinted as danger
     case bar        // full-span overhead bar: slide or precise jump
+    case hangingBar // full-span wall from the sky with NO top: slide, and ONLY slide (v2.2)
     case splitBar   // overhead bar covering 2 of 3 lanes: steer to the gap (entity lane) or slide
     case gem        // octahedron collectible
     case shield     // icosahedron pickup
@@ -43,7 +44,7 @@ extension EntityKind {
     /// in front of you would spend ammo to destroy the ammo.
     var isBlastable: Bool {
         switch self {
-        case .low, .tall, .movingTall, .bar, .splitBar:
+        case .low, .tall, .movingTall, .bar, .splitBar, .hangingBar:
             return true
         case .chasm:
             return false
@@ -69,11 +70,16 @@ struct EntityState: Sendable, Identifiable, Equatable {
     var lane: Int
     var spin: Double        // accumulated phase for spinning/bobbing collectibles
     var fading: Bool        // entity is being magneted / absorbed: renderer may fade it
+    /// Thrown by a Warden rather than drawn by the spawner (v2.2). The renderer paints these in the
+    /// Warden's hazard red instead of the world accent, and that is not decoration: inside an arena
+    /// a thrown wall follows a DIFFERENT rule from every other wall in the game — it staggers and
+    /// can never kill — so the player has to be able to tell whose wall it is at a glance (decree 6).
+    var fromWarden: Bool
 
     init(id: Int, kind: EntityKind, x: Double = 0, y: Double = 0, z: Double = 0,
-         lane: Int = -1, spin: Double = 0, fading: Bool = false) {
+         lane: Int = -1, spin: Double = 0, fading: Bool = false, fromWarden: Bool = false) {
         self.id = id; self.kind = kind; self.x = x; self.y = y; self.z = z
-        self.lane = lane; self.spin = spin; self.fading = fading
+        self.lane = lane; self.spin = spin; self.fading = fading; self.fromWarden = fromWarden
     }
 }
 
@@ -203,12 +209,17 @@ enum FXEvent: Sendable, Equatable {
 
     // MARK: Wardens (v1.9)
     case wardenArrived(world: Int)              // the craft drops in — the arena has begun
-    case wardenShieldBroke                      // auto-fire won: the core is open, attacks start
-    // `band` is the shape, and therefore the verb that answers it — the renderer, the audio cue and
-    // the haptic all key off it, so adding a shape is a compile error everywhere it must be handled.
-    case wardenTelegraph(mask: UInt8, band: WardenBand)  // a strike locked; the wind-up is the read
-    case wardenStruck(mask: UInt8, band: WardenBand, caught: Bool) // it fired; `caught` = it landed
-    case wardenCoreHit(hits: Int)               // a clean dodge damaged the open core (1-based)
+    case wardenShieldBroke                      // the armour is stripped: the core is open
+    /// **It threw something (v2.2).** `band` is the shape, and therefore the verb that answers it —
+    /// the renderer, the audio cue and the haptic all key off it, so adding a shape is a compile
+    /// error everywhere it must be handled. `lead` is how many metres ahead the hazard materialised,
+    /// which is also how long the player has: travel time IS the telegraph.
+    ///
+    /// This replaces `wardenTelegraph` + `wardenStruck`. There is no longer a moment when a strike
+    /// "fires" — the hazard is a real obstacle from the instant it exists, and it resolves the way
+    /// every obstacle in the game resolves, in `stepObstacles`.
+    case wardenThrew(band: WardenBand, lead: Double)
+    case wardenCoreHit(hits: Int)               // an answered hazard damaged it (1-based)
     case wardenDefeated(world: Int, bounty: Int)
     case wardenBrokeOff                         // the shield held out the window — it leaves, you live
 }

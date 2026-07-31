@@ -25,6 +25,11 @@ struct CoreEntity {
     var phase: Double      // moving-wall oscillation phase
     var passed: Bool
     var fading: Bool
+    /// Thrown by a Warden rather than drawn by the spawner (v2.2). Three consequences, all of them
+    /// the reason the flag exists rather than a lookup: inside an arena it can only ever STAGGER
+    /// (the boss has no kill move), answering it damages the Warden, and the renderer tints it in
+    /// the Warden's own hazard red so the player can tell whose wall it is.
+    var fromWarden: Bool = false
 }
 
 /// The deterministic, renderer-agnostic game engine.
@@ -104,11 +109,6 @@ final class GameCore {
     /// simulation reads them, but the missions layer and the session log both want them.
     @ObservationIgnored private(set) var blastsFired: Int = 0
     @ObservationIgnored private(set) var obstaclesShattered: Int = 0
-    /// Whether THIS encounter has already landed a shot on the player. Per-encounter and not a timer,
-    /// which is the only shape that can deliver "stumble first, then kill": strikes are 1.05–1.20 s
-    /// apart and any recovery window short enough to feel like a stagger expires before the next one
-    /// arrives, so a timer-based rule would make a Warden literally unable to kill anybody.
-    @ObservationIgnored private(set) var wardenCaughtOnce: Bool = false
     /// Wardens killed this run — the meta layer banks this once, in `applyRunSummary`.
     @ObservationIgnored private(set) var wardensDefeatedThisRun: Int = 0
     /// Warden bounty coins earned this run. Kept OUT of `gemCount` so a kill never inflates the
@@ -209,7 +209,7 @@ final class GameCore {
         bankZ = 0; jumpBuf = 0
         world = 0; maxWorld = 0; worldFrom = 0; worldTo = 0; worldBlend = 1
         shield = false; invulnT = 0; magnetT = 0; doublerT = 0; chronoT = 0
-        stumbleT = 0; stumbles = 0; wardenCaughtOnce = false
+        stumbleT = 0; stumbles = 0
         boostT = 0; superSneakersT = 0; flowStreak = 0; flowSurges = 0
         bonus = 0; score = 0; gemCount = 0; streak = 0; bestStreak = 0; mult = 1; bountyCoins = 0
         activeObstacles.removeAll(keepingCapacity: true)
@@ -444,7 +444,7 @@ final class GameCore {
                 let margin = Tuning.cadenceClearance + (o.kind == .chasm ? Tuning.chasmHalfLength : 0)
                 guard abs(o.d - d) <= margin else { continue }
                 switch o.kind {
-                case .bar, .splitBar, .movingTall, .chasm: blocked = true
+                case .bar, .splitBar, .movingTall, .chasm, .hangingBar: blocked = true
                 case .tall, .low: if o.lane == lane { blocked = true }
                 default: break
                 }
@@ -476,74 +476,70 @@ final class GameCore {
         guard mode == .play else { return }
         if warden == nil, let w = Warden.armableWorld(forDistance: distance), w != wardenWorldDone {
             warden = WardenEncounter(world: w, runSeed: runSeed)
-            wardenCaughtOnce = false   // every Warden forgives exactly once, and only its own shot
             emit(.wardenArrived(world: w))
         }
         guard var w = warden else { return }
-        // Body extent at THIS instant — `stepPlayer` has already run, so a floor or a curtain
-        // resolves against where the player actually ended up, exactly as a wall does.
-        let pb = Collisions.playerBounds(jumpY: jumpY, scaleY: sy)
-        let ev = w.step(dt, playerLane: laneIndex, playerX: px,
-                        playerTop: pb.top, playerBottom: pb.bottom,
-                        jumpY: jumpY, vy: vy, grounded: grounded,
-                        charge: &wardenCharge)
+        let ev = w.step(dt, playerLane: laneIndex)
         warden = w
 
-        if ev.shieldBroke { emit(.wardenShieldBroke) }
-        if ev.telegraphBegan { emit(.wardenTelegraph(mask: w.beamMask, band: ev.telegraphBand)) }
-        if ev.struck {
-            emit(.wardenStruck(mask: ev.struckMask, band: ev.struckBand, caught: ev.caughtPlayer))
-            if ev.caughtPlayer && invulnT <= 0 {
-                // A landed beam is exactly as lethal as a wall, and a held shield eats it exactly
-                // as it eats a wall. It does NOT count as a dodge — absorbing is surviving, not
-                // damaging.
-                //
-                // **Stumble first, then kill (v2.0).** The first shot a Warden lands staggers you;
-                // the second one in the same encounter ends the run. The state is per-ENCOUNTER
-                // rather than a recovery timer, and that is not a shortcut: strikes are 1.05–1.20 s
-                // apart, so any window short enough to feel like a stagger expires before the next
-                // strike can arrive, and a timer-based rule would leave the Warden mathematically
-                // incapable of killing anyone — taking the fight's own hardness gate permanently
-                // red *because the fight got fairer*.
-                //
-                // It also settles the coherence risk of teaching "contact staggers" for 2,400 m and
-                // then silently reverting at the boss: the boss uses the same verb, it just only
-                // forgives once.
-                if shield {
-                    // A held shield eats the beam and costs the SHIELD — nothing else. It used to
-                    // also wipe the streak, the multiplier and the flow chain with nothing on
-                    // screen explaining why, which made the encounter's only interaction with
-                    // anything the player owns both invisible and purely punitive. Absorbing an
-                    // attack is a success; it should not read as a failure. (This is also the
-                    // "Ion Shield" Countermeasure from 10_WARDENS.md §5, delivered with a pickup
-                    // that already exists rather than a new purchase.)
-                    shield = false; invulnT = Tuning.invulnDuration
-                    emit(.shieldAbsorbed(x: px))
-                } else if !wardenCaughtOnce && stumbleT <= 0 {
-                    wardenCaughtOnce = true
-                    stumble(fromWarden: true)
-                } else {
-                    die()
-                }
-            } else if ev.coreHit {
-                emit(.wardenCoreHit(hits: w.coreHits))
-            }
+        // **A throw is a spawn, not a strike.** The encounter names a shape and a lead; the core
+        // turns that into real obstacles on the real deck through `applyThrown`, which is the same
+        // `apply` path the spawner uses minus the arena filter and the pool caps. Nothing here
+        // consumes rng from the run's stream (iron rule 2) — the only draw is the open lane, and
+        // that comes from the encounter's own derived generator.
+        if ev.threw {
+            throwHazard(band: ev.throwBand, lead: ev.throwLead, openLane: ev.throwOpenLane)
+            emit(.wardenThrew(band: ev.throwBand, lead: ev.throwLead))
         }
-        if ev.killed {
-            wardensDefeatedThisRun += 1
-            bonus += Tuning.wardenScoreBonus * mult
-            // Currency only, like a ring — never streak (rule 9). Banked SEPARATELY from `gemCount`
-            // because `gemCount` is not just the coin payout: it is also the run's GEM stat, and
-            // `RunSummary.gems` feeds the "collect 60 gems" mission, the daily/weekly gem missions,
-            // the gem achievement and 2 XP per gem. Filing a 150-coin bounty there meant one kill
-            // silently completed 40% of a gem mission and leaked 300 XP for gems never collected.
-            bountyCoins += Tuning.wardenCoinBounty
-            emit(.wardenDefeated(world: w.world, bounty: Tuning.wardenCoinBounty))
-        }
+
         if ev.brokeOff { emit(.wardenBrokeOff) }
         if ev.finished {
             wardenWorldDone = w.world
             warden = nil
+            // The boss takes its toys. A thrown hazard that outlived the fight would sit on the deck
+            // as a wall that cannot kill you — a free pass through a stretch of act-two track — and
+            // it would look identical to one that can. `WardenEncounter.step` already refuses to
+            // launch anything that cannot arrive in time, so this only ever sweeps up the tail.
+            activeObstacles.removeAll { $0.fromWarden }
+        }
+    }
+
+    /// Turn one throw into real obstacles on the real deck.
+    ///
+    /// The mapping is one shape to one demand, and it is the same trichotomy S-009 established —
+    /// the shapes were never the problem, the way they were DRAWN was. Each of these is a mesh the
+    /// player has been reading for 2,400 m, killed by a rule they already know:
+    ///
+    ///   `.lance`   → two `tall` walls with one lane open → change lane
+    ///   `.floor`   → a `chasm` blown in the deck          → jump (with a two-sided window)
+    ///   `.curtain` → a `hangingBar`                       → slide, and only slide
+    private func throwHazard(band: WardenBand, lead: Double, openLane: Int) {
+        let d = distance + lead
+        switch band {
+        case .lance:
+            for lane in 0..<3 where lane != openLane { applyThrown(.tall(d: d, lane: lane)) }
+        case .floor:
+            applyThrown(.chasm(d: d))
+        case .curtain:
+            applyThrown(.hangingBar(d: d))
+        }
+    }
+
+    /// The player answered a thrown hazard — dodged it clean, or blasted it. Both are worth one hit.
+    private func registerWardenAnswer() {
+        guard var w = warden, let dmg = w.registerAnswer() else { return }
+        warden = w
+        switch dmg {
+        case .armourChipped: emit(.wardenCoreHit(hits: w.coreHits))
+        case .armourBroke:   emit(.wardenShieldBroke)
+        case .coreHit:       emit(.wardenCoreHit(hits: w.coreHits))
+        case .killed:
+            wardensDefeatedThisRun += 1
+            bonus += Tuning.wardenScoreBonus * mult
+            // Currency only, like a ring — never streak (rule 9). Banked SEPARATELY from `gemCount`
+            // because `gemCount` is also the run's GEM stat and feeds gem missions and per-gem XP.
+            bountyCoins += Tuning.wardenCoinBounty
+            emit(.wardenDefeated(world: w.world, bounty: Tuning.wardenCoinBounty))
         }
     }
 
@@ -574,7 +570,7 @@ final class GameCore {
 
     private func obstacleX(_ e: CoreEntity) -> Double {
         switch e.kind {
-        case .bar, .splitBar, .chasm: return 0   // full-span: `lane` is -1, so never index `laneX`
+        case .bar, .splitBar, .chasm, .hangingBar: return 0   // full-span: `lane` is -1, never index `laneX`
         case .movingTall: return sin((distance - e.d) * Tuning.movingWallFreq + e.phase) * Tuning.movingWallAmplitude
         default: return Tuning.laneX[e.lane]
         }
@@ -600,6 +596,10 @@ final class GameCore {
             activeObstacles.removeLast()
             obstaclesShattered += 1
             if mode == .play { bonus += Tuning.blastScorePerObstacle * mult }
+            // Blasting a thrown hazard damages the Warden exactly as dodging it does. The
+            // equivalence is the design: a dodge is free and a blast costs a round, so dodging is
+            // always the better answer and the blast is insurance — never a shortcut.
+            if e.fromWarden && (e.kind != .tall || !hasUnpassedThrownTwin(e)) { registerWardenAnswer() }
             emit(.obstacleShattered(kind: e.kind, x: obstacleX(e), y: e.baseY, z: distance - e.d))
         }
 
@@ -627,6 +627,7 @@ final class GameCore {
                 let hit: Bool
                 switch e.kind {
                 case .bar: hit = Collisions.barHit(playerTop: pb.top, playerBottom: pb.bottom, z: z)
+                case .hangingBar: hit = Collisions.hangingBarHit(playerTop: pb.top, playerBottom: pb.bottom, z: z)
                 case .chasm: hit = Collisions.chasmHit(playerY: jumpY, z: z)
                 case .splitBar: hit = Collisions.splitBarHit(playerTop: pb.top, playerBottom: pb.bottom, playerX: px, openLane: e.lane, z: z)
                 case .low: hit = Collisions.lowHit(playerBottom: pb.bottom, playerX: px, obstacleX: ox, z: z)
@@ -643,6 +644,30 @@ final class GameCore {
                         emit(.shieldAbsorbed(x: px))
                         activeObstacles.swapAt(i, activeObstacles.count - 1)
                         activeObstacles.removeLast()
+                        continue
+                    } else if e.fromWarden {
+                        // **A WARDEN CAN NEVER KILL YOU (v2.2, D-028).** Not "forgives once", not
+                        // "stumbles then kills" — never. This is the owner's instruction and it is
+                        // the model every shipped runner boss uses: the boss is an OPPORTUNITY
+                        // layer, and failing it costs the reward, not the run.
+                        //
+                        // v2.1 was the inverse. Two landed beams 1.20 s apart ended the run, and
+                        // branch 3 below could be skipped outright — it required `stumbleT <= 0`
+                        // while `stumbleT` runs 0.90 s and `stumbleGrace` only 0.15 s, so any wall
+                        // clip in the 60 m before the arena mouth made the FIRST Warden hit lethal.
+                        //
+                        // What it costs instead is everything the player can afford to lose: the
+                        // multiplier and the tempo (the stumble), one blast round, and — the term
+                        // that actually decides the fight — the answer this hazard would have been
+                        // worth. Miss enough and the clock runs out with the Warden alive.
+                        stumble(fromWarden: true)
+                        wardenCharge = max(0, wardenCharge - Tuning.wardenHitChargeLoss)
+                        // The WHOLE throw goes, not just the wall that touched you. A `.lance` is a
+                        // pair at one `d`, and leaving the partner standing would let it cross the
+                        // player plane un-hit a few ticks later and pay a Warden answer for the
+                        // attack that just landed on you — credit for failing.
+                        let throwD = e.d
+                        activeObstacles.removeAll { $0.fromWarden && $0.d == throwD }
                         continue
                     } else if stumbleT <= 0,
                               Collisions.grazes(kind: e.kind, playerX: px, obstacleX: ox,
@@ -668,6 +693,14 @@ final class GameCore {
             if !activeObstacles[i].passed && z >= Tuning.obstacleZHalf {
                 activeObstacles[i].passed = true
                 if mode == .play {
+                    // A thrown hazard that reaches this line was ANSWERED — it got past without
+                    // touching anyone, because every contact above removes it. That is one hit on
+                    // the Warden. A `.lance` throws TWO walls, so only the pair's second wall
+                    // scores; `registerWardenAnswer` is idempotent per pair because the first wall's
+                    // partner is still on the deck when it fires. (See the lane guard below.)
+                    if e.fromWarden && (e.kind != .tall || !hasUnpassedThrownTwin(e)) {
+                        registerWardenAnswer()
+                    }
                     switch e.kind {
                     case .tall, .movingTall:
                         let dx = abs(px - ox)
@@ -676,7 +709,7 @@ final class GameCore {
                             emit(.nearMiss(kind: .close, x: px))
                             registerFlowNearMiss()
                         }
-                    case .bar:
+                    case .bar, .hangingBar:
                         if slideT > 0 {
                             bonus += Tuning.nearMissBonus * mult
                             emit(.nearMiss(kind: .slick, x: px))
@@ -688,6 +721,21 @@ final class GameCore {
             }
             i += 1
         }
+    }
+
+    /// Whether `e`'s lance partner is still on the deck and still unscored.
+    ///
+    /// A `.lance` throw places TWO walls at the same `d`, and both cross the player plane on the
+    /// same tick — so without this the Warden would take two hits for one dodge and every fight
+    /// would be half as long as its own arithmetic says. The pair is identified by distance rather
+    /// than by an id: they are placed together at exactly the same `d` and nothing else the Warden
+    /// throws is a `.tall`.
+    private func hasUnpassedThrownTwin(_ e: CoreEntity) -> Bool {
+        for o in activeObstacles
+        where o.fromWarden && o.kind == .tall && o.id != e.id && !o.passed && o.d == e.d {
+            return true
+        }
+        return false
     }
 
     /// Flow surge (v1.3): every `flowPerSurge`-th CLOSE/SLICK without a hit pays a score bonus and
@@ -908,7 +956,7 @@ final class GameCore {
         // A paid continue must never resume INSIDE the fatal recovery window — you would have bought
         // a run that the next wall ends for free. The counter (`stumbles`) is left standing: it is a
         // run statistic and the bot's contact detector, not a resource.
-        stumbleT = 0; wardenCaughtOnce = false
+        stumbleT = 0
         // A Warden that put the player down has done its job: it breaks off rather than resuming
         // over a cleared board, and its world is marked finished so the arena can't re-arm as the
         // player runs the rest of it. The charge bank is deliberately NOT refunded — it was spent.
@@ -940,6 +988,42 @@ final class GameCore {
         var n = 0
         for p in activePickups where p.kind == kind { n += 1 }
         return n
+    }
+
+    /// Place a Warden's thrown hazard.
+    ///
+    /// Deliberately NOT `apply`, and the two differences are both load-bearing:
+    ///
+    /// 1. **It skips `Warden.suppresses`.** That gate exists to keep the arena clear of everything
+    ///    the SPAWNER would have drawn, precisely so the Warden's own hazards are the only things on
+    ///    it. Routing a throw through `apply` would have the arena filter delete the attack.
+    /// 2. **It skips the pool caps.** A throw is not a procedural spawn competing for a budget; it is
+    ///    the fight. Dropping one on a full pool would silently make the encounter unwinnable, and
+    ///    the caps provably never bind anyway (`BlastTests.testNoObstacleCapEverBindsDuringRealPlay`).
+    ///
+    /// Consumes no rng and does not touch `spawner`, so a fight still cannot perturb the seeded
+    /// stream (iron rule 2; pinned by `WardenTests.testAFightCanNeverPerturbTheSpawnStream`).
+    private func applyThrown(_ cmd: SpawnCmd) {
+        let before = activeObstacles.count
+        switch cmd {
+        case let .tall(d, lane):
+            activeObstacles.append(CoreEntity(id: takeId(), kind: .tall, lane: lane, d: d,
+                                              x: Tuning.laneX[lane], baseY: 1.6, phase: 0,
+                                              passed: false, fading: false, fromWarden: true))
+        case let .chasm(d):
+            activeObstacles.append(CoreEntity(id: takeId(), kind: .chasm, lane: -1, d: d, x: 0,
+                                              baseY: 0, phase: 0, passed: false, fading: false,
+                                              fromWarden: true))
+        case let .hangingBar(d):
+            activeObstacles.append(CoreEntity(id: takeId(), kind: .hangingBar, lane: -1, d: d, x: 0,
+                                              baseY: (Tuning.hangingBarKillBottom + Tuning.hangingBarKillTop) / 2,
+                                              phase: 0, passed: false, fading: false, fromWarden: true))
+        default:
+            // A Warden throws exactly three things. Anything else is a programming error, and
+            // silently ignoring it would produce a fight with an attack that never arrives.
+            assertionFailure("applyThrown got a command a Warden cannot throw: \(cmd)")
+        }
+        assert(activeObstacles.count > before || activeObstacles.count == before)
     }
 
     private func apply(_ cmd: SpawnCmd) {
@@ -989,6 +1073,11 @@ final class GameCore {
         case let .boostPad(d, lane):
             guard pickupCount(.boostPad) < Tuning.capBoostPad else { return }
             activePickups.append(CoreEntity(id: takeId(), kind: .boostPad, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 0.05, phase: 0, passed: false, fading: false))
+        case let .hangingBar(d):
+            guard obstacleCount(where: { $0 == .hangingBar }) < Tuning.capHangingBar else { return }
+            activeObstacles.append(CoreEntity(id: takeId(), kind: .hangingBar, lane: -1, d: d, x: 0,
+                                              baseY: (Tuning.hangingBarKillBottom + Tuning.hangingBarKillTop) / 2,
+                                              phase: 0, passed: false, fading: false))
         case let .chasm(d):
             // Full-span like a bar, so `lane: -1` and `x: 0` (see `obstacleX`). `baseY: 0` is the
             // deck plane it replaces — the renderer sinks the shaft below it from there.
@@ -1010,7 +1099,9 @@ final class GameCore {
             let x = obstacleX(e)
             // `baseY` (set at spawn) is the authoritative render height for EVERY obstacle kind —
             // bar/splitBar centre 1.3, low 0.425, tall 1.6. Renderers must never hardcode these.
-            entityScratch.append(EntityState(id: e.id, kind: e.kind, x: x, y: e.baseY, z: z, lane: e.lane, spin: 0, fading: false))
+            entityScratch.append(EntityState(id: e.id, kind: e.kind, x: x, y: e.baseY, z: z,
+                                             lane: e.lane, spin: 0, fading: false,
+                                             fromWarden: e.fromWarden))
         }
         for g in activeGems {
             let z = distance - g.d

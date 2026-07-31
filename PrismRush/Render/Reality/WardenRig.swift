@@ -71,7 +71,17 @@ final class WardenRig {
     /// Applied to the individual PARTS, never to the `craft` entity: the halo and the core have
     /// their own radius budgets (see `haloScale` and the core, which is a lethal-red readability
     /// surface and must not balloon with the hull).
-    private static let craftScale: Float = 1.70
+    /// **2.55, up from 1.70 (S-012).** Nothing about the model changed — the craft simply moved
+    /// out. v2.1 hung it at `wardenStandOff` 19; v2.2 hangs it at the THROW LEAD (34 m falling to
+    /// 22 m as it takes damage), because a hazard that materialises further away than the craft
+    /// supposedly throwing it is a lie the player can see, and decree 2 is that previews never lie.
+    ///
+    /// At 34 m the same model subtends 19/34 = 0.56× of its v2.1 size, which reads as the boss
+    /// having quietly shrunk — and "no presence, just a basic triangle" was the owner's verdict that
+    /// S-009 was fixing when it staged the craft in the first place. 1.70 × 1.5 restores ~85% of the
+    /// old apparent size at full health and MORE than it as the craft closes in, so the fight now
+    /// ends with the boss at its largest instead of starting there.
+    private static let craftScale: Float = 2.55
 
     /// **The hull is authored ASYMMETRICALLY about its origin, and that exists to protect the
     /// telegraph rather than the boss.**
@@ -121,11 +131,7 @@ final class WardenRig {
     private var idleT: Double = 0
     private var lastCoreHits = 0
     private var lastPhase: WardenPhase?
-    private var panels: [ModelEntity] = []   // one per lane, flat on the deck (LANCE only)
-    private var columns: [ModelEntity] = []  // one per lane, descending as the beam winds up
     private let gunBeam: ModelEntity         // the phase-1 auto-fire, drawn for the first time (S-009)
-    private let floorSlab: ModelEntity       // full width, grows UP out of the deck — jump it
-    private let curtainWall: ModelEntity     // full width, descends from the sky and STOPS — slide it
 
     private let matHazard: UnlitMaterial
     private let matHazardDim: UnlitMaterial
@@ -200,13 +206,6 @@ final class WardenRig {
                               materials: [matShield])
         gunBeam.isEnabled = false
 
-        floorSlab = ModelEntity(mesh: .generateBox(width: Self.fullWidth, height: 1, depth: 13),
-                                materials: [matHazardDim])
-        floorSlab.isEnabled = false
-        curtainWall = ModelEntity(mesh: .generateBox(width: Self.fullWidth, height: 1, depth: 13),
-                                  materials: [matHazardDim])
-        curtainWall.isEnabled = false
-
         craft.addChild(hull)
         craft.addChild(dome)
         craft.addChild(rim)
@@ -246,33 +245,7 @@ final class WardenRig {
         group.addChild(craft)
         group.addChild(beams)
         beams.addChild(gunBeam)
-        beams.addChild(floorSlab)
-        beams.addChild(curtainWall)
 
-        for lane in 0..<3 {
-            let x = Float(Tuning.laneX[lane])
-            // The deck plate: this is the read. S-006 proved the neon grid is the canvas that makes
-            // a hazard legible, so the beam announces itself ON the floor, where the player is
-            // already looking, rather than only in the sky where the craft is. It runs from just
-            // behind the player far up the track, so the lane it claims is unmistakable.
-            let panel = ModelEntity(mesh: .generateBox(width: 2.0, height: 0.03, depth: 13),
-                                    materials: [matHazardDim])
-            panel.position = SIMD3<Float>(x, 0.04, Float(Self.strikeZ))
-            panel.isEnabled = false
-            beams.addChild(panel)
-            panels.append(panel)
-
-            // A vertical column that descends onto the lane and touches the deck exactly as the
-            // beam fires — so "when" is as legible as "where", with no countdown and no number.
-            // Placed near the player's own plane rather than at the craft: the strike happens
-            // where the player is standing, so that is where it has to be drawn.
-            let column = ModelEntity(mesh: .generateBox(width: 1.0, height: 1, depth: 1.0),
-                                     materials: [matHazardDim])
-            column.position = SIMD3<Float>(x, 0, Float(Self.strikeZ))
-            column.isEnabled = false
-            beams.addChild(column)
-            columns.append(column)
-        }
         group.isEnabled = false
     }
 
@@ -359,7 +332,7 @@ final class WardenRig {
         // This replaces a 34° INSTANTANEOUS SNAP that fired the moment a hit landed
         // (`angle: coreHits * 0.6 + t * 0.35`). That was a discontinuity, not a beat, and it was
         // the only "animation" the craft had. Reduce Motion holds the craft still, as before.
-        if !reduceMotion && w.telegraphProgress <= 0 {
+        if !reduceMotion && w.throwFlash <= 0 {
             craft.orientation = simd_quatf(angle: Float(idleT) * 0.21, axis: SIMD3<Float>(0, 1, 0))
         }
 
@@ -406,74 +379,26 @@ final class WardenRig {
             // dying, which is backwards.
         }
 
-        // The strike. Exactly ONE shape is ever drawn, and the other two are switched off — a lance
-        // and a curtain on screen together would put two contradictory verbs in the same frame,
-        // which is the decree-6 failure the whole shape system exists to avoid.
-        let t = Float(w.telegraphProgress)
-        let hot = w.striking
-        let live = w.telegraphProgress > 0 || hot
-        let mat = hot ? matHazard : matHazardDim
-
-        // The per-lane plates are the LANCE's read and only the lance's. They occlude the grid
-        // unconditionally, so leaving them on under a curtain would erase the strip of lit grid that
-        // is the *entire* discriminator between "run under it" and "jump it".
-        let lanceLive = live && w.band == .lance
-        for lane in 0..<3 {
-            let panel = panels[lane], column = columns[lane]
-            guard lanceLive, w.closes(lane) else {
-                if panel.isEnabled { panel.isEnabled = false; column.isEnabled = false }
-                continue
-            }
-            panel.isEnabled = true
-            column.isEnabled = true
-            panel.model?.materials = [mat]
-            column.model?.materials = [mat]
-            // Widen the plate as the shot charges, so peripheral vision catches it even when the
-            // player is watching the deck rather than the sky.
-            panel.scale = SIMD3<Float>(hot ? 1.0 : (0.45 + 0.55 * t), 1, 1)
-
-            // The column descends from the craft's altitude to the deck. Its unit box is 1 high, so
-            // scaling y by the remaining reach and sitting it at half that keeps its TOP pinned up
-            // in the sky while its bottom edge falls — the shot visibly coming down, not growing up.
-            //
-            // **The top is the CRAFT's height, not a constant (S-009).** It used to be a hardcoded
-            // 7.5 against a craft hovering at 5.2, so a lance's top edge was cut flat 256 px ABOVE
-            // the thing supposedly firing it: the attacks did not come from the attacker. Reading
-            // the craft's live y ties the shot to its source for one line, and keeps doing so now
-            // that the craft's height and depth both animate.
-            let drop = max(1, Float(w.y) - Self.emitterDrop)
-            let reach = hot ? drop : drop * min(1, t)
-            column.scale = SIMD3<Float>(hot ? 1 : 0.55, max(0.01, reach), hot ? 1 : 0.55)
-            column.position = SIMD3<Float>(Float(Tuning.laneX[lane]),
-                                           drop - reach / 2, Float(Self.strikeZ))
-        }
-
-        // FLOOR — grows UP out of the deck to its lethal height, blotting out the grid edge to edge.
-        // Its bottom stays pinned at 0 so the growth reads as the deck itself rising.
-        let floorLive = live && w.band == .floor
-        floorSlab.isEnabled = floorLive
-        if floorLive {
-            let full = Float(Tuning.wardenFloorKillTop)
-            let h = max(0.02, hot ? full : full * min(1, t))
-            floorSlab.model?.materials = [mat]
-            floorSlab.scale = SIMD3<Float>(1, h, 1)
-            floorSlab.position = SIMD3<Float>(0, h / 2, Float(Self.strikeZ))
-        }
-
-        // CURTAIN — descends from the sky and STOPS at the hem, leaving lit grid running underneath.
-        // Its top stays pinned in the sky while the hem falls, the exact inverse of the floor, so
-        // the two shapes are opposite motion as well as opposite occlusion.
-        let curtainLive = live && w.band == .curtain
-        curtainWall.isEnabled = curtainLive
-        if curtainLive {
-            // Same rule as the lance: the wall hangs from the craft, not from a constant.
-            let top = max(Self.curtainHem + 0.5, Float(w.y) - Self.emitterDrop)
-            let hem = hot ? Self.curtainHem : top - (top - Self.curtainHem) * min(1, t)
-            let h = max(0.02, top - hem)
-            curtainWall.model?.materials = [mat]
-            curtainWall.scale = SIMD3<Float>(1, h, 1)
-            curtainWall.position = SIMD3<Float>(0, hem + h / 2, Float(Self.strikeZ))
-        }
+        // **THE THREE RED BANDS ARE GONE (v2.2).**
+        //
+        // Everything that used to be drawn here — the per-lane lance plates and columns, the floor
+        // slab growing out of the deck, the curtain wall descending from the sky — was the single
+        // biggest source of the owner's "the fight is a red thing that covers the screen". The
+        // S-011 render audit put numbers on it: a full-width opaque red band on screen for 92–95%
+        // of the exposed phase with a 100 ms dark gap between shapes, a curtain erasing 100% of the
+        // track beyond 5.3 m, and a floor whose "wind-up" delivered 379 of its final 440 px in one
+        // frame.
+        //
+        // The verb design was never the problem and it survives untouched: a Warden still asks for
+        // lane, jump and slide in a scripted order with disjoint answers. What changed is that each
+        // shape is now a REAL OBSTACLE thrown onto the deck (`GameCore.throwHazard`), drawn by the
+        // same pooled meshes the spawner's obstacles use and read by rules the player has had 2,400
+        // metres to learn. There is nothing left for the rig to paint on the strike plane, because
+        // there is no strike plane.
+        //
+        // What the craft does instead is THROW: `WardenState.throwFlash` drives the muzzle recoil
+        // (applied to `z` in `WardenEncounter.state`) and the renderer's `.wardenThrew` burst fires
+        // at the hull. The attack and the attacker are visibly the same event for the first time.
     }
 
     private func isShed(_ i: Int, hits: Int, of n: Int) -> Bool {
@@ -496,7 +421,10 @@ final class WardenRig {
         d.position = SIMD3<Float>(local.x, craftY + local.y, craftZ + local.z)
         d.orientation = .init()
         d.isEnabled = true
-        debrisT[i] = min(0.34, Double(Tuning.wardenRecoverByRank.min() ?? 0.35) - 0.02)
+        // Shed parts clear well before the next throw, so debris never accumulates into a cloud
+        // around the craft. Sized off the shortest throw interval rather than a literal, so it
+        // tracks the tuning table if that changes.
+        debrisT[i] = min(0.34, (Tuning.wardenThrowIntervalByRank.min() ?? 1.65) * 0.2)
         let outward = SIMD3<Float>(local.x, 0, local.z)
         let n = max(0.001, (outward.x * outward.x + outward.z * outward.z).squareRoot())
         debrisV[i] = SIMD3<Float>(outward.x / n * 2.0, 1.2, outward.z / n * 2.0 - 0.8)

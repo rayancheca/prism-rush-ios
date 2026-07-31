@@ -41,6 +41,21 @@ enum Collisions {
             && playerBottom < Tuning.barKillTop
     }
 
+    /// Hanging bar (v2.2): a full-span wall dropped from the sky with **no ceiling**.
+    ///
+    /// The unreachable ceiling is the whole obstacle. `barHit` kills between 0.95 and 1.65, so a
+    /// base jump puts the body's underside above the band for 0.434 s and every bar in the game up
+    /// to v2.1 could be jumped — which made SLIDE the catalogue's only optional verb. This band runs
+    /// 0.95 → 4.0, and the highest a body's underside ever reaches is 3.748 m (a Super Sneakers
+    /// apex), so no vertical state clears it. The only answer is to be low.
+    ///
+    /// Sliding clears it on exactly the same numbers as an ordinary bar, so nothing new is taught.
+    static func hangingBarHit(playerTop: Double, playerBottom: Double, z: Double) -> Bool {
+        abs(z) < Tuning.obstacleZHalf
+            && playerTop > Tuning.hangingBarKillBottom
+            && playerBottom < Tuning.hangingBarKillTop
+    }
+
     /// Split bar covering two lanes with one open gap: the bar's vertical kill band applies only
     /// while the player overlaps a COVERED lane — standing in the gap (or sliding) is safe.
     static func splitBarHit(playerTop: Double, playerBottom: Double, playerX: Double, openLane: Int, z: Double) -> Bool {
@@ -67,42 +82,11 @@ enum Collisions {
         abs(z) < Tuning.chasmHalfLength && playerY < Tuning.chasmClearance
     }
 
-    /// Warden strike: resolves the instant the shape fires, against the player's real x and their
-    /// real body extent rather than their committed lane — so a lane change that has been tapped but
-    /// not yet travelled does not teleport them clear, and neither does a jump still leaving the
-    /// ground.
-    ///
-    /// There is no `z` term for any shape: a strike is dropped on the player's own plane for one
-    /// instant, not an object arriving down the track.
-    ///
-    /// One shape per strike, and each is answered by exactly one verb (S-009):
-    ///
-    /// - `.lance`   — per-lane columns, full height. Answered laterally. This is v1.9's only shape
-    ///                and its rule is unchanged, so a lance behaves byte-for-byte as it always did.
-    /// - `.floor`   — a slab across every lane, lethal to anything whose underside is below
-    ///                `wardenFloorKillTop`. Answered by jumping. Note a *slide* does not clear it:
-    ///                sliding lowers the body's underside, so it is strictly worse here.
-    /// - `.curtain` — a wall across every lane hanging from the sky with NO ceiling, lethal to
-    ///                anything whose top is above `wardenCurtainKillBottom`. Answered by sliding
-    ///                only — see `Tuning.wardenCurtainKillBottom` for why it cannot have a top.
-    ///
-    /// An empty `mask` means no lance is in flight and must never register as a hit; the full-width
-    /// shapes ignore the mask entirely.
-    static func wardenStrikeHit(playerX: Double, playerTop: Double, playerBottom: Double,
-                                mask: UInt8, band: WardenBand) -> Bool {
-        switch band {
-        case .lance:
-            guard mask != 0 else { return false }
-            for lane in 0..<Tuning.laneX.count where mask & (1 << UInt8(lane)) != 0 {
-                if abs(playerX - Tuning.laneX[lane]) < Tuning.wardenBeamHalfWidth { return true }
-            }
-            return false
-        case .floor:
-            return playerBottom < Tuning.wardenFloorKillTop
-        case .curtain:
-            return playerTop > Tuning.wardenCurtainKillBottom
-        }
-    }
+    // NOTE (v2.2): `wardenStrikeHit` is gone, along with the three abstract shapes it tested.
+    // A Warden no longer fires anything at the player's own plane — it throws real obstacles down
+    // the real track, and those resolve through `tallHit`, `chasmHit` and `hangingBarHit` above,
+    // exactly as the same obstacles do anywhere else in the game. The boss now has no collision rule
+    // of its own at all, which is the most literal possible statement of "it can never kill you".
 
     // MARK: - The stumble: how DEEP was the contact? (v2.0)
     //
@@ -168,6 +152,12 @@ enum Collisions {
                 || lowVerticalEscape(playerBottom: playerBottom) <= dy
         case .bar:
             return barVerticalEscape(playerTop: playerTop, playerBottom: playerBottom) <= dy
+        case .hangingBar:
+            // ONE edge, not two. A bar has two answers so the escape is whichever is nearer; this
+            // has exactly one — get low — so the only shallow miss is "almost low enough". The
+            // ceiling is deliberately NOT offered as a second escape: it is unreachable, and a
+            // graze rule that measured against it would forgive a jump that was never going to work.
+            return max(0, playerTop - Tuning.hangingBarKillBottom) <= dy
         case .splitBar:
             return splitBarEscape(playerX: playerX, openLane: openLane) <= dx
                 || barVerticalEscape(playerTop: playerTop, playerBottom: playerBottom) <= dy

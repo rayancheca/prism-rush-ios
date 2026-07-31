@@ -165,6 +165,9 @@ final class RealityRenderer: RendererPort {
     private var paletteKey: Int = -1
     private var matAccent = UnlitMaterial(color: .cyan)
     private var matAccent2 = UnlitMaterial(color: .magenta)
+    /// The Warden's hazard red, held as a material so thrown obstacles can be tinted every frame
+    /// without allocating. World-blind on purpose: a Warden's wall is the Warden's, in every world.
+    private let matWardenHazard = UnlitMaterial(color: UIColor(red: 1, green: 51/255.0, blue: 85/255.0, alpha: 1))
     private let matGemGold: UnlitMaterial
     private let matGemHot: UnlitMaterial    // magnet-pulled gems tint hotter as they shrink
 
@@ -441,17 +444,27 @@ final class RealityRenderer: RendererPort {
 
         // Spawned entities — the two obstacle materials are rebuilt with the palette above, then
         // assigned by reference. Also fixes stale pooled colors.
-        let mA = matAccent, mA2 = matAccent2
+        let mA = matAccent, mA2 = matAccent2, mWarden = matWardenHazard
         let mGold = matGemGold, mHot = matGemHot
         pools.sync(snap.entities) { entity, s in
             // `s.y` is authoritative for EVERY kind (bar/splitBar centre 1.3, low 0.425, tall 1.6
             // now arrive from the core) — never hardcode heights here.
             entity.position = SIMD3<Float>(Float(s.x), Float(s.y), Float(s.z))
+            // **A Warden's wall is red, in every world (v2.2).** Not decoration: inside an arena a
+            // thrown obstacle follows a different rule from every other obstacle in the game — it
+            // staggers and can never kill — so the player must be able to tell whose wall it is in
+            // one frame (decree 6). Red is already the Warden's colour everywhere else in the fight.
+            let mObstacle = s.fromWarden ? mWarden : mA
+            let mObstacle2 = s.fromWarden ? mWarden : mA2
             switch s.kind {
             case .tall:
-                (entity as? ModelEntity).map { $0.model?.materials = [mA] }
+                (entity as? ModelEntity).map { $0.model?.materials = [mObstacle] }
             case .low, .bar, .movingTall:
-                (entity as? ModelEntity).map { $0.model?.materials = [mA2] }
+                (entity as? ModelEntity).map { $0.model?.materials = [mObstacle2] }
+            case .hangingBar:
+                // Always red: nothing else in the game hangs from the sky with no way over it, and
+                // the only thing that throws one is the Warden.
+                (entity as? ModelEntity).map { $0.model?.materials = [mWarden] }
             case .splitBar:
                 // `s.lane` is the OPEN lane: park the two pooled segments over the other two
                 // lanes (recycled entities may carry a different gap, so place every frame).
@@ -495,7 +508,7 @@ final class RealityRenderer: RendererPort {
                 // the rims and they take the live accent. `suffix(2)` rather than an index so
                 // adding another static part to the well can never silently recolour it.
                 for child in entity.children.suffix(2) {
-                    (child as? ModelEntity)?.model?.materials = [mA2]
+                    (child as? ModelEntity)?.model?.materials = [mObstacle2]
                 }
             }
         }
@@ -633,27 +646,23 @@ final class RealityRenderer: RendererPort {
             particles.burst(x: wardenX, y: wardenY, z: -wardenZ, color: cWardenShield,
                             count: 70, power: 8.0, spread: 0.6, life: 0.9)
             if !reduceMotion { shake = max(shake, 0.5) }
-        case let .wardenStruck(mask, band, caught):
-            // The slam fires where the shape actually landed, so the impact confirms the read the
-            // player just made: at the foot of each closed lane for a lance, and along the full
-            // width of the deck for the two shapes that span it — at deck level for a floor, at the
-            // curtain's hem for a curtain.
-            switch band {
-            case .lance:
-                for lane in 0..<3 where mask & (1 << UInt8(lane)) != 0 {
-                    particles.burst(x: Float(Tuning.laneX[lane]), y: 0.2, z: -5,
-                                    color: cWardenHazard, count: caught ? 40 : 22,
-                                    power: 5.0, spread: 0.5, life: 0.55)
-                }
-            case .floor, .curtain:
-                let y: Float = band == .floor ? 0.2 : Float(Tuning.wardenCurtainKillBottom)
-                for lane in 0..<3 {
-                    particles.burst(x: Float(Tuning.laneX[lane]), y: y, z: -5,
-                                    color: cWardenHazard, count: caught ? 30 : 16,
-                                    power: 5.0, spread: 0.5, life: 0.55)
-                }
-            }
-            if !reduceMotion { shake = max(shake, caught ? 1.0 : 0.35) }
+        case let .wardenThrew(band, lead):
+            // **The muzzle.** A throw fires at the CRAFT, not at the player's plane — that is the
+            // whole readability change. v1.9–v2.1 painted the attack on the strike plane at z −9,
+            // so the boss and its attack were never visibly connected and the S-011 audit measured
+            // the consequence: a red band covering 92–95% of the exposed phase with nothing to say
+            // where it came from. Now something visibly leaves the craft and then travels toward
+            // you as an object you already know how to read.
+            let launchZ = -Float(lead)
+            particles.burst(x: wardenX, y: wardenY, z: launchZ, color: cWardenHazard,
+                            count: 34, power: 5.5, spread: 0.5, life: 0.5, velZ: 12)
+            // A ring in the SHAPE's channel: wide and low for a lance (lanes), tight and high for a
+            // curtain (get down), tight and low for a chasm (get up). Peripheral vision catches the
+            // ring before the eye has parsed the object.
+            particles.ring(y: band == .curtain ? wardenY + 1.2 : 0.6,
+                           z: launchZ, radius: band.isLateral ? 5.5 : 3.2,
+                           color: cWardenHazard, count: 22, velZ: 16, life: 0.7)
+            if !reduceMotion { shake = max(shake, 0.28) }
         case .wardenCoreHit:
             // **Damage has to visibly LEAVE THE PLAYER.** Bursting only at the craft meant something
             // exploded 26 units away with nothing having travelled there, which is the whole reason
@@ -679,10 +688,9 @@ final class RealityRenderer: RendererPort {
             particles.ring(y: wardenY, z: -wardenZ, radius: 4, color: cWardenShield, count: 30, velZ: 30, life: 1.1)
             if !reduceMotion { shake = max(shake, 1.1) }
             kickFOV()
-        case .wardenTelegraph, .wardenBrokeOff:
-            // Deliberately silent here. The telegraph IS the rig's descending column — duplicating
-            // it with a particle burst would compete with the one thing the player must read. A
-            // break-off is the Warden giving up: nothing happened to the player, so nothing fires.
+        case .wardenBrokeOff:
+            // Deliberately silent. A break-off is the Warden giving up: nothing happened to the
+            // player, so nothing fires. The craft climbing away is the whole statement.
             break
 
         case let .stumbled(x, fromWarden):
@@ -1226,6 +1234,13 @@ final class RealityRenderer: RendererPort {
         case .tall:       return boxEntity(1.9, 3.2, 0.9, .cyan)
         case .movingTall: return boxEntity(1.9, 3.2, 0.9, .magenta)
         case .bar:        return boxEntity(7.6, 0.7, 0.7, .magenta)
+        case .hangingBar:
+            // Spans the deck and runs from the kill line up past any reachable apex, so what is
+            // drawn IS what kills (decree 2). An ordinary bar is a 0.7-high rung with clear air
+            // above it; this is a wall with clear air only BELOW it, and the difference has to be
+            // unmistakable in one frame at 33 m/s.
+            return boxEntity(7.6, Float(Tuning.hangingBarKillTop - Tuning.hangingBarKillBottom),
+                             0.7, uiHex(0xFF3355))
         case .splitBar:   return splitBarEntity()
         case .gem:        return ModelEntity(mesh: gemMesh, materials: [matGemGold])
         // An actual shield crest, not a ball (owner, S-009). A sphere was the one pickup silhouette

@@ -40,12 +40,14 @@ final class LaggedAutopilotTests: XCTestCase {
     ///
     /// The delay is applied ONLY to Warden reactions. Ordinary obstacle play stays perfect, so a
     /// death can only ever be attributed to an encounter — which is what makes the result readable.
-    private func survives(seed: UInt64, reaction: Double) -> (survived: Bool, encounters: Int, caught: Int) {
+    private func survives(seed: UInt64, reaction: Double) -> (survived: Bool, encounters: Int, caught: Int, kills: Int) {
         let core = GameCore(seed: 1)
         var encounters = 0
         var caught = 0
+        var kills = 0
         core.onFX = {
             if case .wardenArrived = $0 { encounters += 1 }
+            if case .wardenDefeated = $0 { kills += 1 }
             // Counted from the EVENT, not from `core.stumbles`, so a wall clip at the arena mouth
             // can never be misread as the boss landing a shot.
             if case let .stumbled(_, fromWarden) = $0, fromWarden { caught += 1 }
@@ -59,7 +61,7 @@ final class LaggedAutopilotTests: XCTestCase {
             elapsed += Tuning.tickDt
             ticks += 1
 
-            if let w = core.warden, w.isTelegraphing {
+            if let w = core.warden, w.isFighting, core.activeObstacles.contains(where: \.fromWarden) {
                 if lockedAt == nil { lockedAt = elapsed }
                 // Inside the reaction window the player has SEEN nothing yet: they keep running as
                 // they were. Deliberately not "do nothing" — a frozen player is not a slow player,
@@ -74,12 +76,17 @@ final class LaggedAutopilotTests: XCTestCase {
             Autopilot.drive(core)
             core.tick(Tuning.tickDt)
         }
-        return (core.mode != .over, encounters, caught)
+        return (core.mode != .over, encounters, caught, kills)
     }
 
-    /// A player reacting at genuine human speed must never be killed by a Warden. If this fails the
-    /// fight is unfair, and the fix is a LONGER wind-up — never a smaller player hitbox.
-    func testAPlayerReactingAtHumanSpeedSurvivesEveryWarden() async {
+    /// A player reacting at genuine human speed must never be TOUCHED by a Warden.
+    ///
+    /// **v2.2 re-points this rather than relaxing it.** A Warden can no longer kill anybody, so
+    /// `died == 0` has become trivially true and would be a gate that cannot fail. The fairness
+    /// floor is now the `caught` assertion alone, and it is the stronger of the two claims anyway:
+    /// at human reaction speed the boss must not land a single hazard. If this goes red the fix is a
+    /// LONGER throw lead (`wardenThrowLeadFar` / `wardenThrowLeadNear`) — never a smaller hitbox.
+    func testAPlayerReactingAtHumanSpeedIsNeverTouchedByAWarden() async {
         var died = 0, encounters = 0, caught = 0
         for s in 0..<24 {
             let seed = UInt64(s) &* 0x9E37_79B9_7F4A_7C15 &+ 0x1234_5678
@@ -90,39 +97,41 @@ final class LaggedAutopilotTests: XCTestCase {
         }
         XCTAssertEqual(encounters, 24 * 2, "every run must meet both Wardens or this proves nothing")
         XCTAssertEqual(died, 0,
-            "\(died)/24 runs died while reacting in \(Self.humanFloor) s — the fight is UNFAIR. "
-            + "Lengthen Tuning.wardenTelegraphByRank; do not shrink the player.")
-        // **Surviving is no longer the same claim as being untouched (v2.0).** A landed beam now
-        // staggers instead of killing the first time, so `died == 0` above could stay green while a
-        // human-speed player is being hit in every single fight and rescued by the stumble. This is
-        // the assertion that keeps the fairness floor meaning what it says: at genuine human
-        // reaction speed the Warden must not land a shot at all.
+            "\(died)/24 runs died at a \(Self.humanFloor) s reaction. A Warden cannot kill, so a "
+            + "death here means its hazards outlived the encounter or leaked outside the arena.")
+        // The real floor. Surviving is not the same claim as being untouched, and since v2.2 the
+        // survival claim is free — this is the one that still has teeth.
         XCTAssertEqual(caught, 0,
-            "\(caught) beams landed on players reacting in \(Self.humanFloor) s. They survived only "
-            + "because the stumble caught them, which is the stumble hiding an unfair fight — "
-            + "exactly the failure mode it was warned about. Lengthen the wind-up.")
+            "\(caught) hazards landed on players reacting in \(Self.humanFloor) s — the fight is "
+            + "UNFAIR. Lengthen Tuning.wardenThrowLeadFar / wardenThrowLeadNear; do not shrink the "
+            + "player.")
     }
 
-    /// …and a player who is NOT reading the telegraph must lose. This is the assertion that would
-    /// have caught v1.9's "takes no effort" before the owner had to.
+    /// …and a player who is NOT reading the throw must LOSE THE FIGHT. This is the assertion that
+    /// would have caught v1.9's "takes no effort" before the owner had to.
     ///
-    /// **v2.0 raised this bar rather than lowering it.** A Warden now forgives its first landed shot,
-    /// so a sluggish player has to be caught TWICE inside one encounter to die. The test is unchanged
-    /// in form and the margin is reported below, because a gate that only just passes is a gate about
-    /// to start lying.
-    func testAPlayerWhoIsNotWatchingTheTelegraphLoses() async {
-        var died = 0, caught = 0
+    /// **v2.2 re-points the failure currency, not the bar.** Death is no longer available as a
+    /// consequence, so the hardness gate is now expressed in the two things a Warden can still take:
+    /// a sluggish player must be hit, and must fail to kill it. Both directions of the original
+    /// two-sided gate survive — 0.40 s untouched above, 0.75 s punished here — and the margin is
+    /// still printed, because a gate that only just passes is a gate about to start lying.
+    func testAPlayerWhoIsNotWatchingTheThrowLosesTheFight() async {
+        var caught = 0, kills = 0, encounters = 0
         for s in 0..<24 {
             let seed = UInt64(s) &* 0x9E37_79B9_7F4A_7C15 &+ 0x1234_5678
             let out = survives(seed: seed, reaction: Self.sluggish)
             caught += out.caught
-            if !out.survived { died += 1 }
+            kills += out.kills
+            encounters += out.encounters
         }
-        XCTAssertGreaterThan(died, 0,
-            "nobody died at a \(Self.sluggish) s reaction time — the encounter is passable without "
-            + "reading it, which is exactly the verdict this redesign exists to answer. "
-            + "(\(caught) beams did land, so if this is red the STUMBLE is what is carrying them, "
-            + "not the fight being fair.) Tighten Tuning.wardenTelegraphByRank / wardenRecoverByRank.")
-        print("[lagged] sluggish (\(Self.sluggish) s): \(died)/24 died, \(caught) beams landed")
+        XCTAssertGreaterThan(caught, 0,
+            "no hazard landed on ANY player reacting in \(Self.sluggish) s — the encounter is "
+            + "passable without reading it, which is exactly the verdict this redesign exists to "
+            + "answer. Shorten Tuning.wardenThrowLeadNear or wardenThrowIntervalByRank.")
+        XCTAssertLessThan(kills, encounters,
+            "a \(Self.sluggish) s player killed every Warden they met (\(kills)/\(encounters)) — "
+            + "the fight has no failure state left.")
+        print("[lagged] sluggish (\(Self.sluggish) s): \(caught) hazards landed, "
+              + "\(kills)/\(encounters) Wardens killed")
     }
 }

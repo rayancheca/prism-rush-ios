@@ -153,14 +153,21 @@ final class StumbleTests: XCTestCase {
         XCTAssertEqual(core.bonus, bonusAfter, "and must pay no score at all")
     }
 
-    // MARK: - 4. the Warden: stumble first, then kill
+    // MARK: - 4. the Warden: it can never kill you (v2.2, D-028)
 
-    /// The owner's ruling, verbatim: *"stumble first then kill"*. Standing still guarantees the
-    /// lance closes the player's lane, so every strike lands and the two outcomes arrive in order.
-    func testAWardenStumblesYouOnceThenKillsYou() async {
+    /// **The rule that replaced "stumble first, then kill".**
+    ///
+    /// v2.0's ruling was per-ENCOUNTER forgiveness: the first landed beam staggered, the second
+    /// ended the run. The owner's v2.2 instruction supersedes it — *"it can never kill you"* — and
+    /// the reason is not softness. Every shipped runner boss the S-011 research pass examined models
+    /// the boss as an opportunity layer: no kill move, the lethal thing is the obstacle it places,
+    /// and failing it costs the reward rather than the run.
+    ///
+    /// So a player who never touches the controls inside an arena is staggered repeatedly and comes
+    /// out alive, every time. What they lose is the fight.
+    func testAWardenStaggersYouAsOftenAsItLikesAndNeverKillsYou() async {
         let core = GameCore(seed: 11)
         core.startRun(seed: 11, startDistance: 3 * Tuning.worldLength)
-        core.debugFillWardenCharge()
 
         var stumbles = 0, died = false
         core.onFX = {
@@ -168,30 +175,27 @@ final class StumbleTests: XCTestCase {
             if case .died = $0 { died = true }
         }
 
-        // Never touch the controls: every strike is unanswered by construction.
-        XCTAssertTrue(tickUntil(core, max: 120 * 40) { core.mode == .over })
-
-        XCTAssertTrue(died)
-        XCTAssertEqual(stumbles, 1,
-            "the first landed beam must stagger and the second must kill — \(stumbles) staggers "
-            + "means the escalation is not per-encounter")
+        // Never touch the controls: every throw lands by construction. Wait for the encounter to
+        // ARM before waiting for it to end — `core.warden` is nil at tick 0, so the naive
+        // "tick until nil" returns instantly and proves nothing.
+        XCTAssertTrue(tickUntil(core, max: 120 * 10) { core.warden != nil }, "no Warden armed")
+        XCTAssertTrue(tickUntil(core, max: 120 * 40) { core.warden == nil },
+                      "the encounter never ended")
+        XCTAssertFalse(died, "a Warden ended the run — v2.2 says it can never do that")
+        XCTAssertGreaterThan(stumbles, 1,
+            "only \(stumbles) stagger(s) — a motionless player must be hit by every throw, so this "
+            + "means the hazards are not reaching them at all")
     }
 
-    /// The forgiveness is per-ENCOUNTER, not per-run: surviving world 3's Warden must not spend the
-    /// rescue that world 6's will offer.
-    func testAPaidContinueDoesNotResumeOneShotFromDeath() async {
+    /// And the stagger really is the ordinary one, with the ordinary costs — the boss does not get
+    /// a second, softer rule of its own.
+    func testAWardenSStaggerCostsTheSameThingsEveryStaggerCosts() async {
         let core = GameCore(seed: 11)
         core.startRun(seed: 11, startDistance: 3 * Tuning.worldLength)
-        core.debugFillWardenCharge()
-        XCTAssertTrue(tickUntil(core, max: 120 * 40) { core.wardenCaughtOnce })
-        XCTAssertEqual(core.stumbles, 1)
-        XCTAssertTrue(tickUntil(core, max: 120 * 40) { core.mode == .over })
-
-        core.revive()
-        XCTAssertFalse(core.wardenCaughtOnce,
-                       "a continue must not resume already one shot from death")
-        XCTAssertEqual(core.stumbleT, 0, "…nor inside the fatal recovery window")
-        XCTAssertEqual(core.stumbles, 1, "the run STAT survives — it is not a spent resource")
+        XCTAssertTrue(tickUntil(core, max: 120 * 40) { core.stumbles > 0 },
+                      "a motionless player was never hit by the Warden")
+        XCTAssertEqual(core.mult, 1, "the multiplier is the punishment, here as everywhere")
+        XCTAssertGreaterThan(core.stumbleT, 0, "…and it leaves the same recovery window")
     }
 
     // MARK: - 5. determinism

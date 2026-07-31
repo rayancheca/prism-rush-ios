@@ -287,7 +287,7 @@ struct Spawner {
 
     private static func isObstacle(_ cmd: SpawnCmd) -> Bool {
         switch cmd {
-        case .low, .tall, .movingTall, .bar, .splitBar, .chasm: return true
+        case .low, .tall, .movingTall, .bar, .splitBar, .chasm, .hangingBar: return true
         default: return false
         }
     }
@@ -297,7 +297,7 @@ struct Spawner {
         case let .low(d, _), let .tall(d, _), let .bar(d), let .gem(d, _, _),
              let .shield(d, _), let .magnet(d, _), let .doubler(d, _), let .chrono(d, _),
              let .superSneakers(d, _), let .ring(d, _, _), let .boostPad(d, _),
-             let .splitBar(d, _), let .movingTall(d, _), let .chasm(d):
+             let .splitBar(d, _), let .movingTall(d, _), let .chasm(d), let .hangingBar(d):
             return d
         }
     }

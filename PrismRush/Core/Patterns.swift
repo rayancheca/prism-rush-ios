@@ -16,6 +16,14 @@ enum SpawnCmd: Sendable, Equatable {
     case ring(d: Double, lane: Int, y: Double)
     case boostPad(d: Double, lane: Int)
     case chasm(d: Double)          // full-width gap, `d` is its CENTRE
+    /// Full-span wall hanging from the sky with no top: slide, and only slide (v2.2).
+    ///
+    /// **No pattern places one yet.** It exists as a `SpawnCmd` because that is the vocabulary
+    /// `GameCore.apply` speaks and a Warden throws through it (`applyThrown`); putting it in the
+    /// pattern catalogue is a spawn change and would cost a `layoutVersion` bump, which the v2.2
+    /// Warden rebuild is deliberately designed not to spend. It is the obvious next candidate:
+    /// slide is currently mandatory NOWHERE in the 15-pattern catalogue.
+    case hangingBar(d: Double)
 }
 
 /// The 15-pattern catalogue: 0–8 ported from the shipped prototype, 9 the prism-ring arc and 10 the

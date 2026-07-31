@@ -74,7 +74,7 @@ final class ArcCollectionTests: XCTestCase {
                              let .splitBar(d, _), let .gem(d, _, _), let .shield(d, _),
                              let .magnet(d, _), let .doubler(d, _), let .chrono(d, _),
                              let .superSneakers(d, _),
-                             let .ring(d, _, _), let .boostPad(d, _):
+                             let .ring(d, _, _), let .boostPad(d, _), let .hangingBar(d):
                             return d
                         // The chasm is the one spawn with an extent — measure its FAR rim, or the
                         // length law would let a pattern end inside the hole it just dug.

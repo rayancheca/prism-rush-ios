@@ -83,32 +83,16 @@ enum Autopilot {
             if nextDangerous && !stayingForced { laneDir = 0 }
         }
 
-        // 1b) A Warden's LANCE (v1.9) OUTRANKS the obstacle read, and has to.
+        // NOTE (v2.2): the two Warden-specific override blocks that used to live here and below
+        // are GONE, and their absence is the clearest statement of what the rebuild did. v1.9–v2.1
+        // needed them because a Warden's attacks were abstract shapes resolved on the player's own
+        // plane — invisible to every line of obstacle logic in this file, so a bot inside an arena
+        // scored every lane `.infinity`, settled on "stay put", and walked into every telegraph.
         //
-        // A Warden arena is swept clear of obstacles, so every lane scores `.infinity`, nothing is
-        // blocked, and the logic above settles on "stay put" — which is the single answer a lance
-        // punishes, because it always closes the lane the player is standing in. Without this the
-        // bot walks into every telegraph and the 200-seed solvability proof turns red for a reason
-        // that has nothing to do with the spawner.
-        //
-        // Only a strike that is still WINDING UP is dodged (`isTelegraphing`); the lit afterglow of
-        // a shot already fired is ignored, so the bot never chases a spent one. The full-width
-        // shapes are handled vertically in (2b) — there is no lane to move to.
-        if let w = c.warden, w.pendingBand == .lance, w.closes(target) {
-            // Least movement first, centre as the tie-break — the same preference order the
-            // obstacle logic above uses. Ascending iteration keeps the choice deterministic.
-            // A lance never closes more than two of three lanes, so an escape always exists.
-            var pick = -1
-            var bestCost = Int.max
-            for l in 0..<3 where !w.closes(l) && !blockedNow[l] {
-                let cost = abs(l - c.laneIndex) * 2 + (l == 1 ? 0 : 1)
-                if cost < bestCost { bestCost = cost; pick = l }
-            }
-            if pick >= 0 {
-                target = pick
-                laneDir = target > c.laneIndex ? 1 : (target < c.laneIndex ? -1 : 0)
-            }
-        }
+        // A Warden now throws REAL obstacles onto the REAL deck. The lane scan above sees its walls,
+        // the chasm logic below sees its holes, and the bar-slide commit below sees its hanging bars,
+        // because they are the same entities the spawner places. The bot did not need to be taught
+        // the boss; the boss was taught to speak the track.
 
         // 2) Vertical: jump lows in the target lane, slide (or air-slam) bars. Leads scale with
         //    the EFFECTIVE speed — under chrono slow-mo, obstacles arrive at the slowed rate.
@@ -135,8 +119,12 @@ enum Autopilot {
                 continue
             }
             guard arrival > 0, arrival <= reach else { continue }
-            if o.kind == .bar || o.kind == .splitBar {
-                nearestBar = min(nearestBar, arrival)   // sliding clears a split bar in ANY lane
+            if o.kind == .bar || o.kind == .splitBar || o.kind == .hangingBar {
+                // Sliding clears all three: a split bar in ANY lane, and a hanging bar from any
+                // lane at all — a hanging bar has no top, so slide is not merely the cheap answer,
+                // it is the ONLY one. The bot must never try to jump it, and it cannot: the jump
+                // branch below only ever fires for a chasm or a low.
+                nearestBar = min(nearestBar, arrival)
             } else if o.kind == .low && o.lane == target {
                 nearestLowTarget = min(nearestLowTarget, arrival)
             }
@@ -169,31 +157,6 @@ enum Autopilot {
             }
         }
 
-        // 2b) The Warden's VERTICAL shapes (S-009). Deliberately LAST, so it overrides everything
-        //     above — in particular the airborne branch, which sets `slide` on any descent and would
-        //     otherwise slam the bot out of a jump it needs to hold to clear a floor.
-        //
-        // The arena is swept clear, so `nearestLow`/`nearestBar`/`nearestChasmEdge` are all
-        // `.infinity` inside a fight and none of the obstacle-derived logic above can ever fire a
-        // jump or a slide. Without this block a floor is 100% bot death and the encounter is
-        // unprovable — which is why the bot learns the verbs in the same change that gives the
-        // Warden them, never after.
-        if let band = c.warden?.pendingBand, let w = c.warden {
-            switch band {
-            case .lance:
-                break   // answered laterally in (1b)
-            case .floor:
-                // Sliding LOWERS the body's underside, so it is strictly worse against a floor —
-                // clearing it while sliding needs jumpY ≥ 0.7748 rather than 0.750. Never slide.
-                decision.slide = false
-                if c.grounded && w.secondsToStrike <= Tuning.wardenBotJumpLead { decision.jump = true }
-            case .curtain:
-                // Un-jumpable by construction, from any height. Slide — and from mid-air the slide
-                // doubles as the air-slam that brings the body back down under it.
-                decision.jump = false
-                if w.secondsToStrike <= Tuning.wardenBotSlideLead { decision.slide = true }
-            }
-        }
         return decision
     }
 

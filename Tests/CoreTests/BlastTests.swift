@@ -366,7 +366,9 @@ final class BlastTests: XCTestCase {
 
     private struct Placed: Equatable { var kind: EntityKind; var lane: Int; var d: Double }
 
-    /// Spawn every obstacle a run places, in spawn order (ids are monotonic), with NO player input.
+    /// Every obstacle the SPAWNER places, in spawn order (ids are monotonic), with NO player input.
+    /// A Warden's thrown hazards are excluded: they are supposed to differ when the fight differs,
+    /// and a blast that shatters one changes the fight. This test is about the spawn stream.
     private func frozenPlacements(seed: UInt64, blasting: Bool) -> [Placed] {
         let core = GameCore(seed: 1)
         core.startRun(seed: seed)
@@ -377,7 +379,7 @@ final class BlastTests: XCTestCase {
             if blasting && ticks % 90 == 0 { core.debugFillWardenCharge(); _ = core.blast() }
             core.tick(Tuning.tickDt)
             ticks += 1
-            for e in core.activeObstacles where !seen.contains(e.id) {
+            for e in core.activeObstacles where !seen.contains(e.id) && !e.fromWarden {
                 seen.insert(e.id)
                 out.append((e.id, Placed(kind: e.kind, lane: e.lane, d: e.d)))
             }
@@ -397,7 +399,7 @@ final class BlastTests: XCTestCase {
             if chronoEvery > 0 && ticks % chronoEvery == 0 { core.activateSlowMo() }
             core.tick(Tuning.tickDt)
             ticks += 1
-            for e in core.activeObstacles where !seen.contains(e.id) {
+            for e in core.activeObstacles where !seen.contains(e.id) && !e.fromWarden {
                 seen.insert(e.id)
                 out.append((e.id, Placed(kind: e.kind, lane: e.lane, d: e.d)))
             }
