@@ -526,3 +526,98 @@ survive contact, and the pattern in how they failed is worth keeping.
 by redoing the arithmetic, and both of the others were caught by nothing except running the app and
 opening the screenshot. `swift test` compiles neither `UI/` nor `Render/`; 231 green tests said
 nothing about any of the three.
+
+---
+
+## D-023
+**The unlock ladder is pulled forward ~2.1×, and only the KINDS move.** (S-011, owner-directed.)
+
+Gates: 260 / 576 / 1,440 / 1,920 / 2,560 m → **150 / 350 / 600 / 900 / 1,200 m**. The whole
+15-pattern catalogue is now open by 60.5 s.
+
+The measurement that forced it (`audits/scratch/s011_obstacles.md`, 600 seeds, integrating the real
+speed ramp): a player dying at 1,500 m had met 10.9 of 15 patterns, and four of them were not
+unlikely but **unreachable** — the tier gated at 1,440 m and the spawn horizon sits 115 m past it.
+The five starter patterns were **49% of every encounter in a two-minute run**. The last new thing the
+game ever introduced arrived at **111.6 s**, after speed (caps 3,077 m), gap and the ladder had all
+stopped moving. That is the arithmetic behind the owner's *"the gameplay has been left stale."*
+
+**The gap axis is deliberately NOT pulled forward with it.** New kinds arrive early; crowding still
+arrives late, and every pattern is now met at a LOWER speed, which is strictly more reaction time.
+The one exception is the chasm, whose window does not widen at lower speed (airborne distance minus a
+fixed 8 m hole): 0.398 s of launch slop at the new gate versus 0.478 s at the old. Still wider than
+the bar's 0.408 s jump window.
+
+## D-024
+**A moving wall closes a lane at every distance.** (S-011, owner: *"the moving walls are stupid as you
+can always survive them by just sticking to one side."*)
+
+`Patterns.wallPhase` returned `intensity(d)`-scaled swing, which is **zero below 3,200 m**. At phase 0
+each wall parked dead centre and swept only x ∈ [−0.332, +0.332] across the 1.9 u lethal window, so an
+outer lane cleared the 1.25 kill half-width by **0.618 u — 49% of margin, on both walls, every time**.
+Parking in lane 0 and giving no input survived pattern 13 until the ramp closed an outer lane at
+**6,841 m = 4 min 02 s**. Pattern 13 is the *exclusive* tier-five unlock, so the only new content in a
+22-second stretch of ladder was the one pattern beatable by doing nothing.
+
+Now ±`wallPhaseSwing` everywhere: wall 0 leaves lane 0, wall 1 leaves lane 2, a genuine 13 u weave.
+The breadcrumbs the pattern already emitted were drawing exactly that route while the swing was off.
+Act two loses this as an escalation axis and keeps its real one, the draw-table mix — a wall that
+closes a lane is the correct BASELINE, not an endgame reward.
+
+## D-025
+**`Autopilot`'s chasm launch lead is derived from the physics, not clamped to constants.** (S-011.)
+
+It was `clamp(0.28·v, 7, 11)`. Launching `L` before the leading rim clears the hole exactly when
+`chasmAirborneEnter·v ≤ L ≤ chasmAirborneExit·v − 2·chasmHalfLength`; at v = 17.5 m/s that interval is
+only **[0.51, 5.76]**, so the floor of 7 forced the launch *outside the window* and the bot landed
+1.3 u short of the far rim, deterministically. It survived two versions because the chasm gated where
+v ≥ 30.3, and 17.5 is reachable there only under a chrono (×0.65) — a coincidence no seed had hit.
+D-023 made it common and seed 17604131991531453882 found it immediately.
+
+The replacement is the apex rule — launch so the jump's apex lands on the hole's centre — which is the
+exact rule `Patterns` case 14 uses to PLACE the hole. Prover and author now agree by construction
+rather than by two sets of numbers that happened to match.
+
+**Related, filed not fixed:** a chasm met while a chrono is active has its gem-arc telegraph point
+~1.2 m early, because the hole is placed from the predicted RAMP speed while chrono moves the player
+at 0.65×. It stays clearable (0.30 s of slop) but the cue misleads. Pre-existing; D-023 makes it more
+reachable.
+
+## D-026
+**A gem is not a coin, and skill is the largest term in the faucet.** (S-011, owner-directed; full
+audit in `audits/AUDIT_011_ECONOMY.md`.)
+
+Gems were currency at 1:1 and 76–87% of every payout; `styleCoins` — the only term measuring whether
+the player played WELL — was capped at 80 coins/run, about 6%. So the game paid for pickup, not for
+play. Consequences: nothing cost more than 23 minutes, the 83,500-coin catalogue was 2 h 22 m, and
+`$0.99 → 1,200 coins` was worth less than one good run.
+
+Owner's four calls: a mid character should cost 30–45 min; **skill should pay much more**; Coin Surge
+becomes **earned, never bought**; IAP should genuinely matter.
+
+Implemented: `coinsPerGemDivisor` 20, distance 1/35 → 1/170, worlds 5 → 3, bounty 150 → 22, and
+`styleCoins` uncapped at `(closes+slicks)·2 + surges·5`. Measured over two tuning passes: income cut
+**6.3× / 7.4× / 7.2×** at 800 / 1,500 / 3,300 m, style share **3% → 47–59%**, a mid character
+31–34 min, the catalogue ~21 h.
+
+**Coin Surge was REMOVED from the coin shop, not re-priced.** 450 coins → +3,858 (+7,716 with Double
+Coins) is 8.6–17× ROI, repeatable and uncapped: you could mint currency with currency, which is what
+actually made buying a pack irrational. A re-price leaves a trap item whose safety depends on the
+faucet never changing again, and the faucet changed twice in this one session. The invariant is now
+structural: **no coin-spend path may grant a coin multiplier.**
+
+**Not a spawn change.** Gem placement is untouched, so `layoutVersion` stays at 11 and the solvability
+proof, the `PatternOrderTests` call counts and the daily goldens are all unaffected.
+
+## D-027
+**The `×N` multiplier belongs on the score, not on the gem chip.** (S-011, owner: *"what does x5 mean
+in the [HUD]"*.)
+
+`HUDView.gemMultPill` put `×N` in the chip's LABEL slot, where the word "GEMS" otherwise sat. The
+reasoning ("it reads as *what this chip is*") failed on arithmetic, not typography: `mult` reaches its
+×5 cap at **124 m / 7.16 s** and holds it for **90.3% of a clean run**, so the label was almost never
+"GEMS" and the chip spent nearly every run showing a bare `×5` beside a five-digit number with nothing
+naming either. And they were never related — `mult` multiplies SCORE; every currency line in
+`GameCore` deliberately omits it. The multiplier now sits beside the score readout; the gem pill's
+label is fixed text, so the no-reflow property that motivated the original design is preserved
+without paying for it in meaning.
