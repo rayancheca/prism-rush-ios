@@ -190,12 +190,13 @@ final class MissionsTests: XCTestCase {
 
     func testTodaysChallengeSeedMatchesUTCGoldens() async {
         let store = ProfileStore(testing: Profile())
-        // Goldens pinned in DailyChallengeTests (layoutVersion 10 as of v1.9 — THE WARDENS, whose
-        // arenas filter obstacles out of the first 600 m of every third world). These must track
-        // that file: the daily leaderboard is only meaningful if every player on a date gets the
-        // same track from the same layout version.
-        XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 10)), 0x2F9C_F876_7EBE_A5C0)
-        XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 11)), 0x96EE_0451_179D_E767)
+        // Goldens pinned in DailyChallengeTests (layoutVersion 11 as of v2.1 — the unlock ladder
+        // pulled forward, plus the moving-wall swing at all distances). These must track that file:
+        // the daily leaderboard is only meaningful if every player on a date gets the same track
+        // from the same layout version. This is the pin that is easy to miss — it lives in the META
+        // layer and asserts the same numbers from the other side of the seam.
+        XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 10)), 0xD6A1_D120_8B63_B231)
+        XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 11)), 0xF937_67EA_DC39_CCE6)
         // 23:59 and 00:01 straddle UTC midnight → different tracks.
         XCTAssertEqual(store.todaysChallengeSeed(now: utc(2026, 6, 10, 23, 59)),
                        store.todaysChallengeSeed(now: utc(2026, 6, 10, 0, 1)))

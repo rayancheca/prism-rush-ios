@@ -75,24 +75,28 @@ enum Patterns {
 
     private static func otherLanes(_ l: Int) -> [Int] { [0, 1, 2].filter { $0 != l } }
 
-    /// Phase for moving wall `index` of pattern 13 at base distance `b` (v1.7, PR-0400).
+    /// Phase for moving wall `index` of pattern 13 at base distance `b`.
     ///
-    /// Act one returns 0 for both walls: each parks dead centre on its collision plane, leaving BOTH
-    /// outer lanes permanently safe. That was deliberate for readability, and it made the game's
-    /// exclusive tier-5 unlock its *easiest* late pattern — one input, two right answers, forever.
-    /// Act two swings the walls to opposite sides in proportion to `Spawner.intensity`, so exactly
-    /// one lane stays open past ~6,800 m and the player has to read which. Ramped, not switched:
-    /// at 3,200 m the swing is zero and the pattern is byte-identical to v1.6.
+    /// **v2.1 (S-011): the swing is now full at EVERY distance.** It used to be
+    /// `Spawner.intensity(forDistance: b)`-scaled, which is zero below 3,200 m and does not close an
+    /// outer lane until 6,841 m — so for the first four minutes of every run both walls parked dead
+    /// centre and both outer lanes were permanently safe. See `Tuning.wallPhaseSwing` for the
+    /// measurement and the owner's verdict on it.
     ///
-    /// Pure f(b) — consumes ZERO RNG, so pattern 13's pinned call count of 0 (`PatternOrderTests`)
-    /// is unchanged and the seeded obstacle stream is untouched.
+    /// Opposite sides, so the pair reads as a weave: wall 0 swings positive (closing the centre and
+    /// lane 2, and its breadcrumb is already in lane 0); wall 1 swings negative (closing the centre
+    /// and lane 0, breadcrumb in lane 2). sin(0.75)·1.6 = 1.09 at the collision plane, so the one
+    /// open lane keeps ≥ 3.0 u of clearance and two-of-three is never exceeded.
+    ///
+    /// It is still a function of `index` alone and still consumes ZERO RNG, so pattern 13's pinned
+    /// call count of 0 (`PatternOrderTests`) is unchanged and the seeded obstacle stream is
+    /// untouched — but the emitted phase VALUE changes, so this rides the layoutVersion bump.
+    ///
+    /// The `b` parameter is retained deliberately: it is the seam any future distance-varying swing
+    /// would reattach at, and removing it would churn three call sites and two tests to save nothing.
     static func wallPhase(at b: Double, index: Int) -> Double {
-        let i = Spawner.intensity(forDistance: b)
-        guard i > 0 else { return 0 }
-        // Opposite sides so the pair reads as a weave. Wall 0 swings positive (closing lane 2, and
-        // its breadcrumb is already in lane 0); wall 1 swings negative (closing lane 0, breadcrumb
-        // in lane 2). sin(0.75)·1.6 = 1.09 at full swing, so the open lane keeps ≥ 3.0 u of clearance.
-        return (index == 0 ? 1 : -1) * i * Tuning.wallPhaseSwingActTwo
+        _ = b
+        return (index == 0 ? 1 : -1) * Tuning.wallPhaseSwing
     }
 
     // MARK: dispatch
@@ -212,13 +216,17 @@ enum Patterns {
             if rng.chance(0.35) { out.append(.chrono(d: b + 17, lane: open)) }
             return 22
 
-        case 13: // moving walls x2. In ACT ONE phase 0 puts each wall at CENTER on its collision
-                 // plane, so the gem-lined outer lanes (0 and 2) are always the safe, readable
-                 // escape. In ACT TWO the phase swings apart (v1.7 — see `wallPhase`), closing one
-                 // outer lane and making the safe side something to read rather than remember; the
-                 // existing breadcrumbs already sit on the correct side of each swing. The wall
-                 // still oscillates visually on approach; amplitude 1.6 guarantees a clear lane.
-                 // LAST in the catalogue (rule 4).
+        case 13: // MOVING WALLS ×2 — a weave, as of v2.1. Each wall is swung to its own side (see
+                 // `wallPhase`), so wall 0 leaves only lane 0 open and wall 1 leaves only lane 2:
+                 // enter left, cross right, 13 u apart. The breadcrumbs below were already drawing
+                 // exactly that route while the swing was switched off, which is how the pattern
+                 // managed to look designed while being survivable with no input at all for the
+                 // first four minutes of a run.
+                 //
+                 // 13 u is ~0.59 s at the tier's unlock speed and the lane lerp clears wall 1's band
+                 // in 0.061 s, so the crossing is a planned move, not a scramble. The wall still
+                 // oscillates visually on approach (that sweep IS the telegraph); amplitude 1.6
+                 // guarantees a clear lane at every phase.
             out.append(.movingTall(d: b + 9, phase: wallPhase(at: b, index: 0))); gemLine(b + 1, 0, 3, &out)
             out.append(.movingTall(d: b + 22, phase: wallPhase(at: b, index: 1))); gemLine(b + 14, 2, 3, &out); return 32
 

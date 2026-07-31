@@ -84,24 +84,25 @@ final class PatternOrderTests: XCTestCase {
         }
     }
 
-    /// The sixth tier must not disturb the five below it. Every band under `chasmDiff` has to draw
-    /// from exactly the same range as v1.7 did — `maxIndex` there returns 14, which is what
-    /// `Patterns.count` used to evaluate to. If someone "tidies" that literal into `Patterns.count`,
-    /// tier five silently gains the tier-six pattern and every seeded run below 2,560 m changes.
-    func testSixthTierLeavesTheEarlierLadderByteIdentical() async {
-        let v17Ladder: [(Double, Int)] = [
-            (0, 5), (259, 5), (260, 9), (575, 9), (576, 11),
-            (1_439, 11), (1_440, 13), (1_919, 13), (1_920, 14), (2_559, 14),
-        ]
-        for (d, want) in v17Ladder {
-            XCTAssertEqual(Spawner.maxIndex(forDistance: d), want,
-                           "tier ladder below chasmDiff must match v1.7 exactly (d=\(d))")
-        }
-        // And act one below the gate never draws the chasm at all.
-        for d in stride(from: 0.0, to: Tuning.chasmDiff * Tuning.diffFullAt, by: 20) {
+    /// Tier five must never gain the tier-six pattern.
+    ///
+    /// **This test used to pin the v1.7 tier DISTANCES** ("every band under `chasmDiff` draws from
+    /// exactly the same range as v1.7 did"). v2.1 moved every gate on purpose (S-011 — the ladder
+    /// was pulled forward so the whole catalogue lands inside the first minute), so pinning the old
+    /// distances would now be pinning a decision that has been deliberately reversed.
+    ///
+    /// What it protects is the invariant underneath, which has not changed and is still a live trap:
+    /// `Spawner.maxIndex` returns a LITERAL `14` below `chasmDiff`, and `Patterns.count` is 15. If
+    /// someone "tidies" that literal into `Patterns.count`, tier five silently gains the chasm and
+    /// every seeded run below the tier-six gate changes with no layoutVersion bump to announce it.
+    func testTheChasmIsNeverSelectableBelowItsGate() async {
+        let gate = Tuning.chasmDiff * Tuning.diffFullAt
+        for d in stride(from: 0.0, to: gate, by: 5) {
             XCTAssertLessThanOrEqual(Spawner.maxIndex(forDistance: d), 14,
                                      "the chasm must not be selectable at d=\(d)")
         }
+        XCTAssertEqual(Spawner.maxIndex(forDistance: gate), Patterns.count,
+                       "…and must be selectable the moment the gate opens")
     }
 
     func testTierLadderMonotoneAndRNGCountsPinned() async {
@@ -113,18 +114,19 @@ final class PatternOrderTests: XCTestCase {
             XCTAssertLessThanOrEqual(m, Patterns.count)
             prev = m
         }
-        // Exact six-tier boundaries (260 m / diff 0.18 / 0.45 / 0.6 / 0.8 over diffFullAt 3200).
+        // Exact six-tier boundaries — v2.1: 150 / 350 / 600 / 900 / 1,200 m over diffFullAt 3,200.
+        // The whole catalogue is open by 1,200 m ≈ 60.5 s (see the ladder block in Tuning).
         XCTAssertEqual(Spawner.maxIndex(forDistance: 0), 5)
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 259), 5)
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 260), 9)
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 575), 9)
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 576), 11)
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 1_439), 11)
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 1_440), 13)
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 1_919), 13)
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 1_920), 14)
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 2_559), 14)
-        XCTAssertEqual(Spawner.maxIndex(forDistance: 2_560), Patterns.count)   // diff 0.8 → the chasm
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 149), 5)
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 150), 9)
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 349), 9)
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 350), 11)
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 599), 11)
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 600), 13)
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 899), 13)
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 900), 14)
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 1_199), 14)
+        XCTAssertEqual(Spawner.maxIndex(forDistance: 1_200), Patterns.count)   // the chasm
         // Act two's draw table bypasses `maxIndex`, so tier six MUST be open before act two starts
         // or the table can spawn a pattern the ladder has not unlocked.
         XCTAssertLessThanOrEqual(Tuning.chasmDiff * Tuning.diffFullAt, Tuning.actTwoAt)

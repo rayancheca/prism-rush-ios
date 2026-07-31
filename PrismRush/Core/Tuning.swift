@@ -19,11 +19,13 @@ enum Tuning {
     static let slideDuration: Double = 0.55, slideScaleY: Double = 0.38, slamVy: Double = -14
     static let jumpBuffer: Double = 0.25   // widened for human reaction + iOS touch latency
 
-    // Moving wall (pattern 10): deterministic phase + smaller amplitude + slower sweep so a human can
-    // read it and a safe lane always exists; only spawns once the player has acclimated (diff >= 0.6).
+    // Moving wall (pattern 13): deterministic phase + smaller amplitude + slower sweep so a human can
+    // read it and a safe lane always exists.
     static let movingWallAmplitude: Double = 1.6
     static let movingWallFreq: Double = 0.22
-    static let movingWallMinDiff: Double = 0.6
+    /// Tier five's gate — 900 m ≈ 47 s. See the unlock-ladder block further down for why the whole
+    /// ladder moved.
+    static let movingWallMinDiff: Double = 900.0 / diffFullAt
     static let bodyRadius: Double = 0.62, groundedCenterY: Double = 0.66
     static let lowKillTop: Double = 0.85
     static let barKillBottom: Double = 0.95, barKillTop: Double = 1.65
@@ -119,10 +121,55 @@ enum Tuning {
     // Near-miss windows (tall passed in this |dx| band → CLOSE bonus). The outer edge must stay
     // below the lane pitch (2.2) or simply standing one lane away auto-awards CLOSE.
     static let nearMissInner: Double = 1.25, nearMissOuter: Double = 1.95
-    // Difficulty gating thresholds for the pattern catalogue (5-tier prefix ladder, see Spawner).
-    static let earlyDistance: Double = 260
-    static let midEarlyDiff: Double = 0.18   // v1.3: 576 m — rings & overdrive unlock before the pain
-    static let midDiff: Double = 0.45
+    // MARK: the unlock ladder (v2.1, S-011 — pulled forward by a factor of ~2.1)
+    //
+    // Difficulty gating thresholds for the pattern catalogue (six-tier prefix ladder, see Spawner).
+    //
+    // **Why these moved.** S-011 measured what a player actually meets, by re-implementing the
+    // spawner and integrating the real speed ramp (`docs/agent/audits/scratch/s011_obstacles.md`).
+    // Against the OLD ladder — 260 / 576 / 1,440 / 1,920 / 2,560 m:
+    //
+    //   - a player who dies at 1,500 m has met **10.9 of 15** patterns, and four of them
+    //     (gauntlet, split bar, moving walls, chasm) were not unlikely — they were **unreachable**,
+    //     because the tier gates at 1,440 m and the spawn horizon is 115 m ahead of it;
+    //   - a player who dies at 800 m (a 42-second run) has met 9.0 of 15;
+    //   - the five starter patterns are **49% of every encounter in a two-minute run**, each seen
+    //     about nine times;
+    //   - the LAST new thing the game ever introduces arrives at 2,560 m = **111.6 seconds**, after
+    //     the speed axis (caps at 3,077 m), the gap axis and the ladder have all stopped moving.
+    //
+    // That is the arithmetic behind the owner's "the gameplay has been left stale": after ~30
+    // seconds nothing new arrived for another 40, and the last new thing arrived at 1 min 52 s.
+    //
+    // The new ladder puts the WHOLE catalogue inside the first minute:
+    //
+    //   | tier | patterns | gate      | elapsed | what opens                       |
+    //   |------|----------|-----------|---------|----------------------------------|
+    //   | 1    | 0–4      | 0 m       | 0 s     | the warm-up: low, tall, bar      |
+    //   | 2    | 0–8      | 150 m     | 8.6 s   | zigzag, mixed row, pickup, 2×bar |
+    //   | 3    | 0–10     | 350 m     | 19.6 s  | prism ring, overdrive runway     |
+    //   | 4    | 0–12     | 600 m     | 32.6 s  | gauntlet, split bar              |
+    //   | 5    | 0–13     | 900 m     | 47.0 s  | moving walls                     |
+    //   | 6    | 0–14     | 1,200 m   | 60.5 s  | THE CHASM                        |
+    //
+    // Tier one is the GILP "warm-up block" (a published 7–12 s safe zone before the game asks for
+    // anything) and lands at 8.6 s. Nothing about the patterns themselves got harder — the player
+    // simply stops running out of game before the game runs out of ideas.
+    //
+    // The gap axis is deliberately NOT pulled forward with it: `gap(forDistance:)` still lerps
+    // 11 → 5 over `diffFullAt`, so at the chasm's new gate the inter-pattern gap is 9.75 u rather
+    // than the old 6.20 u. New KINDS arrive early; crowding still arrives late. That split is the
+    // whole safety argument — and it is why speed does the same favour: every one of these patterns
+    // is met at a LOWER speed than before, which is strictly more reaction time.
+    //
+    // The one exception worth naming is the chasm, whose window does NOT widen at lower speed: it
+    // is airborne-distance minus a fixed 8 m hole, so launch slop is `0.742 − 8/v` seconds — 0.398 s
+    // at the new 1,200 m gate (23.2 m/s) against 0.478 s at the old 2,560 m gate. Still wider than
+    // the bar's 0.408 s jump window, and its ballistic gem arc cues the launch. Pinned by
+    // `DifficultyCurveTests`.
+    static let earlyDistance: Double = 150
+    static let midEarlyDiff: Double = 350.0 / diffFullAt    // 350 m — rings & overdrive
+    static let midDiff: Double = 600.0 / diffFullAt         // 600 m — gauntlet & split bar
 
     // Collision / lifecycle (derived from the reference; named to avoid magic numbers).
     static let obstacleZHalf: Double = 0.95       // |z| < this → obstacle is at the player plane
@@ -207,19 +254,43 @@ enum Tuning {
     /// 18 u ≈ 0.55 s at the cap — looser than adjacencies act one already ships *inside* a pattern
     /// (pattern 5's talls are 9 u apart). Density comes from the mix, not from crowding the seams.
     static let gapFloorActTwo: Double = 4
-    /// Moving walls (pattern 13) spawn at phase 0 in act one, which parks them dead centre on their
-    /// collision plane and leaves BOTH outer lanes permanently safe — verified the easiest late
-    /// pattern in the catalogue despite being the exclusive tier-5 unlock. In act two the phase
-    /// swings out to ±this (scaled by intensity) so the safe lane has to be read, not memorised.
-    /// Bounded: sin(0.75)·1.6 = 1.09, so one outer lane always keeps ≥ 3.0 u of clearance.
-    static let wallPhaseSwingActTwo: Double = 0.75
+    /// How far a moving wall's phase is swung off centre. **Applied at every distance from v2.1**
+    /// (S-011); it used to be zero until 3,200 m and ramp in only across act two.
+    ///
+    /// The owner, on pattern 13: *"the moving walls are stupid as you can always survive them by
+    /// just sticking to one side."* He was right, and the measurement is worse than the complaint.
+    /// At phase 0 each wall parks dead centre on its collision plane and sweeps only x ∈ [−0.332,
+    /// +0.332] across the whole 1.9 u lethal window, so an outer lane cleared the kill half-width
+    /// (1.25) by **0.618 u — 49% of margin, on both walls, every time**. Parking in lane 0 or lane 2
+    /// and giving NO INPUT AT ALL survived the pattern, and kept surviving it until the act-two ramp
+    /// finally closed an outer lane at **d = 6,841 m = 4 minutes 2 seconds**. Pattern 13 is the
+    /// EXCLUSIVE unlock of its tier, so the only new thing the game introduced in that whole stretch
+    /// was the one pattern you could beat by doing nothing.
+    ///
+    /// At the full swing each wall closes the centre and ONE outer lane (sin(0.75)·1.6 = 1.09 at the
+    /// plane; the remaining outer lane keeps ≥ 3.0 u of clearance, so a safe answer always exists and
+    /// two-of-three is never exceeded). Wall 0 swings positive and leaves lane 0; wall 1 swings
+    /// negative and leaves lane 2 — so the pattern is now a genuine weave across 13 u, and the
+    /// breadcrumbs it already emitted (lane 0 before wall 0, lane 2 before wall 1) were always
+    /// drawing the correct route for a swing that had not been switched on yet.
+    ///
+    /// Act two loses this as an escalation axis and keeps its real one, the draw-table mix. A wall
+    /// that closes a lane is the correct BASELINE, not an endgame reward.
+    static let wallPhaseSwing: Double = 0.75
 
     // MARK: v1.7 — risk-priced gems (PR-0414 / D-006)
 
-    /// Gems stay entirely safe until here — `midDiff × diffFullAt`, the tier that opens the gauntlet
-    /// and the split bar, by which point every verb has been taught. D-006's revisit clause asks for
-    /// risk to be gated behind a distance threshold rather than shipping a punishing early game.
-    static let riskGemsFrom: Double = 1_440
+    /// Gems stay entirely safe until here — the tier that opens the gauntlet and the split bar, by
+    /// which point every verb has been taught. D-006's revisit clause asks for risk to be gated
+    /// behind a distance threshold rather than shipping a punishing early game.
+    ///
+    /// **Now DERIVED from the ladder rather than restated** (S-011). It was the literal `1_440`,
+    /// which was `midDiff × diffFullAt` at the time and silently stopped being so the moment the
+    /// ladder moved. Binding it to the tier keeps the documented intent true by construction instead
+    /// of by coincidence: 600 m ≈ 33 s. That is also the first distance at which the greed line is
+    /// worth having — the old 1,440 m sat past where most runs ended, so the one mechanic that makes
+    /// coins a *choice* was invisible to the players who most needed a reason to take a risk.
+    static var riskGemsFrom: Double { midDiff * diffFullAt }
     /// The greed line stops this many SECONDS of travel short of the lane it occupies closing.
     /// Constant in time, so the exit is the same commitment at 17 m/s and at the cap (a planned
     /// swerve, never a reaction — clearing a lane takes ~0.06 s of lane lerp).
@@ -256,7 +327,15 @@ enum Tuning {
     /// Below this distance `maxIndex` returns 14, which is what `Patterns.count` used to be — so
     /// every tier boundary under 2,560 m draws byte-identically to v1.7 (pinned by
     /// `PatternOrderTests.testSixthTierLeavesTheEarlierLadderByteIdentical`).
-    static let chasmDiff: Double = 0.8                 // × diffFullAt → 2,560 m
+    ///
+    /// **v2.1 (S-011): 0.8 → 0.375, i.e. 2,560 m → 1,200 m.** Property 1 above was aspirational, not
+    /// true. Measured across 600 seeds: at the old gate the earliest possible encounter was 2,675 m
+    /// (gate + the 115 m spawn horizon) and the MEDIAN first encounter was 2,971 m / 124.8 s — so a
+    /// run ending at 2,500 m met a chasm in **0.0%** of cases, and even the repo's own benchmark
+    /// "good run" of 3,300 m met one in 77%. The owner asked for "a hole in the ground as well, not
+    /// just a big and small wall" while the hole had been shipped for two versions: he had simply
+    /// never been able to reach it. At 1,200 m the median first encounter is ~1,340 m / 66 s.
+    static let chasmDiff: Double = 1_200.0 / diffFullAt   // × diffFullAt → 1,200 m
 
     /// Half the chasm's length along the track: the gap is `2 × 4 = 8` u of missing deck.
     ///
@@ -273,15 +352,42 @@ enum Tuning {
     /// we want: "be airborne", not "be airborne at exactly the apex".
     static let chasmClearance: Double = 0.30
 
-    /// Seconds of travel before the chasm's LEADING edge at which the Autopilot commits its jump.
+    /// The fraction of a jump during which the feet are clear of the deck — i.e. `jumpY(t) ≥
+    /// chasmClearance`, solved rather than quoted. `y(t) = jumpV0·t − ½·gravity·t²`, so the roots are
+    /// `(jumpV0 ∓ √(jumpV0² − 2·gravity·clearance)) / gravity` = **0.02936 s and 0.78603 s**.
+    static var chasmAirborneEnter: Double {
+        (jumpV0 - (jumpV0 * jumpV0 - 2 * gravity * chasmClearance).squareRoot()) / gravity
+    }
+    static var chasmAirborneExit: Double {
+        (jumpV0 + (jumpV0 * jumpV0 - 2 * gravity * chasmClearance).squareRoot()) / gravity
+    }
+
+    /// Distance before the chasm's LEADING rim at which the Autopilot commits its jump.
     ///
-    /// The launch point must satisfy `0.0294·v ≤ lead ≤ 0.7860·v − 2·chasmHalfLength`. At the tier's
-    /// unlock speed (30.3 m/s) that is [0.89, 15.8]; at the cap (33) [0.97, 17.9]; under a pad boost
-    /// (36) [1.06, 20.3]. `0.28·v` lands at 8.5 / 9.2 / 10.1 — near the middle of all three, with
-    /// > 7 u of margin on either side. Clamped so the arithmetic cannot walk out of range if the
-    /// speed constants are ever retuned.
-    static let chasmBotLeadSeconds: Double = 0.28
-    static let chasmBotLeadMin: Double = 7, chasmBotLeadMax: Double = 11
+    /// **Derived from the physics as of v2.1 (S-011), not clamped to a magic floor.** Launching `L`
+    /// before the rim at speed `v` clears the hole exactly when
+    ///
+    ///     chasmAirborneEnter·v  ≤  L  ≤  chasmAirborneExit·v − 2·chasmHalfLength
+    ///
+    /// The old rule was `clamp(0.28·v, 7, 11)`. The `7` floor is what broke: at v = 17.5 m/s the
+    /// valid interval is only [0.51, 5.76], so the clamp forced the launch **outside the window
+    /// entirely** and the bot landed 1.3 u short of the far rim, every time, deterministically.
+    /// It survived for two versions because the chasm gated at 2,560 m where v ≥ 30.3 — and 17.5 m/s
+    /// is reachable there only under a chrono (×0.65), which no seed in the 200-seed soak had
+    /// happened to hold over a chasm. Pulling the tier-six gate to 1,200 m made that coincidence
+    /// common and seed 17604131991531453882 found it immediately.
+    ///
+    /// The replacement is the apex rule: launch so the jump's APEX lands on the chasm's CENTRE,
+    /// which is the exact rule `Patterns` case 14 uses to PLACE the hole, so prover and author now
+    /// agree by construction rather than by two sets of numbers that happened to match. It is also
+    /// the midpoint of the valid interval — maximum margin on both sides at every speed — and it is
+    /// still clamped, but to the true bounds instead of to constants.
+    static func chasmBotLead(speed v: Double) -> Double {
+        let apex = v * (jumpV0 / gravity) - chasmHalfLength
+        let lo = chasmAirborneEnter * v
+        let hi = chasmAirborneExit * v - 2 * chasmHalfLength
+        return Swift.min(Swift.max(apex, lo), Swift.max(lo, hi))
+    }
 
     // MARK: v1.9 — THE WARDENS (PR-0457, design in docs/agent/10_WARDENS.md)
 

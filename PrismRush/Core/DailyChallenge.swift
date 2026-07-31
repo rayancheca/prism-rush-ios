@@ -40,7 +40,17 @@ enum DailyChallenge {
     /// Warden arena (the first 600 m of every third world) are filtered at `GameCore.apply`. A
     /// layout version is a promise about the whole run, not about the RNG, so the same seed no
     /// longer means the same track and the shared daily must reshuffle.
-    static func seed(year: Int, month: Int, day: Int, layoutVersion: UInt64 = 10) -> UInt64 {
+    /// layoutVersion 11 = v2.1 — THE LADDER, PULLED FORWARD (S-011), plus the moving-wall fix.
+    /// Two spawn-path changes in one bump because either alone would have cost the same reshuffle.
+    /// (a) Every tier gate moves: 260/576/1,440/1,920/2,560 m → 150/350/600/900/1,200 m, so
+    /// `Spawner.maxIndex` returns a different ceiling at nearly every distance under 2,560 m and the
+    /// `rng.int(0, maxIdx − 1)` draw differs from ~150 m onward for every seed. This is the first
+    /// bump since v7 that changes act one's *selection*, not merely its entities.
+    /// (b) `Patterns.wallPhase` now emits ±`wallPhaseSwing` at every distance instead of 0 below
+    /// 3,200 m, which changes pattern 13's emitted phase, the lanes `Spawner.movingWallLanes` reports
+    /// closed, and therefore its safe-entry breadcrumb and greed line. Zero extra RNG calls; the
+    /// track still differs, and a layout version is a promise about the whole run.
+    static func seed(year: Int, month: Int, day: Int, layoutVersion: UInt64 = 11) -> UInt64 {
         let folded = UInt64(year * 10_000 + month * 100 + day)
         var mix = SplitMix64(seed: folded ^ tag ^ (layoutVersion << 48))
         return mix.next()

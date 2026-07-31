@@ -120,8 +120,7 @@ enum Autopilot {
         // window on BOTH sides: launching too early lands the bot in the hole. So it is tracked by
         // its LEADING edge (the point the jump must already have cleared) and by its TRAILING edge
         // (while that is still ahead of us, we are over the void).
-        let chasmLead = clampD(c.effectiveSpeed * Tuning.chasmBotLeadSeconds,
-                               Tuning.chasmBotLeadMin, Tuning.chasmBotLeadMax)
+        let chasmLead = Tuning.chasmBotLead(speed: c.effectiveSpeed)
         var nearestBar = Double.infinity
         var nearestLowTarget = Double.infinity
         var nearestChasmEdge = Double.infinity

@@ -48,12 +48,12 @@ struct Spawner {
     /// have silently handed tier five the tier-six pattern.
     static func maxIndex(forDistance dist: Double) -> Int {
         let diff = min(1, dist / Tuning.diffFullAt)
-        if dist < Tuning.earlyDistance { return 5 }        // 0–260 m: teach (patterns 0–4)
-        if diff < Tuning.midEarlyDiff { return 9 }         // 260–576 m: + zigzag/mixed/pickup/double bar
-        if diff < Tuning.midDiff { return 11 }             // 576–1440 m: + rings & overdrive runways
-        if diff < Tuning.movingWallMinDiff { return 13 }   // 1440–1920 m: + gauntlet & split bars
-        if diff < Tuning.chasmDiff { return 14 }           // 1920–2560 m: + moving walls (v1.7's full set)
-        return Patterns.count                              // 2560 m+: + THE CHASM (tier six, v1.8)
+        if dist < Tuning.earlyDistance { return 5 }        // 0–150 m  / 0–8.6 s:  teach (patterns 0–4)
+        if diff < Tuning.midEarlyDiff { return 9 }         // 150–350 m / 8.6–20 s: + zigzag/mixed/pickup/2×bar
+        if diff < Tuning.midDiff { return 11 }             // 350–600 m / 20–33 s:  + rings & overdrive runways
+        if diff < Tuning.movingWallMinDiff { return 13 }   // 600–900 m / 33–47 s:  + gauntlet & split bars
+        if diff < Tuning.chasmDiff { return 14 }           // 900–1200 m / 47–60 s: + moving walls
+        return Patterns.count                              // 1200 m+  / 60 s+:     + THE CHASM
     }
 
     // Act two shifts the *mix*, never the catalogue. Every pattern stays reachable at every depth —
