@@ -479,29 +479,81 @@ final class EconomyTests: XCTestCase {
     func testMysteryBoxOddsBoundaries() async {
         // Pin every band edge of the honest weighted table (decree 5).
         XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.0), .coins(200))
-        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.39), .coins(200))
-        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.40), .coins(400))
-        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.61), .coins(400))
-        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.62), .slowMo(2))
-        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.78), .headStart(1))
-        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.90), .coinSurge(1))
-        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.98), .coins(1200))
-        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.9999), .coins(1200))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.419), .coins(200))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.42), .coins(350))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.639), .coins(350))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.64), .slowMo(3))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.79), .headStart(2))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.90), .coins(600))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.975), .coins(1400))
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.9999), .coins(1400))
+    }
+
+    /// **The box must not be a trap, and it must not be a printer** (S-012, E6).
+    ///
+    /// The old table's expected value was 242.7 against a 300 price — −19%, which decree 5 ("no dark
+    /// patterns") does not comfortably survive. The fix is not just a re-weight: this test also pins
+    /// the STRUCTURAL half, which is that no band may grant a coin multiplier. A Coin Surge doubles
+    /// a whole run and banks with no cap, so an 8% surge band made a 300-coin spend net-POSITIVE for
+    /// any player who ran deep enough to arm it well — the last surviving violation of D-026.
+    func testTheMysteryBoxIsWorthWhatItCostsAndCanNeverMintCoins() async {
+        // Per-charge coin values, taken from the surviving packs rather than invented.
+        func unitValue(_ id: String) -> Double {
+            guard let pack = ShopConsumables.packs.first(where: { $0.id == id }) else { return 0 }
+            return Double(pack.cost) / 3.0
+        }
+        let slowMo = unitValue("slowMoPack"), headStart = unitValue("headStartPack")
+
+        // Integrate the table over [0, 1) at fine resolution — this reads the SHIPPED function, so
+        // it cannot drift out of step with the bands the way a hand-written sum would.
+        let steps = 200_000
+        var ev = 0.0
+        for i in 0..<steps {
+            switch ShopConsumables.mysteryReward(roll: (Double(i) + 0.5) / Double(steps)) {
+            case let .coins(c):     ev += Double(c)
+            case let .slowMo(n):    ev += Double(n) * slowMo
+            case let .headStart(n): ev += Double(n) * headStart
+            case let .speedUp(n):   ev += Double(n) * unitValue("speedUpPack")
+            case let .shield(n):    ev += Double(n) * unitValue("shieldPack")
+            case .coinSurge:
+                XCTFail("the Mystery Box granted a Coin Surge — a 300-coin SPEND that returns a coin "
+                        + "multiplier is exactly the arbitrage D-026 deleted the Coin Surge Pack to "
+                        + "prevent, and a surge banks uncapped so it is worth the best run you will "
+                        + "ever arm it on")
+            }
+        }
+        ev /= Double(steps)
+        let price = Double(ShopConsumables.mysteryBoxCost)
+        XCTAssertEqual(ev, price, accuracy: price * 0.05, String(format:
+            "expected value %.1f against a %.0f price (%.1f%%) — a box more than 5%% either side of "
+            + "its own cost is a trap or a printer", ev, price, (ev / price - 1) * 100))
+
+        // And the coin bands ALONE must stay under the price, or the box mints currency from
+        // currency with unlimited rolls and no cooldown.
+        var coinOnlyEV = 0.0
+        for i in 0..<steps {
+            if case let .coins(c) = ShopConsumables.mysteryReward(roll: (Double(i) + 0.5) / Double(steps)) {
+                coinOnlyEV += Double(c)
+            }
+        }
+        coinOnlyEV /= Double(steps)
+        XCTAssertLessThan(coinOnlyEV, price, String(format:
+            "coin-only EV is %.1f against a %.0f price — the box is a coin printer", coinOnlyEV, price))
     }
 
     func testOpenMysteryBoxSpendsGrantsAndGatesOnCoins() async {
         var p = Profile(); p.coins = ShopConsumables.mysteryBoxCost   // exactly one box
         let store = ProfileStore(testing: p)
 
-        // Jackpot roll: spend 300, win 1,200 → coins 1,200; winnings are NOT counted as earned.
-        XCTAssertEqual(store.openMysteryBox(roll: 0.99), .coins(1200))
-        XCTAssertEqual(store.profile.coins, 1200)
+        // Jackpot roll: spend 300, win 1,400 → coins 1,400; winnings are NOT counted as earned.
+        XCTAssertEqual(store.openMysteryBox(roll: 0.99), .coins(1400))
+        XCTAssertEqual(store.profile.coins, 1400)
         XCTAssertEqual(store.profile.totalCoinsEarned, 0, "gacha winnings are bought, not earned")
 
-        // Consumable roll: spend + grant the charge.
-        XCTAssertEqual(store.openMysteryBox(roll: 0.80), .headStart(1))
-        XCTAssertEqual(store.profile.headStartCharges, Profile().headStartCharges + 1)
-        XCTAssertEqual(store.profile.coins, 900)
+        // Consumable roll: spend + grant the charges.
+        XCTAssertEqual(store.openMysteryBox(roll: 0.80), .headStart(2))
+        XCTAssertEqual(store.profile.headStartCharges, Profile().headStartCharges + 2)
+        XCTAssertEqual(store.profile.coins, 1100)
 
         // Too poor: nil, no spend, no grant.
         let broke = ProfileStore(testing: Profile())   // 0 coins

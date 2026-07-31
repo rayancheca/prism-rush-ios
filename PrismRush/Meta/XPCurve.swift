@@ -54,15 +54,55 @@ enum XPCurve {
     }
 
     /// Banded level-up coin grant — paid once, ever, watermarked by `Profile.xpLevelRewarded`.
-    /// Lifetime total across the ladder: 10,300 coins.
+    ///
+    /// **Cut 4.3× in S-012 (E7), and the reason is one measurement.** The old ladder paid 10,300
+    /// coins across L1→L30, and L30 takes roughly 73–81 minutes of play. Running for those same
+    /// 73–81 minutes pays 4,630–6,265 coins on the S-011 faucet. **Levelling was paying 1.6–2.2×
+    /// what playing pays** — so the session that made SKILL the largest term in the faucet was
+    /// immediately out-earned by a counter that goes up no matter how you play.
+    ///
+    /// Add the power-up charges (`levelUpCharges` below, 13,050 coins at shop prices before its own
+    /// cut) and the L1→L30 giveaway came to 23,350 coins of priceable value against a permanent
+    /// catalogue of 83,500 — **28% of the whole game, handed out for levelling**, which is what
+    /// undercuts the only sinks that alter play.
+    ///
+    /// 2,400 total keeps the ladder a real on-ramp — it is still the fastest coins a new player
+    /// ever sees, and the shape (a flat early band, a rising middle, a milestone at 30) is
+    /// unchanged — while landing at 38–52% of the run faucet over the same stretch instead of 160–220%.
+    /// Lifetime total across the ladder: **2,400 coins**.
     static func coinGrant(forLevel n: Int) -> Int {
         switch n {
-        case 2...9:   return 100
-        case 10...19: return 250
-        case 20...29: return 500
-        case 30:      return 2_000
-        default:      return 0    // level 1 is the start; out-of-range pays nothing
+        case 2...9:   return 25     // 8 levels →   200
+        case 10...19: return 60     // 10 levels →  600
+        case 20...29: return 120    // 10 levels → 1,200
+        case 30:      return 400    // the milestone
+        default:      return 0      // level 1 is the start; out-of-range pays nothing
         }
+    }
+
+    /// Power-up charges granted for reaching level `n`.
+    ///
+    /// **Was a flat multiply in `GameView` and is now per-level, which is the point.** The old rule
+    /// was `slowMo += 2·levels; speedUp += 2·levels; shield += levels; coinSurge += levels` — 58
+    /// slow-mos, 58 speed-ups, 29 shields and 29 Coin Surges by L30, worth 13,050 coins at shop
+    /// prices plus an UNBOUNDED coin-surge stack (a surge doubles a run's payout and charges never
+    /// expire, so 29 of them are worth whatever your 29 best runs are worth).
+    ///
+    /// Halving the consumables and putting the surge on a five-level milestone takes the priceable
+    /// value to 6,584 and the surges to 6. Expressing it per-LEVEL rather than per-level-UP is what
+    /// makes a milestone rule possible at all, and it also fixes a latent bug in the old form: a run
+    /// that crossed two levels at once multiplied by the delta, so the grant was correct only by
+    /// accident of the bands being flat.
+    static func levelUpCharges(forLevel n: Int) -> (slowMo: Int, speedUp: Int, shield: Int, coinSurge: Int) {
+        guard n >= 2 else { return (0, 0, 0, 0) }
+        return (slowMo: 1,
+                speedUp: 1,
+                // Every other level, so a shield stays the scarcest of the three — it is the only
+                // one that converts directly into surviving a mistake.
+                shield: n % 2 == 0 ? 1 : 0,
+                // The only source of Coin Surges left in the game now that neither the shop nor the
+                // Mystery Box grants one (D-026). Five-level milestones: 6 across the whole ladder.
+                coinSurge: n % 5 == 0 ? 1 : 0)
     }
 
     /// Levels that auto-unlock a character (R1: Pebble L3, Blossom L6, Shard L12, Eclipse L25;

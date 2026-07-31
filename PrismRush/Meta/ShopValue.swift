@@ -105,34 +105,61 @@ enum ShopConsumables {
         // The fix is structural rather than a re-price. Pricing it above its own payout would leave
         // a trap item whose safety depends on the faucet never changing again — and the faucet just
         // changed twice in one session. **No coin-spend path may grant a coin multiplier**, so the
-        // arbitrage cannot be reintroduced by tuning. Surges are now earned only: the Mystery Box's
-        // 8% band (a 300-coin roll for one charge is ~14 coins of expected value, not a printer) and
-        // the level-up grant in `GameView`.
+        // arbitrage cannot be reintroduced by tuning.
+        //
+        // **S-012 closed the hole this invariant still had.** The Mystery Box is a 300-COIN SPEND,
+        // and it granted a Coin Surge on 8% of rolls — the same shape as the deleted pack, weaker
+        // but uncapped, and net-POSITIVE beyond about 15,000 m of run because a surge is valued at
+        // the best run you will ever arm it on, not the average one. The band is gone; surges are
+        // now earned only, from the level ladder.
     ]
 
-    /// Mystery Box reward for a roll in [0, 1). Weighted, honest, with a jackpot — the player can
-    /// lose a little on coins-only common rolls but the consumable/jackpot upside keeps it fair
-    /// (decree 5: no dark patterns). Pure f(roll), so the odds pin in tests.
+    /// Mystery Box reward for a roll in [0, 1). Pure f(roll), so the odds pin in tests.
+    ///
+    /// **Re-weighted in S-012, and it was wrong in BOTH directions at once.**
+    ///
+    /// *Too mean, for almost everybody.* The old table's expected value was 242.7 coins against a
+    /// 300-coin price — **−19%** — and re-derived after S-011 deleted the Coin Surge Pack (which is
+    /// what the 8% band was being valued at) it was −23%. Decree 5 says no dark patterns, and a box
+    /// that takes a fifth of every purchase is at best in tension with that.
+    ///
+    /// *And simultaneously too generous, for the players who matter least to protect.* A Coin Surge
+    /// doubles a whole run's payout and charges bank with no cap, so a deep runner values that 8%
+    /// band at their BEST run rather than their average one — the box turns net-positive past a
+    /// surged run of roughly 15,000 m. That made the box the last surviving violation of D-026's
+    /// structural rule that **no coin-spend path may grant a coin multiplier.**
+    ///
+    /// Both are fixed by the same edit: the Coin Surge band is gone, and the remaining bands are
+    /// weighted so the expected value is the price.
+    ///
+    ///   0.42 × 200 + 0.22 × 350 + 0.15 × (3 × 83.33) + 0.11 × (2 × 100)
+    ///        + 0.075 × 600 + 0.025 × 1,400
+    ///     =  84 + 77 + 37.5 + 22 + 45 + 35  =  **300.5** against a 300 cost.
+    ///
+    /// Note what that composition says, honestly: the COIN bands alone are 240.5, i.e. you will
+    /// usually get back less money than you spent. The power-up bands are what make the box whole,
+    /// and they are 26% of rolls. It is a lottery you break even on, not a coin printer — which,
+    /// with unlimited rolls and no cooldown, is the only shape that can be both fair and safe.
     static func mysteryReward(roll: Double) -> ConsumableGrant {
         switch roll {
-        case ..<0.40: return .coins(200)    // 40% — common (a small loss vs the 300 cost)
-        case ..<0.62: return .coins(400)    // 22% — coin profit
-        case ..<0.78: return .slowMo(2)     // 16%
-        case ..<0.90: return .headStart(1)  // 12%
-        case ..<0.98: return .coinSurge(1)  //  8%
-        default:      return .coins(1200)   //  2% — jackpot
+        case ..<0.42:  return .coins(200)     // 42.0% — the common loss
+        case ..<0.64:  return .coins(350)     // 22.0% — a small coin profit
+        case ..<0.79:  return .slowMo(3)      // 15.0%
+        case ..<0.90:  return .headStart(2)   // 11.0%
+        case ..<0.975: return .coins(600)     //  7.5%
+        default:       return .coins(1400)    //  2.5% — jackpot
         }
     }
 
     /// The honest odds table for the reveal screen (decree 5: show real odds). Best-first; the
     /// percentages match `mysteryReward`'s bands exactly. (label, percent, tint hex.)
     static let mysteryOdds: [(label: String, pct: Int, hex: UInt32)] = [
-        ("1,200 coins — JACKPOT", 2, 0xFFD23D),
-        ("Coin Surge ×1",         8, 0xFFD23D),
-        ("Head Start ×1",        12, 0xFF9F1C),
-        ("Slow-Mo ×2",           16, 0x9BF0FF),
-        ("400 coins",            22, 0xFFD23D),
-        ("200 coins",            40, 0xFFD23D),
+        ("1,400 coins — JACKPOT", 3, 0xFFD23D),
+        ("600 coins",             7, 0xFFD23D),
+        ("Head Start ×2",        11, 0xFF9F1C),
+        ("Slow-Mo ×3",           15, 0x9BF0FF),
+        ("350 coins",            22, 0xFFD23D),
+        ("200 coins",            42, 0xFFD23D),
     ]
 
     /// Coins still needed to open the box; 0 means affordable.

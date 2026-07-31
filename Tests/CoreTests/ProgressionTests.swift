@@ -135,14 +135,14 @@ final class ProgressionTests: XCTestCase {
         let store = ProfileStore(testing: Profile())
         let now = utc(2026, 6, 10)
 
-        // Run A: exactly 300 XP (290 distance + 10 combo) → L1 → L2 → 100-coin grant.
+        // Run A: exactly 300 XP (290 distance + 10 combo) → L1 → L2 → 25-coin grant.
         var a = RunSummary(); a.distance = 2_900
         let rA = store.applyRunSummary(a, now: now)
         XCTAssertEqual(rA, LevelUpResult(xpGained: 300, levelBefore: 1, levelAfter: 2,
-                                         coinsGranted: 100, unlockedLevels: []))
+                                         coinsGranted: 25, unlockedLevels: []))
         XCTAssertEqual(store.profile.totalXP, 300)
-        XCTAssertEqual(store.profile.coins, 100)
-        XCTAssertEqual(store.profile.totalCoinsEarned, 100)
+        XCTAssertEqual(store.profile.coins, 25)
+        XCTAssertEqual(store.profile.totalCoinsEarned, 25)
         XCTAssertEqual(store.profile.xpLevelRewarded, 2)
         XCTAssertEqual(store.playerLevel, 2)
 
@@ -150,8 +150,8 @@ final class ProgressionTests: XCTestCase {
         var b = RunSummary(); b.distance = 30_000
         let rB = store.applyRunSummary(b, now: now)
         XCTAssertEqual(rB, LevelUpResult(xpGained: 2_000, levelBefore: 2, levelAfter: 5,
-                                         coinsGranted: 300, unlockedLevels: [3]))
-        XCTAssertEqual(store.profile.coins, 400)
+                                         coinsGranted: 75, unlockedLevels: [3]))
+        XCTAssertEqual(store.profile.coins, 100)
         XCTAssertEqual(store.profile.xpLevelRewarded, 5)
 
         // Run C: tiny run — XP accrues, no level crossed, zero grant.
@@ -162,6 +162,54 @@ final class ProgressionTests: XCTestCase {
         XCTAssertTrue(rC.unlockedLevels.isEmpty)
     }
 
+    /// **The level ladder must not out-earn playing the game** (S-012, E7).
+    ///
+    /// Measured before the cut: L1→L30 paid 10,300 direct coins and takes roughly 73–81 minutes;
+    /// running for those same minutes pays 4,630–6,265 on the S-011 faucet. Levelling was worth
+    /// **1.6–2.2× the entire run faucet** — so the session that made SKILL the largest term in the
+    /// payout was immediately out-earned by a counter that goes up no matter how you play. Add the
+    /// power-up charges and the giveaway came to 23,350 coins of priceable value against an 83,500
+    /// catalogue: 28% of the whole game, for levelling.
+    ///
+    /// This pins the totals rather than the bands, because the total is the claim.
+    func testTheWholeLevelLadderPaysLessThanRunningForTheSameTime() async {
+        let directCoins = (2...30).reduce(0) { $0 + XPCurve.coinGrant(forLevel: $1) }
+        XCTAssertEqual(directCoins, 2_400, "the L1→L30 direct coin total moved — re-derive E7")
+
+        // The run faucet over the same 73–81 minutes, from the S-011 measurement table
+        // (docs/agent/audits/AUDIT_011_ECONOMY.md): 4,630 coins at the pessimistic end.
+        let runFaucetOverTheSameStretch = 4_630
+        XCTAssertLessThan(directCoins, runFaucetOverTheSameStretch, """
+            the level ladder pays \(directCoins) coins over the ~77 minutes it takes to reach L30,             against ~\(runFaucetOverTheSameStretch) for actually running. Levelling must be a             bonus on top of playing, never a substitute for it.
+            """)
+
+        // The charge grants, valued at the surviving shop prices.
+        var slowMo = 0, speedUp = 0, shield = 0, coinSurge = 0
+        for n in 2...30 {
+            let g = XPCurve.levelUpCharges(forLevel: n)
+            slowMo += g.slowMo; speedUp += g.speedUp; shield += g.shield; coinSurge += g.coinSurge
+        }
+        XCTAssertEqual(slowMo, 29); XCTAssertEqual(speedUp, 29)
+        XCTAssertEqual(shield, 15, "shields sit on even levels — the scarcest of the three")
+        XCTAssertEqual(coinSurge, 6, "surges sit on five-level milestones, and this is now the ONLY "
+                       + "source of them in the entire game (D-026)")
+
+        func packValue(_ id: String) -> Double {
+            (ShopConsumables.packs.first { $0.id == id }.map { Double($0.cost) } ?? 0) / 3
+        }
+        let chargeValue = Double(slowMo) * packValue("slowMoPack")
+            + Double(speedUp) * packValue("speedUpPack")
+            + Double(shield) * packValue("shieldPack")
+        let total = Double(directCoins) + chargeValue
+
+        // The permanent catalogue the giveaway must not swamp.
+        let catalogue = 83_500.0
+        XCTAssertLessThan(total / catalogue, 0.15, String(format:
+            "the L1→L30 giveaway is %.0f coins of priceable value — %.0f%% of the whole %.0f-coin "
+            + "catalogue. Above ~15%% it stops being an on-ramp and starts replacing the only sinks "
+            + "that alter play.", total, total / catalogue * 100, catalogue))
+    }
+
     func testLevelGrantWatermarkIdempotent() async {
         // Simulated cloud merge to L9 with grants already paid there (watermark 9).
         var p = Profile(); p.totalXP = 6_600; p.xpLevelRewarded = 9
@@ -170,7 +218,7 @@ final class ProgressionTests: XCTestCase {
         let r = store.applyRunSummary(run, now: utc(2026, 6, 10))
         XCTAssertEqual(r.levelBefore, 9)
         XCTAssertEqual(r.levelAfter, 10)
-        XCTAssertEqual(r.coinsGranted, 250, "pays ONLY the newly crossed L10, never L2–L9 again")
+        XCTAssertEqual(r.coinsGranted, 60, "pays ONLY the newly crossed L10, never L2–L9 again")
         XCTAssertEqual(store.profile.xpLevelRewarded, 10)
 
         // Watermark ABOVE the reached level (other device is further): nothing pays.

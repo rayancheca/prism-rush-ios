@@ -946,17 +946,28 @@ final class GameModel {
                 // Earn deploy charges by levelling up (honest replenishment — decree 5): slow-mo +
                 // speed-up ×2/level, shield ×1/level (a free on-demand hit is the most potent).
                 //
-                // **Coin surges are granted HERE, and only here plus the Mystery Box** (v2.1,
-                // S-011). They used to be buyable for 450 coins, which let a player spend coins to
-                // multiply coins — see the note in `ShopValue.coinPacks`. Earning them by levelling
-                // makes the surge a reward for playing rather than a lever for compounding, and it
-                // is the one grant a player cannot farm, because XP comes from runs.
-                let levels = result.levelAfter - result.levelBefore
+                // **Coin surges are granted HERE, and NOWHERE else** (v2.2, S-012 — the Mystery
+                // Box's 8% surge band is gone). They used to be buyable for 450 coins, which let a
+                // player spend coins to multiply coins — see the note in `ShopValue.packs`. Earning
+                // them by levelling makes the surge a reward for playing rather than a lever for
+                // compounding, and it is the one grant a player cannot farm, because XP comes from
+                // runs.
+                //
+                // Summed over the levels actually CROSSED rather than multiplied by how many there
+                // were: the grant is now per-level (`XPCurve.levelUpCharges`) so shields and surges
+                // can sit on milestones, and the old multiply was only ever correct by accident of
+                // the bands being flat.
+                var grant = (slowMo: 0, speedUp: 0, shield: 0, coinSurge: 0)
+                for n in (result.levelBefore + 1)...result.levelAfter {
+                    let g = XPCurve.levelUpCharges(forLevel: n)
+                    grant.slowMo += g.slowMo; grant.speedUp += g.speedUp
+                    grant.shield += g.shield; grant.coinSurge += g.coinSurge
+                }
                 store.mutate {
-                    $0.slowMoCharges += 2 * levels
-                    $0.speedUpCharges += 2 * levels
-                    $0.shieldCharges += levels
-                    $0.coinSurgeCharges += levels
+                    $0.slowMoCharges    += grant.slowMo
+                    $0.speedUpCharges   += grant.speedUp
+                    $0.shieldCharges    += grant.shield
+                    $0.coinSurgeCharges += grant.coinSurge
                 }
             }
         }
