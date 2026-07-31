@@ -1966,3 +1966,52 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
   vault window is already generous.
 - **Fix sketch:** add `playerBottom >= tallVaultClearance - stumbleGrazeDY` to the tall arm, gated on
   `canVault`. One line plus one boundary test.
+
+---
+
+## Session 012 items
+
+### PR-0458 · SEV2 · THE BLAST — the game's first offensive verb
+- **Status:** `DONE(S-012)` · commit `3b1cb21` · decision **D-028**
+- Owner's own proposal. Double tap spends `blastCost` and destroys destructible obstacles within
+  `blastRange`. Charge became ammo (`chargeFullGems` 520 → 240); HUD reads `⚡ BLAST ×N`.
+- Proven determinism-neutral (see `BlastTests`); no `layoutVersion` bump.
+
+### PR-0459 · SEV1 · THE WARDEN can never kill you, and throws real hazards
+- **Status:** `DONE(S-012)` · commit `ae68fc7` · decisions **D-029**, **D-030**
+- Replaces the three abstract red bands with real obstacles. Closes the render half of the owner's
+  "a red thing that covers the screen" and nine of the S-011 `s011_warden_render.md` §7 findings.
+
+### PR-0460 · SEV2 · The economy's sink side (E6/E7)
+- **Status:** `DONE(S-012)` · commit `7871dd5` · decision **D-031**
+- Mystery Box re-weighted (was −19% EV *and* the last D-026 violation); level ladder cut 4.3×.
+- IAP packs deliberately unchanged — measured as already correct against the S-011 faucet.
+
+### PR-0461 · SEV2 · Slide is mandatory nowhere in the pattern catalogue
+- **Status:** `OPEN` — **the next session's headline**
+- **Symptom:** every bar in the game can be jumped (`Collisions.barHit` kills only between 0.95 and
+  1.65; a base jump clears it for 0.434 s of an 0.815 s arc). A player who never swipes down can
+  complete all 15 patterns, so SLIDE is the game's only decorative verb.
+- **Why it is now cheap:** S-012 built `EntityKind.hangingBar` — collision, graze rule, Autopilot
+  arm, renderer mesh, pool cap and `SpawnCmd` case all exist and ship. **No pattern places one.**
+- **Blast radius:** a spawn change. Costs `layoutVersion` 12 (pre-armed, unspent), a golden
+  rederivation in `DailyChallengeTests` AND `MissionsTests.testTodaysChallengeSeedMatchesUTCGoldens`,
+  and a fresh 200-seed solvability proof (which asserts zero CONTACTS, not zero deaths).
+- **Verification:** `DifficultyCurveTests` should show a non-zero mandatory-slide rate per band.
+
+### PR-0462 · SEV3 · The pattern catalogue has ~60 distinct arrangements
+- **Status:** `OPEN` — the rest of "the gameplay has been left stale"
+- 3 of 15 patterns consume zero randomness and render identically every time (indices 2, 8, 13);
+  10 of the remaining 12 vary by exactly one thing, which of three lanes.
+- Same blast radius as PR-0461 and should be done in the same session, on the same bump.
+
+### PR-0463 · SEV3 · THE BLAST has no sound of its own
+- **Status:** `OPEN` · needs Rayan's ears
+- Reuses `.boostStart` (fire) and `.shieldBreak` (shatter). Nothing in this program can hear a sound,
+  so a bespoke voice was not invented — the same call S-010 made for the stumble. Queued behind the
+  standing full audio pass (PR-0456).
+
+### PR-0464 · SEV3 · Per-world Warden species still unbuilt
+- **Status:** `OPEN` · carried from S-009 (`s009c_SPEC.md` §3), owner-requested
+- **Much cheaper after S-012:** a species is now a different THROW TABLE
+  (`WardenEncounter.script(rank:)` + `Tuning.wardenThrowKind`), not a different attack system.

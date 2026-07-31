@@ -1,9 +1,9 @@
-# HANDOFF → Session 012
+# HANDOFF → Session 013
 
 ## Paste this to start the next session
 
 ```
-You are session 012 of a long-running program to finish and ship Prism Rush, a neon three-lane
+You are session 013 of a long-running program to finish and ship Prism Rush, a neon three-lane
 endless runner for iPhone (Swift 6, SwiftUI, RealityKit, zero dependencies, zero binary assets).
 
 Read docs/agent/01_RULES.md, then docs/agent/02_STATE.md, then this file.
@@ -13,59 +13,55 @@ rules, just work however you think is best." Do not ask permission to fix someth
 
 Direction: App Store submission IS the goal, timing is open, and Rayan wants the app POLISHED first.
 Design and feel outrank compliance right now. He also said, in S-011: "always plan extremely before
-implementing" and "ask me questions if you need" — he answered eight structured questions in that
-session and every answer is recorded below. Do not re-ask them.
+implementing" and "ask me questions if you need" — he answered eight structured questions there and
+S-012 built three of the four things those answers implied. Do not re-ask them; they are recorded in
+docs/agent/04_DECISIONS.md as D-023..D-031.
 
-YOUR JOB, in priority order. All four are things Rayan explicitly approved in S-011 and that S-011
-did not have room to build.
+YOUR JOB. Item 1 is the whole session unless it goes faster than it should. It is the last of the
+four things Rayan asked for in S-011 and the only one S-012 did not finish — and it is also the only
+one that spends the layoutVersion bump, which is why it was left rather than rushed.
 
-  1. THE BLAST — the game's first offensive verb, and the answer to "what does charged mean".
-     Rayan's own idea: "maybe double tap sends a blast originating from the player that knocks
-     things down and clears a path." He chose "CHARGE becomes ammo": gems fill the bar, DOUBLE TAP
-     spends it, the blast destroys obstacles ahead. This is the highest-value item left — it gives
-     the player agency (today the game has ZERO offensive inputs; everything is evasion), and it
-     makes the CHARGE bar mean something. Today that bar appears 1.5 s into the first run anyone
-     ever plays and its referent (a Warden) does not exist for another 104 seconds.
-     The input space is completely free: double tap, long press, touch LOCATION, swipe velocity and
-     all multi-touch are unread (docs/agent/audits/scratch/s011_input.md §2). SINGLE TAP IS JUMP and
-     must stay instant — do NOT add a double-tap recogniser that delays it. Fire the jump on tap 1
-     exactly as today, and treat a second tap inside the window as the blast.
-     Chasms should stay immune (you cannot knock down a hole) — the same carve-out the stumble uses.
+  1. OBSTACLE VARIETY AND SURPRISE — "the gameplay has been left stale."
+     The ladder is fixed (S-011) and the boss is fixed (S-012). The CONTENT is still thin:
+       - **SLIDE IS MANDATORY NOWHERE IN THE 15-PATTERN CATALOGUE.** Every bar in the game can be
+         jumped (`Collisions.barHit` only kills between 0.95 and 1.65; a base jump clears it for
+         0.434 s of an 0.815 s arc). A player who never swipes down can complete every pattern.
+         **The fix is already built and shipped — you just have to place it.** S-012 added
+         `EntityKind.hangingBar`: full-span, kill band 0.95 → 4.0, unjumpable from any state
+         including Super Sneakers, cleared only by sliding, with a mesh that is exactly its kill
+         band. It has a `SpawnCmd` case, a collision predicate, a graze rule, an Autopilot arm, a
+         renderer mesh and a `capHangingBar`. **No pattern places one.** Putting it in the catalogue
+         is the single highest-value change left in the game.
+       - 3 of 15 patterns consume ZERO randomness and render identically every time (indices 2, 8,
+         13); 10 of the remaining 12 vary by exactly one thing, WHICH OF THREE LANES; the whole game
+         contains ~60 distinct arrangements.
+       - The spawner draws a gem breadcrumb into the safe entry lane of every pattern, so the floor
+         tells you the answer before you arrive. (D-006 kept this deliberately; the greed line past
+         `riskGemsFrom` is the counterweight. Read it before changing it.)
+     See docs/agent/audits/scratch/s011_research_obstacles.md for a master table of what shipped
+     runners use, and s012_scout_spawn.md for the per-pattern RNG-draw table.
 
-  2. THE WARDEN REBUILD. Rayan's three answers, all recorded:
-       - "It can never kill you." Every shipped runner boss researched (Sonic Dash, Minion Rush,
-         Crash On the Run) is an OPPORTUNITY layer: the boss has no kill move, the lethal thing is
-         the obstacle it places, and failure means the boss escapes and you lose the reward.
-         Prism Rush inverted this. Today two landed hits 1.20 s apart end the run.
-       - "Throw real hazards." Stop firing instant beams; the Warden REBUILDS THE TRACK — launches
-         walls down a lane, drops bars to slide under, blasts holes in the deck. Travel time is the
-         telegraph, and every hazard uses vocabulary the player already reads.
-       - Per-world species remain specified and unbuilt (s009c_SPEC.md §3).
-     READ docs/agent/audits/scratch/s011_warden_render.md §7 FIRST. Nine numbered findings with the
-     geometry, and it is why the current fight is unreadable.
+     THIS COSTS THE layoutVersion BUMP. Currently 11, v12 is pre-armed and unspent. Read iron rule 3
+     in CLAUDE.md and follow it exactly: keep the 200-seed bot green (it asserts ZERO CONTACTS, not
+     zero deaths), bump `DailyChallenge.layoutVersion`, and repin the goldens in BOTH
+     `DailyChallengeTests` AND `MissionsTests.testTodaysChallengeSeedMatchesUTCGoldens`. Derive the
+     goldens in Python from the SplitMix64 constants and reproduce the existing pins first.
 
-  3. FINISH THE ECONOMY (E6/E7 of docs/agent/audits/AUDIT_011_ECONOMY.md §3). The faucet is done and
-     measured; the SINK side has not been re-checked against it. Specifically: re-price the IAP packs
-     and the world ladder against the new coins/min, fix the Mystery Box's −19% EV, and re-scale the
-     level-up giveaway (~13,050 coins of free power-ups across L1→L30, which undercuts the only
-     play-altering sink). Rayan chose "IAP should genuinely matter", so this is a real constraint.
+  2. PER-WORLD WARDEN SPECIES — specified in s009c_SPEC.md §3, carried unbuilt since S-009. Much
+     easier now than it was: a species is a different THROW TABLE (`WardenEncounter.script(rank:)`
+     plus `Tuning.wardenThrowKind`), not a different attack system. Rayan asked for this directly.
 
-  4. OBSTACLE VARIETY AND SURPRISE — the rest of "the gameplay has been left stale". The ladder is
-     fixed but the CONTENT is thin: 3 of 15 patterns consume ZERO randomness and render identically
-     every time (2, 8, 13); 10 of the remaining 12 vary by exactly one thing, WHICH OF THREE LANES;
-     the whole game contains 60 distinct arrangements; and the spawner draws a gem breadcrumb into
-     the safe entry lane of every pattern, so the floor tells you the answer before you arrive.
-     **SLIDE IS NEVER MANDATORY ANYWHERE IN THE CATALOGUE** — every bar in the game can be jumped
-     (`Collisions.barHit` only kills below 1.65; a base jump clears it for 0.408 s). A player who
-     never swipes down can complete every pattern. See s011_research_obstacles.md for a master table
-     of what shipped runners use.
+  3. Whatever Rayan says when he plays it. Four things are new since he last looked and every one of
+     them needs his thumbs — see "Rayan action items" below.
 
 BEFORE YOU TRUST ANY NUMBER IN A SCRATCH FILE, check whether a verifier killed it. S-011 ran nine
-hostile verifiers and TWO of its own leading hypotheses were REFUTED (see below). A finding that
-survived a hostile reader is worth ten that did not.
+hostile verifiers and refuted two of its own leading hypotheses. S-012 ran a hostile integration
+reader that found three defects in code written thirty minutes earlier, and had two of its own
+assumptions killed by measurement (a longer telegraph made the boss unloseable; a bigger shockwave
+ring covered the read). A finding that survived a hostile reader is worth ten that did not.
 
 FIRST COMMAND, before anything else. docs/agent/scratch/ and docs/agent/audits/scratch/ are
-gitignored and hold ~350 MB from eleven sessions. Git does NOT move them between worktrees. No-op if
+gitignored and hold ~700 MB from twelve sessions. Git does NOT move them between worktrees. No-op if
 you already have them:
 
   for w in "" .claude/worktrees/prism-rush-spawn-path-c7d88a \
@@ -78,10 +74,11 @@ you already have them:
 
 If both are empty, say so in your report rather than working blind.
 
-BUILD AND RUN THE APP BEFORE YOU CLAIM ANYTHING WORKS. Eleven for eleven. `swift test` compiles
+BUILD AND RUN THE APP BEFORE YOU CLAIM ANYTHING WORKS. Twelve for twelve. `swift test` compiles
 Core/, seven Meta/ files and Audio/Synth.swift. It does NOT compile UI/, Render/, IAP/, StoreKit or
-GameKit. S-011's character-select fix is the newest example: 231 green tests said nothing about a
-coloured rectangle behind every character on a screen nobody had opened.
+GameKit. S-012 shipped 254 green tests and still found, only by looking at the screen, that the
+Warden hovered inside the vertical span of its own thrown hanging bar and spent every curtain throw
+hidden behind its own attack.
 
 Report back in three lines.
 This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/projects/prism-rush-ios/HANDOFF.md
@@ -89,111 +86,98 @@ This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/project
 
 ---
 
-# What session 011 did
+# What session 012 did
 
-Rayan opened with a long, sharp critique of the Warden and of the gameplay generally, then added two
-more complaints mid-session (the character-select background, and the coin economy). S-011 measured
-all of it before changing any of it, asked him eight structured questions, and built what his answers
-implied.
+Three commits, each built and run on the simulator before it was claimed. **254 SPM tests green**
+(was 231). `DailyChallenge.layoutVersion` is **still 11** and v12 is still pre-armed.
 
-**Three commits, each verified on the simulator, 231 SPM tests green throughout.**
+1. **`3b1cb21` — THE BLAST.** The game's first offensive verb, and Rayan's own idea. A double tap
+   spends a third of the charge bank and destroys every destructible obstacle within 46 m. Tap 1
+   still fires the jump on the frame it arrives — the double-tap window lies **entirely inside the
+   span where a buffered jump is already discarded**, so the verb costs the player no latency at all.
+   Charge is now ammo: `chargeFullGems` 520 → 240 and the HUD reads `⚡ BLAST ×2` instead of
+   `CHARGE · 37%`. The chasm is immune by rule; a blast with no target is refused, not wasted; and
+   the Autopilot never fires it, so the 200-seed proof still means "survivable by dodging".
 
-1. **`7736058` — the faded colour box behind every character.** Two independent causes, the same
-   mistake: a soft glow cut square by a clip. The body halo was drawn `bodyR × 1.6` into a canvas
-   `size × 1.0` wide, so it clipped on all four sides into a *coloured rectangle* — cyan behind
-   Prism, red behind Ember, blue behind Bolt. Every large surface had already opted out via
-   `haloScale: 0`, which left the halo drawn ONLY where it was guaranteed to clip; deleted rather
-   than defaulted off. A fainter box remained around the hero's feet: `CharacterHeroStage` put
-   `.clipped()` on the whole ZStack, so the stage ring's pool blur and rim shadow — which spill past
-   the ring's frame *on purpose*, because that spill IS the glow — were cut square. The clip now sits
-   on the mirrored reflection, the one child whose spill it always claimed to be trimming.
+2. **`ae68fc7` — THE WARDEN, rebuilt.** It has no attack of its own and no collision rule at all. It
+   throws real obstacles — two `tall` walls / a `chasm` / a `hangingBar` — and the S-009 verb
+   trichotomy survives one-for-one. **The three red bands are deleted from `WardenRig`.** A landed
+   hazard costs the multiplier, the tempo, one blast round and the answer it would have been worth;
+   miss enough and the clock runs out and it leaves with the bounty. The Autopilot LOST both its
+   Warden-specific override blocks and needed nothing in return.
 
-2. **`934b211` — the ladder and the moving walls.** D-023, D-024, D-025. Gates
-   260/576/1,440/1,920/2,560 → **150/350/600/900/1,200 m**. Moving-wall swing on at all distances.
-   `layoutVersion` **10 → 11**; goldens rederived in Python after the script reproduced all seven
-   pre-existing pins, and the v11 value came out bit-identical to the pin S-010 pre-armed.
-   **v12 pre-armed.**
-
-3. **`0a5265d` — the economy.** D-026, D-027. A gem is no longer a coin; `styleCoins` uncapped and
-   counting streaks; Coin Surge removed from the coin shop; the `×N` moved off the gem pill onto the
-   score. Income cut 6.3–7.4×, style share 3% → 47–59%. **No spawn change** — `layoutVersion` stays
-   at 11.
-
----
-
-# Rayan's eight answers (S-011) — do not re-ask these
-
-**On the Warden and the verbs:**
-1. **It can never kill you.** A hit costs the multiplier, gems and a core-hit chance; it drops real
-   obstacles that kill by the normal rules; failure = it escapes with your reward.
-2. **Double tap = a blast, and CHARGE becomes its ammo.** Usable in any run, not just boss fights.
-3. **The Warden throws real hazards** rather than firing instant beams.
-4. **Obstacles before the Warden** — "you meet obstacles every 3 seconds and a Warden every 106."
-
-**On the economy:**
-5. **A mid-tier character should cost ~30–45 minutes** (cut the faucet ~6×, don't raise prices).
-6. **Skill should pay much more** — uncap style, make near-misses and clean streaks the upside.
-7. **Coin Surge becomes earned, never bought** — structurally, not by re-pricing.
-8. **IAP should genuinely matter** — faucet, sinks and pack sizes tuned together.
+3. **`7871dd5` — the economy finished.** E6 and E7 of `AUDIT_011_ECONOMY` §3.
 
 ---
 
 # Things you would otherwise rediscover the hard way
 
-- **Two of S-011's own leading hypotheses were REFUTED by its verifiers.** (a) *"The Warden's
-  telegraph is too short"* — it is not. Measured usable input windows are 583–742 ms at every rank,
-  and the repo's own `LaggedAutopilotTests` pins survival at 0.40 s of latency. The problem is what
-  is DRAWN in that window, not its length. (b) *"The stumble is too rare or too quiet"* — neither; it
-  fires on 25–45% of lethal-band contacts. Rayan had not seen it because **it shipped the day
-  before, and every capture he reviews is autoplay — the Autopilot structurally cannot stumble**
-  (measured: 1 in 120 perfect runs).
-- **The red thing that covers the screen is three things** (`s011_warden_render.md` §7): the curtain
-  (19.8% of the frame, erasing 100% of the track beyond 5.3 m), the floor (379 of its final 440 px
-  appear in ONE frame), and — most literally — a red vignette that closes in from the frame edges for
-  0.90 s *after* every hit, intensifying, named nowhere. A full-width opaque red band is on screen
-  **91.7–95.2% of the exposed phase**; the dark gap between shapes is 100 ms.
-- **`DifficultyCurveTests.seeds` are not independent.** They are `i × 0x9E3779B97F4A7C15 + offset` —
-  the exact Weyl increment `SplitMix64.next()` adds every call — so the 64 "seeds" are 64 adjacent
-  offsets into ONE master sequence. At shallow draw depth they have not decorrelated (a per-index
-  histogram showed index 9 drawing **0 times in 1,596 eligible draws**). Every per-band statistic in
-  that file is less independent than its seed count implies. SEV3; shipped behaviour unaffected.
-- **A chasm met under a chrono has a misleading telegraph.** The hole is placed from the predicted
-  RAMP speed while chrono moves the player at 0.65×, so the gem-arc cue points ~1.2 m early. Still
-  clearable (0.30 s of slop). Pre-existing; D-023 makes it more reachable.
-- **`PR_WARDEN=1` + `PR_AUTOPLAY=1` + `PR_SKIP_SPLASH=1`** drives a full Warden fight you can record.
-  Prefer `simctl io recordVideo` + `ffmpeg` over repeated `simctl io screenshot` — screenshots stall
-  the app into slow motion, video does not. Use OUTPUT seeking (`-i file -ss t -to u`), never input
-  seeking; h264 keyframes are sparse and `-ss` before `-i` lands far off.
+- **The blast does not change the track, and it is proven rather than argued.** With the player's
+  route frozen, 8 seeds place byte-identical obstacles. Under a driven bot, kind and lane never
+  differ and positional drift maxes at **0.0027 m — under half the 0.0063 m the shipped slow-mo
+  deploy already causes** through the same D-021 mechanism. **The pool caps never bind** (peak live
+  12/18, 10/14, 5/6, 2/6, 2/3 over 12,000 m), which is why freeing a slot cannot change spawning.
+  All of this is pinned in `BlastTests`; if you widen `blastRange` past
+  `spawnHorizon − cadenceClearance` it stops being true, and one test says so.
+- **A longer telegraph made the boss unloseable.** The Warden's first build threw from 46 m and a bot
+  reacting a full 0.75 s late took ZERO hits and killed 48 of 48. S-011 had already refuted "the
+  telegraph is too short" — the window was never the problem, what was DRAWN in it was. 34 m is the
+  shipped value and `LaggedAutopilotTests` is the gate that will catch you moving it.
+- **`WardenEncounter.step` no longer takes the player's geometry** — no lane, x, body extent, jumpY,
+  vy or grounded. A thrown hazard resolves in `stepObstacles` like every other obstacle. If you find
+  yourself passing player state back into the encounter, you are rebuilding the thing that was wrong.
+- **A `.lance` is TWO walls at one `d` and ONE answer.** `hasUnpassedThrownTwin` is what stops the
+  Warden taking two hits for one dodge, and a hazard that lands on you removes the whole throw, so
+  you cannot be hit by one wall and credited for the other.
+- **Thrown hazards carry `fromWarden`, and that flag does three things**: they can only stagger
+  (never kill), answering them damages the Warden, and the renderer paints them hazard red. The tint
+  is not decoration — they follow a different rule from every other wall and the player has to be
+  able to see whose they are.
+- **`obstacleTrace`-style determinism probes must filter `!o.fromWarden`.** The Warden's throws are
+  SUPPOSED to differ when the player behaves differently; only the spawner's output is pinned.
+- **`GameCore.rebuildSnapshot()` runs once per RENDERED frame inside `advance(realDt:)`, never inside
+  `tick(_:)`.** A test that steps the sim by hand and reads `core.snapshot` is reading the menu
+  state. Read the core's own properties instead. This cost real time in S-012.
+- **`PR_BLAST=1`** fires a blast every 1.6 s during autoplay so the verb can be captured;
+  **`PR_WARDEN=1 PR_AUTOPLAY=1 PR_SKIP_SPLASH=1`** drives a full fight you can record. Prefer
+  `simctl io recordVideo` + `ffmpeg` over repeated `simctl io screenshot` — screenshots stall the app
+  into slow motion, video does not. Use OUTPUT seeking (`-i file -ss t`), never input seeking.
 - **SourceKit in this checkout resolves against macOS.** `Theme` / `UIKit` / `RealityRenderer` /
   "has no member" errors are noise. Believe `./Tools/build.sh`.
-- Never drive the simulator while `xcodebuild test` runs — concurrent installs crash the host.
-  (`swift test` is macOS/SPM and never touches the simulator, so those two are safe together.)
+- Never drive the simulator while `xcodebuild test` runs. (`swift test` is macOS/SPM and never
+  touches the simulator, so those two are safe together.)
 - `state.md` (58 KB) and `README.md` (35 KB) at the repo root are history, not truth.
 
 ---
 
 # Current state in one paragraph
 
-Prism Rush is a v2.1 feature-complete iPhone game that has never been submitted: ~100 Swift files,
-zero dependencies, zero binary assets but a generated icon, **231 SPM tests green**, and a genuinely
-deterministic core behind a clean `RendererPort` seam. `DailyChallenge.layoutVersion` is **11** —
-spent this session on the ladder and the moving-wall swing — and **v12 is pre-armed and unspent**.
-The obstacle ladder and the coin faucet are both freshly measured and tuned. The blast and the Warden
-rebuild are approved and unbuilt. `PR-0401` should be **amended, not closed**: a verifier refuted it
-as written, because coins DO buy play-affecting things and cosmetics are only 29% of the fixed sink.
+Prism Rush is a v2.2 feature-complete iPhone game that has never been submitted: ~100 Swift files,
+zero dependencies, zero binary assets but a generated icon, **254 SPM tests green**, and a genuinely
+deterministic core behind a clean `RendererPort` seam. `DailyChallenge.layoutVersion` is **11** and
+**v12 is pre-armed and unspent** — the obstacle-variety work is what should spend it. The player now
+has four verbs instead of three, the boss can no longer kill anybody and fights with the track's own
+vocabulary, and the coin economy is measured end to end on both the faucet and the sink side. What is
+left is CONTENT: the pattern catalogue is still 15 patterns, ~60 arrangements, and one verb it never
+requires.
 
 # Rayan action items (surface them; do not try to do them)
 
-1. **PLAY THE NEW LADDER.** The chasm now arrives around 1,300 m / ~67 s instead of a median
-   2,971 m / 125 s, and the moving walls are a real weave. Does the first minute keep giving you
-   something new?
-2. **PLAY THE STUMBLE.** Still never confirmed by a human. It is real; autoplay captures cannot
-   show it.
-3. **CHECK THE NEW COIN RATE.** A mid character is now ~31–34 min and the whole catalogue ~21 hours.
-   If that feels slow, `Tuning.coinsPerGemDivisor` and `Tuning.styleCoinRate` are one edit each.
-4. **The `Double Coins` IAP description in App Store Connect** — correct it to
+1. **PLAY A WARDEN.** This is the big one. It can no longer kill you, it throws walls and holes and
+   hanging bars instead of red beams, and the three red bands are gone. Does the fight read? And does
+   it still feel like a fight when it cannot kill you — is losing the bounty enough of a stake?
+2. **DOUBLE TAP.** Jump, then tap again fast. Does the blast fire when you meant it to, and does
+   spending a jump to fire it bother you? The window is 0.30 s and it is one constant.
+3. **CHECK THE NEW BLAST ECONOMY.** 240 gems fills the bank and a blast is a third of it, so roughly
+   80 gems a shot. Too precious, or too cheap? `Tuning.chargeFullGems` and `Tuning.blastCost`.
+4. **THE CRAFT'S PRESENCE.** It moved from 19 m out to 34 m — it has to sit where its hazards appear
+   or the throw is a lie — and `craftScale` went 1.70 → 2.55 to compensate. It is now *smallest* at
+   full health and *largest* as it dies. Does that read as menacing, or as distant?
+5. **PLAY THE STUMBLE.** Still never confirmed by a human, three sessions running. Autoplay captures
+   structurally cannot show it — the Autopilot plays perfectly.
+6. **The `Double Coins` IAP description in App Store Connect** — correct it to
    `Every run pays 2× coins. Forever.` before submission.
-5. Carried: the slide SFX (S-006), act two, the hub redesign, per-world Warden species.
+7. Carried: the slide SFX (S-006), a full audio pass (PR-0456), the hub redesign (PR-0452).
 
 # Open questions for Rayan (carried until answered)
 
@@ -201,16 +185,16 @@ as written, because coins DO buy play-affecting things and cosmetics are only 29
 - **PR-0010** — `Store/metadata.md` sells a three-world game; the binary ships twelve families.
 - **PR-0254** — should a run that used a paid revive be leaderboard-eligible? S-003 recommends
   counting it for missions/XP but not the leaderboard. Needs a yes/no.
-- **NEW: buying a deep world forfeits Game Center submission, reach credit and achievements**
+- **Buying a deep world forfeits Game Center submission, reach credit and achievements**
   (`ProfileStore.swift:274-292`), so 71% of the coin catalogue makes runs count for LESS. Intended?
-- **NEW: the Mystery Box is −19% EV** (242.7 expected against a 300 price). Decree 5 says no dark
-  patterns; this is at least in tension with it.
+- **NEW: THE BLAST HAS NO SOUND OF ITS OWN.** It reuses `.boostStart` and `.shieldBreak`. Nothing in
+  this program can hear a sound, so a bespoke voice was not invented — the same call S-010 made for
+  the stumble. It is the game's newest verb and the one most likely to feel weightless without one.
 
-# Resolved in session 011
+# Resolved in session 012
 
-The character-select colour box (two causes); the unlock ladder; the moving-wall exploit; the chasm's
-reachability; an `Autopilot` chasm bug the ladder exposed; the coin faucet; the Coin Surge arbitrage;
-and the `×5` HUD misread. Decisions **D-023…D-027**. `audits/AUDIT_011_ECONOMY.md` written and
-committed. **Owner decisions implemented this session:** the ladder pulled forward, the moving-wall
-swing made permanent, a gem separated from a coin, skill made the largest term in the faucet, and
-Coin Surge made unbuyable.
+THE BLAST built and proven determinism-neutral; CHARGE turned into ammo with an honest HUD; the
+Warden rebuilt so it can never kill and throws real hazards; the three red bands deleted; the
+catalogue's first mandatory-slide obstacle created; the Mystery Box's −19% EV *and* its D-026
+violation fixed by one edit; the level ladder cut from 1.6–2.2× the run faucet to 38–52%. Decisions
+**D-028…D-031**. `PR-0458`, `PR-0459`, `PR-0460`.

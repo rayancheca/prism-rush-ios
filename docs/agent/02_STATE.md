@@ -4,61 +4,43 @@
 > wins** and the other file gets fixed. That includes `state.md` and `README.md` at the repo root,
 > which are the project's human-facing history, not the agent's source of truth.
 
-- **Last written by:** session 010 (2026-07-30) — built the two things the owner had already
-  answered: **THE STUMBLE** (the game's first non-lethal contact) and the **Warden presence pass**
-  (steps 1–2 of `s009c_SPEC.md`, which answer four of his six complaints). The third priority — the
-  post-kill dead air — is the one item that costs a `layoutVersion` bump and was deliberately NOT
-  spent without his call.
-- **231 SPM tests green** (was 218) · **238 Xcode unit tests**, 0 failures · 12 XCUITests green.
-  Three commits: `bd8df3b`, `ac818a9`, `60a9985`. Recovery tag `pre-s010`.
-- **`DailyChallenge.layoutVersion` is STILL 10.** Neither S-009 nor S-010 touched the spawner, the
-  patterns, the arena geometry or RNG consumption. The pre-armed v11 golden is **still UNSPENT**,
-  and the post-kill dead-air fix remains the one thing that would spend it.
-- **THE STUMBLE (D-020).** A contact is survivable when the smallest move that would have made it a
-  clean pass is shallow, on the axis whose VERB answers that obstacle. It is **one rescue, not a
-  second life**: `stumbleRecover` (0.90 s) leaves the player fully vulnerable and any further
-  contact is lethal. The chasm never grazes. A Warden **stumbles first and kills second**, held
-  **per-encounter** rather than on a timer — strikes are 1.05–1.20 s apart, so a timer rule would
-  leave a Warden mathematically unable to kill anyone.
-- **The solvability bot now asserts ZERO CONTACTS, not zero deaths.** This was mandatory, not
-  optional: with survivable contact, an unanswerable pattern would have become a green stagger and
-  the 200-seed proof would have quietly stopped proving anything. It passes.
-- **The two-sided hardness gate got stronger.** At a 0.40 s human reaction: 0 deaths **and 0 beams
-  land at all** (new assertion — surviving is no longer the same claim as being untouched). At
-  0.75 s: **24/24 die after exactly one rescue.**
-- **PR-0052 is ANSWERED BY THE CODE (D-021).** `Spawner.gapFor(dist)` takes the player's LIVE
-  distance, so any speed change nudges every later spawn `d` by ~0.0002 m at 184 m — and chrono and
-  the overdrive boost have done exactly that for versions. The daily challenge has never been able
-  to promise an identical *experience*, only an identical *layout*.
-- **Three attack shapes with DISJOINT answers** — LANCE (lane), FLOOR (jump), CURTAIN (slide). The
-  load-bearing constant is `wardenCurtainKillBottom` with NO ceiling: reusing `barKillTop` would make
-  the floor's clearance window a strict superset of the bar's, one jump would answer both, and the
-  bot would certify the degenerate strategy. Pinned by `testTheCurtainCannotBeJumpedFromAnyState`.
-- **`LaggedAutopilotTests` is the gate that can actually fail.** The Autopilot has perfect
-  information and zero latency, so it finds a 0.70 s wind-up as easy as 0.85 — every assertion in
-  this program stayed green while the owner called the fight effortless. A 0.40 s human reaction must
-  now survive every encounter; a 0.75 s one must die. Both directions pass.
-- **Rank exists.** `world` previously drove nothing but the RNG seed, so every Warden in the game was
-  literally the same fight. Worlds 3/6/9 are now telegraph 0.80/0.75/0.70, hits 4/5/6, flattening at
-  rank 3 so it never stops being beatable.
-- **Owner decisions on record (2026-07-30):** a Warden EXPLODES rather than peeling away; the shield
-  phase STAYS but must be visibly drawn; a beam STUMBLES first and KILLS second (**done**); per-world
-  antagonists are wanted (**not yet built** — `s009c_SPEC.md` §3 and step 6).
-- **WHAT REMAINS OF THE WARDEN SPEC:** step 3 (the FX and shake table — the owner's "no screen shake,
-  no effects"), steps 4–5 (motion beats, sound), and steps 6–8 (`WardenSpecies` and the four
-  antagonists — his "same every time"). Steps 1–2 shipped in S-010.
-- **THE SPEC IS GOOD BUT NOT INFALLIBLE (D-022).** Three of `s009c_SPEC.md`'s numbers failed: one
-  arithmetic slip (halo clearance omitted the torus minor radius — 2 px instead of 26), and two that
-  nothing but running the app could catch (the core was invisible under an opaque hull for the whole
-  exposed phase; near-white spars on a pale hull vanished). Redo its sums, and look at every claim.
-- **WORK LIVES in gitignored scratch:** `s009b_BRIEF.md` (the decision brief the owner answered),
-  `s009c_SPEC.md` (the identity/presence spec — steps 3–8 still to build),
-  `s009b_probe_stumble.md` (stumble geometry), `s009b_probe_pacing.md` (dead-air arithmetic).
-- **PR-0401 IS STILL OPEN** — Countermeasures unbuilt. The shield-absorb fix does deliver the design
-  doc's "Ion Shield" using a pickup that already exists.
-- **Coin income is uncapped and the score multiplier is NOT the cause** — it multiplies `bonus` only
-  and never touches coins, which are four independent components. The owner read "×5" inside the gem
-  chip and reasonably concluded otherwise; that was a HUD legibility bug.
+- **Last written by:** session 012 (2026-07-31) — built the three things the owner had already
+  answered in S-011 and that S-011 had no room for: **THE BLAST** (the game's first offensive verb),
+  the **WARDEN REBUILD** (it can never kill you; it throws real hazards), and the **unbuilt half of
+  the economy audit** (E6/E7). Three commits: `3b1cb21`, `ae68fc7`, `7871dd5`. Recovery tag
+  `pre-s012`.
+- **254 SPM tests green** (was 231). Xcode build OK. Every commit was run on the simulator before it
+  was claimed, and five defects were found that way or by the hostile integration reader — none of
+  them by the test suite.
+- **`DailyChallenge.layoutVersion` is STILL 11.** Nothing this session touched the spawner, the
+  patterns or RNG consumption. The pre-armed v12 golden is **still UNSPENT**, and putting the new
+  `hangingBar` into the pattern catalogue is now the one obvious thing that would spend it.
+- **THE BLAST (D-028).** A double tap spends `blastCost` (1/3 of the bank) and destroys every
+  destructible obstacle within 46 m. **Tap 1 still jumps on the frame it arrives** — the double-tap
+  window lies entirely inside the span where a buffered jump is already discarded, so the verb costs
+  the player nothing. The chasm is immune by rule. A blast with no target is refused, not wasted.
+  **The Autopilot never fires it**, so the 200-seed proof still means "survivable by dodging".
+- **CHARGE IS AMMO.** `chargeFullGems` 520 → 240, and the HUD reads `⚡ BLAST ×2` instead of
+  `CHARGE · 37%`. The meter now means something from the first gem instead of from the first Warden
+  104 seconds later.
+- **THE WARDEN CAN NEVER KILL YOU (D-029).** It has no attack of its own and no collision rule at
+  all. It throws real obstacles — two `tall` walls / a `chasm` / a `hangingBar` — and the S-009 verb
+  trichotomy survives one-for-one. Travel time is the telegraph. A landed hazard costs the
+  multiplier, the tempo, one blast round and the answer it would have been worth; miss enough and the
+  clock runs out and it leaves with the bounty.
+- **The three red bands are DELETED from `WardenRig`**, along with the strike plane. That is the
+  direct answer to the owner's "a red thing that covers the screen" and to nine of the S-011 render
+  findings.
+- **The throw lead was measured, not guessed.** 46 m made the fight unloseable (a 0.75 s-lagged bot
+  took zero hits and killed 48/48). At 34 m the two-sided gate reads: 0.40 s → untouched, every
+  Warden killed; 0.75 s → 68 hazards landed, 31/48 killed.
+- **`hangingBar` is the catalogue's first mandatory slide (D-030)** — but **no pattern places one
+  yet.** Every bar in the game can be jumped, so slide has been decorative for the whole of the
+  catalogue; this one has an unreachable ceiling (4.0 against a 3.748 m maximum reachable underside).
+- **The economy is finished (D-031).** The Mystery Box was −19% EV *and* the last violation of D-026
+  (an 8% Coin Surge band on a 300-coin spend); both fixed by one edit. The level ladder paid 1.6–2.2×
+  the entire run faucet over the same 73–81 minutes and is cut 4.3×. **The IAP packs deliberately did
+  NOT change** — S-011's faucet cut already put $0.99 at 15–20 minutes of play.
 - **Rayan's standing instruction (2026-07-28):** *"never be limited by arbitrary rules — just work
   however you think is best."* Read D-005 before reinstating any process.
 - **Direction:** submission IS the goal, timing is open. **Polish first, publish at the end.**

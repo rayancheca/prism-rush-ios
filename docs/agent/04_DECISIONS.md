@@ -621,3 +621,124 @@ naming either. And they were never related — `mult` multiplies SCORE; every cu
 `GameCore` deliberately omits it. The multiplier now sits beside the score readout; the gem pill's
 label is fixed text, so the no-reflow property that motivated the original design is preserved
 without paying for it in meaning.
+
+## D-028
+**THE BLAST: a double tap is the game's first offensive verb, and CHARGE is its ammunition.**
+(S-012, owner's own proposal: *"maybe double tap sends a blast originating from the player that
+knocks things down and clears a path"*, and his answer *"CHARGE becomes its ammo"*.)
+
+Every input in the game was evasion — three verbs, all of them "get out of the way". This is the
+fourth and the only one that acts ON the world. It is also the answer to a second problem: the CHARGE
+meter appears 1.5 s into the first run anybody plays and the thing it fed (a Warden's fire rate) did
+not exist for another 104 seconds.
+
+**Three things make the design work and each was verified rather than assumed.**
+
+*The input costs nothing.* Tap 1 still fires `jump()` on the frame it arrives — a double-tap
+recogniser would have to hold it for its window first, which is 0.30 s of added latency on the most
+used input in the game (15% of the whole reaction budget at the speed cap). A second tap inside
+`blastTapWindow` is the blast, and that window lies entirely inside the span where a buffered jump is
+ALREADY discarded: a buffer only survives to touchdown if tapped within `jumpBuffer` (0.25 s) of
+landing, i.e. later than 0.565 s into an 0.815 s arc. We are claiming dead input.
+
+*It does not change the track, and therefore owes no `layoutVersion` bump.* Measured, not argued:
+with the player's route frozen, 8 seeds place byte-identical obstacles with and without blasting;
+under a driven bot, kind and lane never differ and positional drift maxes at 0.0027 m against the
+0.0063 m the long-shipped slow-mo deploy already causes through the same D-021 mechanism. The pool
+caps that could have made destruction change spawning never bind (peak 12/18, 10/14, 5/6, 2/6, 2/3
+over 12,000 m).
+
+*The Autopilot never learns it.* "Every pattern is survivable" must not quietly become "survivable or
+destructible" — an unanswerable pattern would then pass the 200-seed proof by being deleted rather
+than dodged. `PR_BLAST=1` drives it from the UI layer so autoplay stays capturable.
+
+The chasm is immune by rule: you cannot knock down a hole, and it is the catalogue's only two-sided
+timing window, so a second answer would undo the verb it was added to teach. And a blast with nothing
+to hit is REFUSED rather than wasted — found by the integration read, because `Warden.suppresses`
+sweeps an arena clear and a reflexive double tap there spent a third of the bank for no effect.
+
+## D-029
+**A WARDEN CAN NEVER KILL YOU. It has no attack of its own; it rebuilds the track.**
+(S-012, owner verbatim: *"it can never kill you"*, *"throw real hazards"*, *"maybe it launches walls
+down a lane, drops bars to slide under, blasts holes in the deck"*.)
+
+Every shipped runner boss the S-011 research examined — Sonic Dash, Minion Rush, Crash On the Run —
+models the boss as an OPPORTUNITY layer: no kill move, the lethal thing is the obstacle it places,
+failure means the boss escapes with the reward. v1.9–v2.1 inverted this and ended the run on the
+second landed beam. Worse, its "forgives once" was skippable: the lethal branch required
+`stumbleT <= 0` while `stumbleT` runs 0.90 s against a 0.15 s grace, so any wall clip in the 60 m
+before the arena mouth made the FIRST Warden hit lethal.
+
+**The S-009 verb trichotomy survives one-for-one — it was never the problem.** What was wrong was
+that all three shapes were abstract red bands painted on the player's own plane. The S-011 render
+audit measured it: a full-width opaque red band on screen for 92–95% of the exposed phase, a 100 ms
+dark gap between shapes, a curtain erasing 100% of the track beyond 5.3 m, a floor delivering 379 of
+its final 440 px in one frame. So each shape became a real obstacle:
+
+    lance   → two `tall` walls, one lane open  → change lane
+    floor   → a `chasm` blown in the deck      → jump
+    curtain → a `hangingBar`                   → slide, and only slide
+
+Travel time IS the telegraph, and no new machinery was needed: a thrown hazard is static in world
+space and the world scrolls it in, exactly like every other obstacle, so `z = distance − d` still
+describes it. **The lead was measured, not guessed.** The first build used 46 m on the reasoning that
+more reading time must be better; `LaggedAutopilotTests` immediately went red in the direction that
+matters — a bot reacting a full 0.75 s late took ZERO hits and killed 48 of 48 Wardens. At 34 m
+(1.15 s at the first encounter, closing to 22 m / 0.75 s at the brink) the same gate reads 68 hazards
+landed and 31/48 killed, while a 0.40 s reaction is still never touched. The S-011 verifier had
+already refuted "the telegraph is too short" — length was never the problem, and buying more of it
+costs the fight its teeth.
+
+A landed hazard costs the multiplier, the tempo, one blast round, and the answer it would have been
+worth. Miss enough and the clock runs out and it leaves with your bounty. **The Autopilot lost both
+its Warden-specific override blocks and needed nothing in return** — it did not have to be taught the
+boss; the boss was taught to speak the track.
+
+`layoutVersion` stays 11: no pattern places a hanging bar, and a throw goes in through `applyThrown`,
+which draws nothing from the run's stream.
+
+## D-030
+**A hanging bar's ceiling is UNREACHABLE, not absent — and that distinction is decree 2.**
+(S-012.)
+
+Every bar in the game up to v2.1 could be jumped: `barHit` kills only between 0.95 and 1.65, and a
+base jump puts the body's underside above the band for 0.434 s of its 0.815 s arc. **A player who
+never once swiped down could complete the entire pattern catalogue.** Slide was the game's only
+decorative verb.
+
+The property that fixes it is "no jump clears it". `wardenCurtainKillBottom` got that by having no
+top at all — and paid for it by forcing the MESH to be drawn taller than anything reachable, or else
+promising a gap the collision does not honour. That was finding F5 of the S-011 render audit, where a
+Super Sneakers jump put the body visibly clear of the drawn curtain and died anyway.
+
+A ceiling above every attainable height gives the same guarantee honestly and 28% shorter. The
+highest a body's underside ever gets is a Super Sneakers apex (3.748 m); `hangingBarKillTop` is 4.0,
+the drawn mesh is exactly the kill band, and the margin is pinned — so raising the jump buff without
+raising this turns the suite red instead of quietly opening a hole in the one obstacle whose entire
+purpose is that there is no way over it.
+
+## D-031
+**The level ladder must not out-earn playing the game, and the Mystery Box must be neither a trap
+nor a printer.** (S-012 — E6/E7 of `audits/AUDIT_011_ECONOMY.md` §3.)
+
+*E7.* L1→L30 paid 10,300 direct coins and takes ~73–81 minutes; running for those same minutes pays
+4,630–6,265 on the S-011 faucet. **Levelling was worth 1.6–2.2× the entire run faucet** — so the
+session that made SKILL the largest term in the payout was immediately beaten by a counter that goes
+up no matter how you play. With the power-up charges (13,050 at shop prices) plus an unbounded
+coin-surge stack, the giveaway came to 23,350 coins of priceable value against an 83,500 catalogue:
+28% of the whole game. Direct coins are cut 4.3× to 2,400; charges are halved and moved off a flat
+multiply onto per-LEVEL grants so shields sit on even levels and Coin Surges on five-level milestones
+(6 across the ladder, and now the only source of them in the game).
+
+*E6, the Mystery Box.* Wrong in both directions at once. Its expected value was 242.7 against a 300
+price — **−19%**, and −23% re-derived after S-011 deleted the pack its 8% Coin Surge band was valued
+at. But the same band made it too GENEROUS at the other end: a surge doubles a whole run and charges
+bank with no cap, so a deep runner values it at their best run, and the box turns net-positive past a
+surged run of ~15,000 m. **That made it the last surviving violation of D-026** — a 300-coin spend
+that returns a coin multiplier. The band is gone and the rest is weighted so EV is the price (300.5).
+The coin bands alone stay at 240.5, so it is a lottery you break even on rather than a coin printer,
+which with unlimited rolls and no cooldown is the only shape that is both fair and safe.
+
+*E6, the IAP packs: NO CHANGE, deliberately.* Measured against the new faucet, $0.99 buys 15–20
+minutes and $19.99 buys 8.5–11 hours. The owner's "IAP should genuinely matter" is already satisfied
+by cutting the faucet 6–7×; re-pricing packs on top would have overshot.
