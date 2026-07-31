@@ -799,15 +799,20 @@ final class GameModel {
         // Captured at run start (stable across revives), so the watermark deltas never drift.
         let mult = store.profile.coinMultiplier * (coinSurgeActiveThisRun ? 2 : 1)
         let worldsCrossed = max(0, core.maxWorld - runStartWorld)
-        lastCoinsFromGems = max(0, core.gemCount * mult - gemCoinsAwarded)
+        // A gem is no longer a coin (v2.1, S-011 — `Tuning.coinsPerGemDivisor`). Integer division is
+        // monotone non-decreasing in `gemCount`, so the per-death watermark below still holds.
+        lastCoinsFromGems = max(0, core.gemCount / Tuning.coinsPerGemDivisor * mult - gemCoinsAwarded)
         gemCoinsAwarded += lastCoinsFromGems
-        lastCoinsFromDistance = max(0, Int(core.traveledDistance / 35) * mult - distCoinsAwarded)
+        lastCoinsFromDistance = max(0, Int(core.traveledDistance / Tuning.coinsPerMetreDivisor) * mult
+                                      - distCoinsAwarded)
         distCoinsAwarded += lastCoinsFromDistance
-        lastCoinsFromWorlds = max(0, worldsCrossed * 5 * mult - worldCoinsAwarded)
+        lastCoinsFromWorlds = max(0, worldsCrossed * Tuning.coinsPerWorld * mult - worldCoinsAwarded)
         worldCoinsAwarded += lastCoinsFromWorlds
-        // 4th component (v1.3): CLOSE/SLICK style coins — same watermark shape as the other three
-        // (XPCurve.styleCoins is cumulative-this-run, so post-revive deaths pay only the new part).
+        // 4th component: CLOSE/SLICK style coins, plus flow-surge streak coins — same watermark shape
+        // as the other three (XPCurve.styleCoins is cumulative-this-run, so post-revive deaths pay
+        // only the new part). This is the term the owner asked to become the upside; it is uncapped.
         lastCoinsFromStyle = max(0, XPCurve.styleCoins(closes: closesThisRun, slicks: slicksThisRun,
+                                                       surges: core.flowSurges,
                                                        multiplier: mult) - styleCoinsAwarded)
         styleCoinsAwarded += lastCoinsFromStyle
         // 5th component (S-009): Warden bounties. Their own watermark, and deliberately NOT folded
@@ -878,11 +883,18 @@ final class GameModel {
                                    color: Theme.color(0x00F5FF), sfx: .levelUp)
                 // Earn deploy charges by levelling up (honest replenishment — decree 5): slow-mo +
                 // speed-up ×2/level, shield ×1/level (a free on-demand hit is the most potent).
+                //
+                // **Coin surges are granted HERE, and only here plus the Mystery Box** (v2.1,
+                // S-011). They used to be buyable for 450 coins, which let a player spend coins to
+                // multiply coins — see the note in `ShopValue.coinPacks`. Earning them by levelling
+                // makes the surge a reward for playing rather than a lever for compounding, and it
+                // is the one grant a player cannot farm, because XP comes from runs.
                 let levels = result.levelAfter - result.levelBefore
                 store.mutate {
                     $0.slowMoCharges += 2 * levels
                     $0.speedUpCharges += 2 * levels
                     $0.shieldCharges += levels
+                    $0.coinSurgeCharges += levels
                 }
             }
         }

@@ -94,8 +94,20 @@ enum ShopConsumables {
                       icon: "shield.lefthalf.filled", hex: 0x00F5FF, cost: 350, grant: .shield(3)),
         CoinSpendItem(id: "headStartPack", title: "Head Start Pack", blurb: "+3 head starts",
                       icon: "bolt.horizontal.fill", hex: 0xFF9F1C, cost: 300, grant: .headStart(3)),
-        CoinSpendItem(id: "coinSurgePack", title: "Coin Surge Pack", blurb: "+3 coin surges",
-                      icon: "dollarsign.circle.fill", hex: 0xFFD23D, cost: 450, grant: .coinSurge(3)),
+        // **There is deliberately no Coin Surge pack here** (v2.1, S-011 — owner's call).
+        //
+        // It cost 450 coins for 3 charges, and a charge DOUBLES a run's coin payout. Measured on the
+        // pre-v2.1 faucet that was 450 in for **+3,858** out — **8.6× ROI, repeatable, uncapped** —
+        // and 17× with the Double Coins IAP on top. You could mint currency with currency, which is
+        // what actually made buying a coin pack irrational; the pack SIZES were a red herring
+        // (`docs/agent/audits/AUDIT_011_ECONOMY.md` §1.5).
+        //
+        // The fix is structural rather than a re-price. Pricing it above its own payout would leave
+        // a trap item whose safety depends on the faucet never changing again — and the faucet just
+        // changed twice in one session. **No coin-spend path may grant a coin multiplier**, so the
+        // arbitrage cannot be reintroduced by tuning. Surges are now earned only: the Mystery Box's
+        // 8% band (a 300-coin roll for one charge is ~14 coins of expected value, not a printer) and
+        // the level-up grant in `GameView`.
     ]
 
     /// Mystery Box reward for a roll in [0, 1). Weighted, honest, with a jackpot — the player can

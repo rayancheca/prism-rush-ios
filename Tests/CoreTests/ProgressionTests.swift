@@ -280,13 +280,31 @@ final class ProgressionTests: XCTestCase {
 
     // MARK: style coins (pure helper — the per-death delta wiring lands in GameView, wave 5)
 
-    func testStyleCoinsCapAndMultiplier() async {
-        XCTAssertEqual(XPCurve.styleCoins(closes: 10, slicks: 5, multiplier: 1), 30)
-        XCTAssertEqual(XPCurve.styleCoins(closes: 30, slicks: 15, multiplier: 1), 80,
-                       "45 events hard-cap at 40 × 2")
-        XCTAssertEqual(XPCurve.styleCoins(closes: 30, slicks: 15, multiplier: 2), 160,
-                       "doubler applies — style coins ARE currency")
-        XCTAssertEqual(XPCurve.styleCoins(closes: 0, slicks: 0, multiplier: 2), 0)
+    /// v2.1 (S-011): style coins are **uncapped** and count streaks. The old test's headline
+    /// assertion was "45 events hard-cap at 40 × 2" — that cap is exactly what made skill 6% of a
+    /// payout while gems carried 76–87%, and the owner's call was that skill should pay much more.
+    /// What this pins now is that the term GROWS without bound, that a streak is worth more than the
+    /// same near-misses scattered, and that the doubler still applies because this IS currency.
+    func testStyleCoinsAreUncappedAndRewardStreaks() async {
+        let rate = Tuning.styleCoinRate, surge = Tuning.flowSurgeCoins
+
+        // Linear in volume, with no ceiling anywhere.
+        XCTAssertEqual(XPCurve.styleCoins(closes: 10, slicks: 5, surges: 0, multiplier: 1), 15 * rate)
+        XCTAssertEqual(XPCurve.styleCoins(closes: 30, slicks: 15, surges: 0, multiplier: 1), 45 * rate)
+        XCTAssertEqual(XPCurve.styleCoins(closes: 300, slicks: 0, surges: 0, multiplier: 1), 300 * rate,
+                       "no cap — a 300-near-miss run must pay for all 300")
+
+        // Composure pays on top of volume: the same 45 events are worth more when they came clean.
+        let scattered = XPCurve.styleCoins(closes: 45, slicks: 0, surges: 0, multiplier: 1)
+        let streaked = XPCurve.styleCoins(closes: 45, slicks: 0, surges: 15, multiplier: 1)
+        XCTAssertEqual(streaked - scattered, 15 * surge)
+        XCTAssertGreaterThan(streaked, scattered,
+                             "a clean line must out-pay the same number of scattered near-misses")
+
+        // The doubler applies to the whole term — style coins ARE currency (unlike XP).
+        XCTAssertEqual(XPCurve.styleCoins(closes: 30, slicks: 15, surges: 10, multiplier: 2),
+                       (45 * rate + 10 * surge) * 2)
+        XCTAssertEqual(XPCurve.styleCoins(closes: 0, slicks: 0, surges: 0, multiplier: 2), 0)
     }
 
     // MARK: daily-challenge placement tiers

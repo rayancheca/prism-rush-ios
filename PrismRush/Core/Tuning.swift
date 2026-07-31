@@ -179,6 +179,72 @@ enum Tuning {
     static let magnetGemXRate: Double = 7, magnetGemYRate: Double = 7   // y fast enough to reel in arc gems
     static let nearMissBonus: Int = 40, gemBaseScore: Int = 10
 
+    // MARK: - the coin faucet (v2.1, S-011 — see docs/agent/audits/AUDIT_011_ECONOMY.md)
+    //
+    // The owner: *"why am i getting so many coins. why would anyone spend 20$ on 40 coins if they
+    // can just get it in on run… coins tie into everything so you cant just change one function."*
+    //
+    // Measured before this change (shipped Autopilot, real GameCore, 40 seeds, mult = 1):
+    //
+    //   | run      | gems | dist | worlds | style | bounty | total | coins/min |
+    //   | 800 m    |  217 |   22 |      5 |    16 |      0 |   259 |       369 |
+    //   | 1,500 m  |  511 |   42 |      5 |    27 |      0 |   586 |       478 |
+    //   | 3,300 m  |  979 |   94 |     20 |    43 |    150 | 1,286 |       564 |
+    //
+    // Two things are wrong with that table and they are the same thing. Gems were currency at
+    // **1:1**, so they were 76–87% of every payout — the game paid you for PICKING THINGS UP. And
+    // `styleCoins`, the only term that measures whether you played WELL, was hard-capped at 80
+    // coins a run, about 6%. The consequences compounded: nothing in the game costs more than
+    // 23 minutes, the whole 83,500-coin catalogue is 2 h 22 m, and `$0.99 → 1,200 coins` is worth
+    // less than one good run.
+    //
+    // The owner's calls (S-011): a mid-tier character should cost **30–45 minutes**, cut the FAUCET
+    // rather than raise prices so the on-screen numbers stay small, and **skill should pay much
+    // more**.
+    //
+    // The keystone is that a gem stops being a coin. Gems keep all three of their in-run jobs —
+    // they draw the route, they fuel the blast charge, and they feed the score — and are worth a
+    // FRACTION of a coin at payout. That is deliberately a payout change and not a spawn change:
+    // gem placement is untouched, so `layoutVersion` stays at 11 and the solvability proof, the
+    // `PatternOrderTests` call counts and the daily goldens are all unaffected.
+    //
+    // MEASURED AFTER (same harness, 24 seeds, mult = 1). These constants were tuned against this
+    // table across two passes, not chosen and hoped for:
+    //
+    //   | run       | secs  | gems | dist | worlds | style | bounty | total | coins/min | style share |
+    //   | 800 m     |  42.1 |   10 |    4 |      3 |    24 |      0 |    41 |      58.4 |         59% |
+    //   | 1,500 m   |  73.8 |   21 |    8 |      3 |    47 |      0 |    79 |      64.2 |         59% |
+    //   | 3,300 m   | 137.2 |   42 |   19 |     12 |    84 |     22 |   179 |      78.3 |         47% |
+    //   | 12,000 m  | 411.1 |  148 |   70 |     45 |   339 |     88 |   691 |     100.9 |         49% |
+    //   | 103,000 m | 3,270 | 1218 |  605 |    384 | 2,907 |    924 | 6,038 |     110.8 |         48% |
+    //
+    // Income is cut **6.3× / 7.4× / 7.2×** at 800 / 1,500 / 3,300 m, and STYLE — 3% of a payout
+    // before — is now the largest single term at every distance. Consequences, against the owner's
+    // stated targets: a mid-tier character (~2,000 coins) is **31–34 minutes**; the whole 83,500-coin
+    // catalogue is **~21 hours**; and the 54-minute run that produced his screenshot pays 6,038
+    // instead of 24,523. `$0.99 → 1,200 coins` is now ~21 minutes of play rather than less than one
+    // run, which is what makes the IAP a shortcut instead of a rounding error.
+    //
+    // Note the rate still RISES with distance (58 → 111 coins/min). That is deliberate and it is the
+    // reward for surviving; what it no longer does is compound, because the two terms that scale with
+    // endurance alone (gems, distance) are now a third of the payout instead of nine tenths.
+
+    /// Gems collected are divided by this to get coins. Was an implicit 1.
+    static let coinsPerGemDivisor: Int = 20
+    /// Metres travelled per coin. Was 35 — that made distance the second-largest term and let a
+    /// 54-minute run mint a whole catalogue on endurance alone.
+    static let coinsPerMetreDivisor: Double = 170
+    /// Flat bonus per world crossed in a run (a checkpoint start pays only for worlds actually run).
+    static let coinsPerWorld: Int = 3
+    /// Coins per CLOSE / SLICK. **Uncapped as of v2.1** — the `min(…, 40)` cap was what made skill
+    /// a rounding error. This is now the term that separates a good run from a long one, and it is
+    /// the only term a player can raise without running further.
+    static let styleCoinRate: Int = 2
+    /// Coins per flow surge (every `flowPerSurge`-th near-miss with no hit between). Streaks paid
+    /// score and nothing else before; paying them in currency is what makes a clean risky line
+    /// worth more than the same number of scattered near-misses.
+    static let flowSurgeCoins: Int = 5
+
     // Spawn / speed lerp factors.
     static let speedLerp: Double = 1.5, overDecel: Double = 22
     static let bankRate: Double = 0.32, bankLerp: Double = 10, slideLerp: Double = 20
@@ -629,6 +695,8 @@ enum Tuning {
     /// feature exists to fix the coin sink, not to feed it — but a fight with no payout is not a
     /// fight worth playtesting, so phase 1 ships the bounty and the run-scoped kill count. The
     /// world-exclusive character and the Countermeasure sink are later phases.
-    static let wardenCoinBounty = 150
+    /// v2.1 (S-011): 150 → 40. Unchanged, this single flat award would have been ~70% of a whole
+    /// good run under the new faucet — a boss bounty worth more than the run it happened inside.
+    static let wardenCoinBounty = 22
     static let wardenScoreBonus = 1_200
 }

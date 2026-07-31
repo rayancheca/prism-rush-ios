@@ -70,10 +70,22 @@ enum XPCurve {
     /// Single source of truth — `SkinCatalogTests` asserts the catalog's `.level` skins match.
     static let xpUnlockLevels: [Int] = [3, 6, 8, 12, 18, 25]
 
-    /// In-run style coins (the 4th per-death delta in GameView): 2 coins per CLOSE/SLICK, hard
-    /// cap 40 events/run; the doubler multiplies because this IS currency (unlike XP).
-    static func styleCoins(closes: Int, slicks: Int, multiplier: Int) -> Int {
-        min(closes + slicks, 40) * 2 * multiplier
+    /// In-run style coins (the 4th per-death delta in GameView). The doubler multiplies because this
+    /// IS currency (unlike XP).
+    ///
+    /// **Uncapped as of v2.1 (S-011), and it now counts streaks.** It used to be
+    /// `min(closes + slicks, 40) * 2` — a hard ceiling of 80 coins a run, which measured out at
+    /// about **6% of a payout** while gems carried 76–87% of it. The one term that asked whether the
+    /// player played WELL was the one term that could not grow, so the game paid for pickup and not
+    /// for play. The owner's call in S-011 was that skill should pay much more.
+    ///
+    /// `surges` is `GameCore.flowSurges` — one per `Tuning.flowPerSurge` near-misses with no contact
+    /// between them. Paying it in currency is what makes a clean risky LINE worth more than the same
+    /// number of near-misses scattered across a run: the streak term is superlinear in composure
+    /// while the per-event term is linear in volume. Together they are the game's greed lever, and
+    /// they are the only part of the faucet a player can raise without simply running further.
+    static func styleCoins(closes: Int, slicks: Int, surges: Int, multiplier: Int) -> Int {
+        ((closes + slicks) * Tuning.styleCoinRate + surges * Tuning.flowSurgeCoins) * multiplier
     }
 
     /// World-purchase price ladder (v1.4): the worlds tab shows ALL 12 cards; locked ones are

@@ -28,11 +28,28 @@ struct HUDView: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("\(Int(snap.distance)) meters")
                     .accessibilityAddTraits(.updatesFrequently)
-                    Text("SCORE \(snap.score)")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.68))
-                        .accessibilityLabel("Score \(snap.score)")
+                    // The multiplier lives HERE, on the thing it multiplies (v2.1, S-011). It used
+                    // to occupy the LABEL slot of the gem chip, so for ~90% of a run that chip read
+                    // `◆ ×5 24,523` with no noun anywhere — a SCORE multiplier printed against a
+                    // CURRENCY figure it has never touched. The owner, looking at exactly that:
+                    // *"what does x5 mean in the [HUD] and why am i getting so many coins."*
+                    HStack(spacing: 6) {
+                        Text("SCORE \(snap.score)")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(.white.opacity(0.68))
+                        if snap.mult > 1 {
+                            Text("×\(snap.mult)")
+                                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(Theme.color(0x00F5FF))
+                                .shadow(color: Theme.color(0x00F5FF).opacity(0.8), radius: 6)
+                        }
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(snap.mult > 1
+                                        ? "Score \(snap.score), times \(snap.mult) multiplier"
+                                        : "Score \(snap.score)")
                     ghostChaseChip(snap)
                 }
 
@@ -40,7 +57,7 @@ struct HUDView: View {
 
                 // Starts below the mute/pause cluster anchored in the top-trailing corner.
                 VStack(alignment: .trailing, spacing: 8) {
-                    gemMultPill(snap)
+                    gemPill(snap)
                     chargeMeter(snap)
                     powerUpStack(snap)
                     flowPips(snap)
@@ -205,20 +222,23 @@ struct HUDView: View {
         }
     }
 
-    // MARK: merged gem / multiplier pill — `◆ 23 ×4`
+    // MARK: the gem pill — `◆ GEMS 23`
 
-    /// The multiplier takes the LABEL slot, so it reads as *what this chip is* rather than as a third
-    /// element appended after the count — which is what used to make this the one chip that changed
-    /// width mid-run (`23` → `798`). "GEMS" holds the slot when there is no multiplier, so the slot
-    /// is never empty and nothing ever reflows.
+    /// **It always says GEMS** (v2.1, S-011).
     ///
-    /// The multiplier lost its black-on-gold capsule badge in the process. That is a deliberate
-    /// trade: the badge was emphasis-by-decoration on the one chip that already had the most going
-    /// on, and the whole point of this stack is that emphasis comes from colour and glyph, not from
-    /// one element being louder than its neighbours.
-    private func gemMultPill(_ snap: GameSnapshot) -> some View {
+    /// The multiplier used to take the LABEL slot, on the reasoning that it read as *what this chip
+    /// is*. The flaw was arithmetic rather than typographic: `mult` reaches its ×5 cap at 124 m /
+    /// 7.16 s and holds it for **90.3% of a clean run**, so the label was almost never "GEMS" — the
+    /// chip spent nearly every run showing a bare `×5` beside a five-digit number with nothing
+    /// naming either. And the two have never been related: `mult` multiplies SCORE, and every
+    /// currency line in `GameCore` deliberately omits it.
+    ///
+    /// The multiplier now sits beside the score readout, on the quantity it actually multiplies.
+    /// The label slot is fixed text, so the width still never reflows — which was the original
+    /// concern, and it is preserved without paying for it in meaning.
+    private func gemPill(_ snap: GameSnapshot) -> some View {
         let gold = Color(red: 1, green: 0.82, blue: 0.24)
-        return StatusChip(tint: gold, label: snap.mult > 1 ? "×\(snap.mult)" : "GEMS") {
+        return StatusChip(tint: gold, label: "GEMS") {
             RoundedRectangle(cornerRadius: 2)
                 .fill(gold)
                 .frame(width: 11, height: 11)
@@ -230,7 +250,7 @@ struct HUDView: View {
                 .monospacedDigit()
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(snap.gems) gems\(snap.mult > 1 ? ", times \(snap.mult) score multiplier" : "")")
+        .accessibilityLabel("\(snap.gems) gems")
         .accessibilityAddTraits(.updatesFrequently)
     }
 
