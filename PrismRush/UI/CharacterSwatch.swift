@@ -26,22 +26,20 @@ struct AnimatedCharacterSwatch: View {
     /// pass a taller value so the tallest antennas (Blossom) and the full up-bob never crop — the
     /// owner's "characters sit in a square smaller than them" fix.
     var heightScale: CGFloat = 1.5
-    /// Horizontal room, same idea as `heightScale`. The body glow is drawn `bodyR * 3.2` wide — i.e.
-    /// 1.6 × `size` at unit skin scale — so at `1.0` it is HARD-CLIPPED by the canvas bounds and
-    /// leaves a faint vertical band with visible edges either side of the figure. On a small dark
-    /// grid card that is invisible; on the hub, where the stage is large and the live 3D scene shows
-    /// through, it reads as a box behind the character (PR-0453). The default 1.0 keeps every
-    /// existing call site byte-identical; the hub hero passes 1.6 so the glow lands inside the
-    /// canvas and falls off to nothing on its own.
+    /// Horizontal room, same idea as `heightScale`. Now that the body halo is gone (see `draw`) the
+    /// widest thing drawn is the aura ring at `bodyR * 1.5`, so `1.0` no longer clips anything on a
+    /// grid card. The hero surfaces keep passing `1.6` because their crests, auras and trail wisps
+    /// are drawn at hero scale and the extra room costs nothing.
+    ///
+    /// The claim this comment used to carry — "on a small dark grid card that is invisible" — was
+    /// simply wrong, and it is why the clipped halo survived four sessions: it was an assumption
+    /// about a screen nobody had looked at. It was plainly visible as a coloured rectangle behind
+    /// every card in the 24-skin grid.
     var widthScale: CGFloat = 1.0
     /// Where the figure's center sits in the canvas (0 = top, 1 = bottom). 0.5 keeps the grids
     /// centered; the hero/splash bias it down so the added headroom lands above the antenna while
     /// the feet stay near the disc.
     var verticalAnchor: CGFloat = 0.5
-    /// Scales the soft body halo. 1 keeps every existing call site byte-identical; the hub hero
-    /// passes 0 because it stands on a lit platform instead, and stacking a diffuse cloud on top
-    /// of that just smeared the 3D scene behind it (S-007, the owner's "background light").
-    var haloScale: CGFloat = 1
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -96,17 +94,23 @@ struct AnimatedCharacterSwatch: View {
         // grids) hold phase 0 = the authored cyan body, matching the in-run Reduce Motion look.
         let bodyColor = Theme.color(skin.bodyHex)
 
-        // Glow — teased renders keep it: the whole canvas fades as one, so the glow reads as a
-        // dimmed version of the owned look rather than a different art style. `haloScale == 0`
-        // skips it entirely (the hub hero, which is lit by its platform instead).
-        if haloScale > 0 {
-            let haloR = bodyR * 1.6 * haloScale
-            let glowRect = CGRect(x: center.x - haloR, y: center.y - haloR,
-                                  width: haloR * 2, height: haloR * 2)
-            ctx.fill(Path(ellipseIn: glowRect),
-                     with: .radialGradient(Gradient(colors: [bodyColor.opacity(0.45), .clear]),
-                                           center: center, startRadius: bodyR * 0.4, endRadius: haloR))
-        }
+        // **There is no body halo, and there must not be one** (owner, S-011 — the third time he has
+        // named this artifact: "background light behind the character" on the hub (S-007), "the box"
+        // on the splash (PR-0453), and now "the characters in the character selection still have the
+        // faded color background").
+        //
+        // The halo was a radial gradient of radius `bodyR * 1.6` — i.e. `0.8 × size` from centre —
+        // drawn into a canvas only `size × widthScale` wide. Every surface that still drew it passed
+        // the default `widthScale: 1.0`, so it was clipped at `0.5 × size` on all four sides: not a
+        // glow, a COLOURED RECTANGLE with hard edges, one per character, in its own hue. The three
+        // large surfaces (hub hero, select stage, splash) had already opted out one at a time via a
+        // `haloScale: 0` parameter, which left the halo drawn *only* where it was guaranteed to clip.
+        // A parameter whose every remaining use is a bug is not a parameter; it is dead code with a
+        // switch on it, so it is gone rather than defaulted off.
+        //
+        // Lift now comes from the one thing in this game that has an edge: `CharacterStageRing`, the
+        // lit platform the figure stands on. Diffuse light has no edge and the visual language here
+        // is edges (decree 6 — clarity beats spectacle).
 
         // Legendary aura (v1.6): an orbiting glow ring behind the figure — the unmistakable
         // "this one is special" tell. Drawn before the body so it reads as a halo around it.
@@ -429,28 +433,37 @@ struct CharacterHeroStage: View {
                     .offset(y: swatchSize * 0.22)
                     .opacity(locked ? 0.55 : 1)   // dimmed pedestal under a teased skin
                 // Floor reflection at 18% (skipped under Reduce Motion: one Canvas, not two).
-                // Offset so the mirrored feet meet the real feet; the stage frame clips the rest.
+                // Offset so the mirrored feet meet the real feet.
                 // Locked: plain render faded harder (0.18 × 0.6) — a mirrored lock chip is noise.
+                //
+                // **The clip lives HERE, on the one child that needs it** (S-011). It used to sit on
+                // the whole ZStack, which meant the stage ring's pool blur and its rim shadow — both
+                // of which deliberately spill past the ring's own frame, because that spill IS the
+                // glow — were cut off square at the stack's bounds. The result was a faint bright
+                // RECTANGLE around the character's feet with hard vertical edges: the same "box" the
+                // owner has now named three times, arriving by a second route after the body halo
+                // was deleted. Clipping only the reflection trims the spill the comment always
+                // claimed to be trimming, and lets the glow fall off to nothing on its own.
                 if !reduceMotion && showsReflection {
                     AnimatedCharacterSwatch(skin: skin, size: swatchSize,
-                                            widthScale: Self.glowWidthScale, haloScale: 0)
+                                            widthScale: Self.glowWidthScale)
                         .scaleEffect(x: 1, y: -1)
                         // Halved: with the halo gone there is nothing to soften the mirrored body,
                         // and at 18% it read as a dark blob sitting on the platform.
                         .opacity(locked ? 0.06 : 0.09)
                         .mask(LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .center))
                         .offset(y: swatchSize)
+                        .frame(height: swatchSize * 1.85, alignment: .top)
+                        .clipped()
                 }
                 AnimatedCharacterSwatch(skin: skin, size: swatchSize,
                                         silhouette: locked, teaseOpacity: Self.stageTeaseOpacity,
                                         heightScale: 1.85, widthScale: Self.glowWidthScale,
-                                        verticalAnchor: 0.66, haloScale: 0)
+                                        verticalAnchor: 0.66)
             }
-            // Clip matches the figure's own 1.85× canvas, so the antenna + up-bob are never cropped
-            // (anchor 0.66 lands the headroom above the tip); only the mirrored reflection's spill
-            // below the stage is trimmed.
+            // Height matches the figure's own 1.85× canvas, so the antenna + up-bob are never
+            // cropped (anchor 0.66 lands the headroom above the tip). Layout only — nothing clips.
             .frame(height: swatchSize * 1.85)
-            .clipped()
             if showsNamePill { namePill }
         }
         .frame(height: height)

@@ -44,8 +44,9 @@ struct SplashView: View {
                 // 1.6 × `size` wide, so a default-width canvas cut it square and it read as a faint
                 // teal rectangle with visible vertical edges behind the figure — the same "box"
                 // PR-0453 fixed for the hub hero and never fixed here, because the splash was
-                // never using the hero stage. `haloScale: 0` removes the blur; `CharacterStageRing`
-                // replaces it with the platform, which is the one the owner signed off in S-007.
+                // never using the hero stage. `CharacterStageRing` replaces it with the platform,
+                // which is the one the owner signed off in S-007. (S-011 deleted the halo outright,
+                // so there is no longer an opt-out to pass here — see `AnimatedCharacterSwatch.draw`.)
                 //
                 // The ring deliberately does NOT ride the flip-spin: it is the floor, and a floor
                 // that rotates with the thing standing on it stops reading as a floor.
@@ -63,7 +64,7 @@ struct SplashView: View {
                         .opacity(entered ? 1 : 0)
                     AnimatedCharacterSwatch(skin: skin, size: Self.figureSize,
                                             heightScale: 1.85, widthScale: 1.6,
-                                            verticalAnchor: 0.62, haloScale: 0)
+                                            verticalAnchor: 0.62)
                         .scaleEffect(entered ? 1 : 0.15)
                         .rotation3DEffect(.degrees(spin), axis: (x: 0, y: 1, z: 0))
                         .opacity(entered ? 1 : 0)
