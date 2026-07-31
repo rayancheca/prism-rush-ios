@@ -564,7 +564,7 @@ enum Tuning {
     /// arena is not. Sized from the crudest bound that is still provable, so no run can defeat it:
     ///
     ///   `wardenArmWindow` + (`wardenMaxSeconds` + `wardenDieTime` + `wardenLeaveTime`) × `boostSpeedMax`
-    ///   = 60 + (14.5 + 1.0 + 0.9) × 36 = 650.4 m, against 660.
+    ///   = 60 + (17.5 + 1.0 + 0.9) × 36 = 758.4 m, against 770.
     ///
     /// **The `dying`/`leaving` terms matter and the v1.9 comment omitted them** (S-009): the cap at
     /// `WardenEncounter.step` deliberately exempts those two phases, so the craft's exit runs PAST
@@ -582,11 +582,17 @@ enum Tuning {
     /// Shrinking it means cutting `wardenMaxSeconds`, which is what the bound above is made of —
     /// and `wardenMaxSeconds` must stay long enough to fit `wardenAnswersToKill` throws.
     ///
-    /// **It has NOT moved since v1.9, deliberately (S-012).** `Warden.suppresses` gates on
-    /// `isArena(d)`, so the arena's length decides which spawn commands reach the deck — moving it
-    /// is a LAYOUT change and would cost a `layoutVersion` bump. The v2.2 rebuild is expressly
-    /// designed to stay inside the existing 660 m.
-    static let wardenArenaLength: Double = 660
+    /// **660 → 770 (v2.3), and this is what spent the layoutVersion bump to 12.** `Warden.suppresses`
+    /// gates on `isArena(d)`, so the arena's length decides which spawn commands reach the deck:
+    /// 110 m more clear deck every 2,400 m is a LAYOUT change even though the seeded spawn STREAM is
+    /// byte-identical (`Spawner.fill` still draws the same patterns and consumes the same rng — only
+    /// which of its output survives `apply` moves). Same mechanism as the v10 bump.
+    ///
+    /// It had to move: the bound above is made of `wardenMaxSeconds`, and the whole answer to *"its
+    /// too short and boring"* is a longer, denser fight. 770 leaves 11.6 m of headroom over the
+    /// 758.4 m worst case and stays 30 m clear of `worldLength` (800), which is the hard limit —
+    /// past it one arena would straddle two worlds and `Warden.arenaWorld` would be ambiguous.
+    static let wardenArenaLength: Double = 770
 
     // Encounter timings. The whole set is bounded by construction: a fixed answer count, a fixed
     // throw interval, and a fixed number of seconds — a Warden can never become a war of attrition.
@@ -621,13 +627,68 @@ enum Tuning {
     /// thrown from `wardenThrowLeadNear` (26 m) at the speed cap reaches the player in 0.79 s, and
     /// the interval must exceed that or two hazards demanding opposite verbs would be on the deck
     /// at once — the decree-6 failure the old three-shape system existed to avoid.
-    static let wardenThrowIntervalByRank: [Double] = [1.95, 1.80, 1.65]
-    /// Clean dodges needed to kill, by rank. Fixed and small at every rank: the fight is the fun
-    /// part, never a grind, and the count is what keeps the encounter bounded.
+    ///
+    /// **v2.3 shortens all three, and the closing speed below is what pays for it.** The interval's
+    /// floor is travel time — two hazards demanding opposite verbs must never share the deck — and
+    /// a hazard that closes under its own power clears the gap far sooner than one the player merely
+    /// runs into. At rank 3 a throw from 52 m now lands in 0.97 s where the v2.2 equivalent took
+    /// 1.56 s, so the same invariant holds at 1.10 s between throws that used to need 1.65 s.
+    ///
+    /// Owner, S-013: *"he only attacked me twice … its too short and boring"*. It was arithmetically
+    /// true — rank 1 needed four answers and threw one every 1.95 s, so a competent player saw the
+    /// fight end in four throws. Rank 1 now needs five answers and throws every 1.55 s.
+    static let wardenThrowIntervalByRank: [Double] = [1.55, 1.30, 1.10]
     /// Answers needed on the OPEN CORE, by rank. Two more strip the armour first
-    /// (`wardenShieldHits`), so the totals are 4 / 5 / 6 — the same figures v1.9 used, re-expressed
-    /// as the two visible stages the HUD and the rig already draw.
-    static let wardenCoreHitsByRank: [Int]     = [2, 3, 4]
+    /// (`wardenShieldHits`), so the totals are **5 / 6 / 7** (v2.2: 4 / 5 / 6).
+    ///
+    /// The ladder widened rather than merely shifting: rank 1 gained one answer and rank 3 gained
+    /// one on top of that, so the gap between the Warden that teaches you and the Warden that tests
+    /// you is now two extra answers rather than the old flat two. Owner, S-013: *"he should be
+    /// easier at first and tougher on harder levels"*.
+    static let wardenCoreHitsByRank: [Int]     = [3, 4, 5]
+
+    /// **How fast a thrown hazard travels TOWARD the player**, m/s on top of the track scroll, by
+    /// rank (v2.3). Zero for everything the spawner places — only a Warden throws.
+    ///
+    /// This is the owner's headline note: *"its not sending walls down the lane like i asked … the
+    /// walls he send come quicker like the trains from subway surfers"*. Until now a "throw" placed
+    /// a wall at a fixed distance and the player ran into it at the same speed they ran into
+    /// ordinary track, so nothing was ever launched at anybody and the boss's attack was
+    /// indistinguishable from scenery.
+    ///
+    /// **The window is the difficulty knob; the lead and this number jointly set the drama.** A
+    /// hazard is on screen for `lead / (runSpeed + this)` seconds, so the pair can be moved together
+    /// to make something rush hard without making it unfair — which is the whole trick that lets a
+    /// 52 m launch be TIGHTER than v2.2's 34 m one. Measured windows:
+    ///
+    ///   rank 1 (run 29.5, close 25 → 54.5 m/s):  0.95 s at full health → 0.73 s at the brink
+    ///   rank 2 (run 33,   close 28 → 61 m/s):    0.85 s              → 0.66 s
+    ///   rank 3 (run 33,   close 32 → 65 m/s):    0.80 s              → 0.62 s
+    ///
+    /// against v2.2's flat 1.15 → 0.75 s. Every one of them is tighter, and the hazard approaches at
+    /// 1.85–1.97× the speed of the deck under it, which is what makes it read as thrown.
+    ///
+    /// **The first pass used [9, 16, 24] and `LaggedAutopilotTests` refuted it immediately**: a bot
+    /// reacting a full 0.75 s late killed 48 of 48 Wardens, because a 52 m lead against +9 m/s is a
+    /// 1.35 s window — far MORE generous than the thing it replaced. Moving the leads out without
+    /// moving these up would have shipped a boss that looked faster and played easier.
+    ///
+    /// Bounded below by the fairness gate: a 0.40 s human reaction plus the ~0.30 s a lane change
+    /// settles in. If that gate goes red the fix is a LONGER lead, never a smaller hitbox.
+    static let wardenCloseSpeedByRank: [Double] = [25, 28, 32]
+    static func wardenCloseSpeed(rank: Int) -> Double { wardenCloseSpeedByRank[rank - 1] }
+
+    /// Extra closing speed on an aimed shot, over the wall thrown beside it (v2.3).
+    ///
+    /// A shot fires from the same lead as everything else, so this is the ONLY thing that makes it
+    /// faster — which keeps the difference honest and in one number. At rank 3 a shot closes at
+    /// 32 + 6 = 38 m/s on top of a 33 m/s run, giving a `40 / 71` = **0.56 s** window at the brink:
+    /// the tightest read in the game, and deliberately so, because it belongs to the one hazard the
+    /// blast can always answer instead of dodging.
+    ///
+    /// Bounded below by the same fairness gate as everything else — `LaggedAutopilotTests` requires
+    /// an untouched run at a 0.40 s reaction.
+    static let wardenShotCloseBonus: Double = 6
     /// Answers that strip the armour before the core is open. Flat across ranks: the armour is the
     /// tutorial half of every fight and must not get longer as the fight gets harder.
     static let wardenShieldHits: Int = 2
@@ -670,8 +731,23 @@ enum Tuning {
     // 583–742 ms and a 0.40 s-latency bot survived them — so length was never the problem, and
     // buying more of it costs the fight its teeth. What changed is WHAT is drawn in the window: a
     // wall you have been reading for 2,400 m instead of a red band you have never seen.
-    static let wardenThrowLeadFar: Double = 34
-    static let wardenThrowLeadNear: Double = 22
+    //
+    // **v2.3 moves them OUT again — 52/40 — and this time it does not buy reading time.**
+    //
+    // The S-012 lesson above still stands and is the reason this is not a repeat of the mistake it
+    // describes: a longer WINDOW makes the fight unloseable. But the window is `lead / (runSpeed +
+    // closeSpeed)`, and `wardenCloseSpeedByRank` has just added a second term to the denominator.
+    // Holding 34 m against a rank-3 close of +24 m/s would have cut the window to 0.60 s — below
+    // the 0.40 s human floor plus the 0.19 s a lane change takes, i.e. genuinely unfair. Moving to
+    // 52/40 restores it to 0.91 s → 0.70 s, which is TIGHTER than v2.2's 1.15 → 0.75 s at rank 3
+    // and looser at rank 1, which is exactly the ladder the owner asked for.
+    //
+    // What the extra distance actually buys is the LOOK. A hazard that appears 52 m out and arrives
+    // in under a second has to visibly rush, and that rush is the whole of *"like the trains from
+    // subway surfers"*. At a fixed 34 m with no closing speed there was nothing to see: the wall sat
+    // there and the deck slid under it.
+    static let wardenThrowLeadFar: Double = 52
+    static let wardenThrowLeadNear: Double = 40
 
     /// What a landed hazard takes out of the blast bank. One round: the same unit the player spends,
     /// so "it cost me a blast" is a thing they can count rather than a percentage they cannot.
@@ -687,11 +763,44 @@ enum Tuning {
     /// breaks off exactly as it would on a held shield. Pinned by
     /// `WardenTests.testAnEncounterCanNeverOutrunItsArena`.
     ///
-    /// 14.5 rather than 16.0 (S-009): the cap exempts `.dying` and `.leaving`, so the true distance
-    /// cost is `(cap + wardenDieTime + wardenLeaveTime) × boostSpeedMax`. See `wardenArenaLength`.
-    /// It still clears the longest *designed* encounter — rank 3 at the charge threshold is 14.20 s
-    /// — and clears every real (full-charge) encounter by 2.6 s.
-    static let wardenMaxSeconds: Double = 14.5
+    /// **17.5 (v2.3), and 18.1 is a wall rather than a preference.** The cap exempts `.dying` and
+    /// `.leaving`, so the true distance cost is `(cap + wardenDieTime + wardenLeaveTime) ×
+    /// boostSpeedMax` = 698.4 m, and `wardenArmWindow` adds 60 on top. An arena must fit inside ONE
+    /// world (`worldLength` 800) or `Warden.arenaWorld` would report two worlds for one stretch of
+    /// deck, so the ceiling on this constant is `(800 − 60) / 36 − 1.9` = **18.1 s**. Anything past
+    /// that is not a tuning decision, it is a different world layout.
+    ///
+    /// That ceiling is why *"its too short and boring"* is answered with DENSITY rather than
+    /// duration: 14.5 → 17.5 is only +21%, but the throw interval falling 1.95 → 1.55 (rank 1) and
+    /// 1.65 → 1.10 (rank 3) roughly doubles the number of hazards that fit inside it. Rank 3 now has
+    /// room for ~15 throws against the 7 answers it takes to kill, so missing several is survivable
+    /// and the fight has a middle instead of ending on the fourth read.
+    static let wardenMaxSeconds: Double = 17.5
+
+    /// Throws over which the lead closes from `wardenThrowLeadFar` to `wardenThrowLeadNear` on the
+    /// CLOCK, for a player who is landing no answers at all (v2.3). See `WardenEncounter.throwLead`.
+    ///
+    /// Eight, which is slightly more than the longest script (7 at rank 3) and comfortably inside
+    /// the ~11–15 throws a fight has room for — so a player who misses everything still meets the
+    /// tightest windows before the clock runs out, but only in the back half of the fight.
+    static let wardenLeadClockThrows: Double = 8
+
+    /// How far out the HUD starts warning that a Warden is ahead (v2.3).
+    ///
+    /// 240 m is ~8 s at the first arena's 29.5 m/s — long enough to be a build-up rather than a
+    /// jump-scare, short enough that it is not background furniture for half a world. The countdown
+    /// is the point: *"i have no clue when its coming"* is answered by a number that visibly runs
+    /// down, not by a word that appears.
+    static let wardenWarnDistance: Double = 240
+
+    /// How many Wardens a player must have MET before the per-throw verb coaching stops.
+    ///
+    /// Three, and it counts encounters rather than runs: *"if its my first time playing instead of
+    /// being the designer i would be super confused"*. Three encounters is one per rank, so the
+    /// coaching survives long enough to introduce the aimed shot (which does not exist at rank 1)
+    /// and then gets out of the way. It is a lifetime count on the profile, so a player who meets
+    /// their first Warden in run 9 still gets taught.
+    static let wardenCoachEncounters: Int = 3
 
     /// A Warden only arms in the first stretch of its arena. Without this, a checkpoint run that
     /// began 80 m from the arena's end would summon a Warden with no room to fight it.
@@ -749,13 +858,14 @@ enum Tuning {
     // taught, nothing new has to be drawn, and the wind-up is not a band — it is the object getting
     // closer.
 
-    /// The three things a Warden throws. One per `WardenBand`, so the S-009 verb trichotomy is
-    /// preserved by construction and the compiler enforces the mapping.
+    /// The four things a Warden throws. One per `WardenBand`, so the verb design is preserved by
+    /// construction and the compiler enforces the mapping.
     static func wardenThrowKind(_ band: WardenBand) -> EntityKind {
         switch band {
-        case .lance:   return .tall         // a PAIR of them — see `WardenEncounter.throwCommands`
+        case .lance:   return .tall         // a PAIR of them — see `GameCore.throwHazard`
         case .floor:   return .chasm
         case .curtain: return .hangingBar
+        case .shot:    return .bolt         // v2.3 — aimed at the lane you are standing in
         }
     }
 

@@ -16,6 +16,11 @@ struct RunSummary: Sendable, Equatable {
     var duration: Double = 0      // wall-clock seconds in .play this run
     var startWorld: Int = 0       // checkpoint start world (0 = full run) — XP world-delta basis
     var wardensDefeated: Int = 0  // Wardens killed this run (v1.9) — banked once, like every field here
+    /// Wardens MET this run, killed or not (v2.3). Distinct from `wardensDefeated` on purpose:
+    /// the first-time verb coaching must stop once a player has SEEN three fights, whether or not
+    /// they won any of them — teaching that only retires on success would nag the players who most
+    /// need it to stop nagging them.
+    var wardensMet: Int = 0
 }
 
 /// A mission: a metric, a target, and a coin reward. Four scopes:

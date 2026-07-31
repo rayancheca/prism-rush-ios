@@ -30,9 +30,25 @@ final class RealityRenderer: RendererPort {
 
     private let cGold = UIColor(red: 1, green: 210/255.0, blue: 61/255.0, alpha: 1) // #FFD23D
     private let cWhite = UIColor.white
-    // Warden hazard colours (v1.9). World-blind by design — the same reason the chasm's walls are:
-    // a threat must look identical in all twelve families, and the accents reach pure white in two.
-    private let cWardenHazard = UIColor(red: 1, green: 51/255.0, blue: 85/255.0, alpha: 1)  // #FF3355
+    // Warden hazard colours (v1.9; **re-hued v2.3**). World-blind by design — the same reason the
+    // chasm's walls are: a threat must look identical in all twelve families, and the accents reach
+    // pure white in two (Datastream, Tempest).
+    //
+    // **The red is gone** (owner, S-013: *"i hate the red colour"*). It was `#FF3355`, and it was
+    // painted as a flat saturated FILL across every surface a Warden owned — which is also half of
+    // *"blocking the view of everything"*, because a full-span slab of saturated red is an opaque
+    // wall of colour whether or not the geometry behind it matters.
+    //
+    // The replacement is a two-tone treatment rather than a new fill colour, and that is the actual
+    // fix: a near-black body carries the MASS (the chasm's trick — read by silhouette, not by hue)
+    // and a bright violet edge carries the MEANING. Violet was already the Warden's own channel on
+    // the craft's spars, so the fight now speaks one colour instead of two, and it is far in hue
+    // from both reserved meanings on the deck: gold gems (`#FFD23D`, which share the arena with it)
+    // and shield cyan (`#66E0FF`).
+    private let cWardenHazard = UIColor(red: 199/255.0, green: 123/255.0, blue: 1, alpha: 1) // #C77BFF
+    /// The body. Darker than every world's deck, so it reads as a hole punched in the light rather
+    /// than as another coloured surface competing with the track.
+    private let cWardenHazardDark = UIColor(red: 42/255.0, green: 31/255.0, blue: 61/255.0, alpha: 1) // #2A1F3D
     private let cWardenShield = UIColor(red: 102/255.0, green: 224/255.0, blue: 1, alpha: 1) // #66E0FF
 
     private let rungSpacing: Float = 4
@@ -165,9 +181,12 @@ final class RealityRenderer: RendererPort {
     private var paletteKey: Int = -1
     private var matAccent = UnlitMaterial(color: .cyan)
     private var matAccent2 = UnlitMaterial(color: .magenta)
-    /// The Warden's hazard red, held as a material so thrown obstacles can be tinted every frame
+    /// The Warden's hazard violet, held as a material so thrown obstacles can be tinted every frame
     /// without allocating. World-blind on purpose: a Warden's wall is the Warden's, in every world.
-    private let matWardenHazard = UnlitMaterial(color: UIColor(red: 1, green: 51/255.0, blue: 85/255.0, alpha: 1))
+    /// (v2.3: was `#FF3355`. See `cWardenHazard` for why the red went.)
+    private let matWardenHazard = UnlitMaterial(color: UIColor(red: 199/255.0, green: 123/255.0, blue: 1, alpha: 1))
+    /// The body tone that goes with it — see `cWardenHazardDark`.
+    private let matWardenHazardDark = UnlitMaterial(color: UIColor(red: 42/255.0, green: 31/255.0, blue: 61/255.0, alpha: 1))
     private let matGemGold: UnlitMaterial
     private let matGemHot: UnlitMaterial    // magnet-pulled gems tint hotter as they shrink
 
@@ -459,12 +478,21 @@ final class RealityRenderer: RendererPort {
             switch s.kind {
             case .tall:
                 (entity as? ModelEntity).map { $0.model?.materials = [mObstacle] }
+            case .bolt:
+                // Always the Warden's violet — a shot has no non-Warden variant to distinguish it
+                // from, and it spins about its own long axis so a closing spindle reads as a
+                // projectile in flight rather than a static dart being scrolled toward you.
+                (entity as? ModelEntity).map { $0.model?.materials = [mWarden] }
+                entity.orientation = simd_quatf(angle: Float(s.z) * 0.55, axis: SIMD3<Float>(0, 0, 1))
             case .low, .bar, .movingTall:
                 (entity as? ModelEntity).map { $0.model?.materials = [mObstacle2] }
             case .hangingBar:
-                // Always red: nothing else in the game hangs from the sky with no way over it, and
-                // the only thing that throws one is the Warden.
-                (entity as? ModelEntity).map { $0.model?.materials = [mWarden] }
+                // Nothing to do per frame: a hanging bar is a multi-part portcullis whose two tones
+                // are baked at construction (`hangingBarEntity`), and it is always the Warden's
+                // colour anyway — nothing else in the game hangs from the sky with no way over it.
+                // The old one-liner tinted `entity as? ModelEntity`, which a composed entity is
+                // not, so leaving it here would have silently done nothing and looked deliberate.
+                break
             case .splitBar:
                 // `s.lane` is the OPEN lane: park the two pooled segments over the other two
                 // lanes (recycled entities may carry a different gap, so place every frame).
@@ -1234,13 +1262,14 @@ final class RealityRenderer: RendererPort {
         case .tall:       return boxEntity(1.9, 3.2, 0.9, .cyan)
         case .movingTall: return boxEntity(1.9, 3.2, 0.9, .magenta)
         case .bar:        return boxEntity(7.6, 0.7, 0.7, .magenta)
-        case .hangingBar:
-            // Spans the deck and runs from the kill line up past any reachable apex, so what is
-            // drawn IS what kills (decree 2). An ordinary bar is a 0.7-high rung with clear air
-            // above it; this is a wall with clear air only BELOW it, and the difference has to be
-            // unmistakable in one frame at 33 m/s.
-            return boxEntity(7.6, Float(Tuning.hangingBarKillTop - Tuning.hangingBarKillBottom),
-                             0.7, uiHex(0xFF3355))
+        case .hangingBar: return hangingBarEntity()
+        // A Warden's aimed shot (v2.3): a spindle stretched down the track so its long axis IS its
+        // direction of travel. Deliberately as wide as the wall it collides like (`tall` is 1.9),
+        // because a projectile drawn narrower than its hitbox reads as dodgeable when it is not —
+        // and it tapers to a point at both ends so it reads as a thrown thing rather than a block.
+        case .bolt:
+            return ModelEntity(mesh: ProceduralMesh.octahedron(rx: 0.95, ry: 0.95, rz: 1.9),
+                               materials: [matWardenHazard])
         case .splitBar:   return splitBarEntity()
         case .gem:        return ModelEntity(mesh: gemMesh, materials: [matGemGold])
         // An actual shield crest, not a ball (owner, S-009). A sphere was the one pickup silhouette
@@ -1339,6 +1368,66 @@ final class RealityRenderer: RendererPort {
             return [UnlitMaterial(color: uiHex(skinBodyHex))]
         }
         return spectrum.map { UnlitMaterial(color: uiHex($0)) }
+    }
+
+    /// The hanging bar: a **portcullis, not a slab** (v2.3).
+    ///
+    /// It shipped in v2.2 as one solid `7.6 × 3.05 × 0.7` box in saturated red, and that is the
+    /// thing the owner hit first: *"the wall it created that i had to crouch under was blocking the
+    /// view of everything"*. He is describing an occluder, and the arithmetic agrees — a full-span
+    /// box standing from the kill line (0.95) to well above any reachable apex (4.0) is 23.2 u² of
+    /// opaque frontal area sitting between the camera and every metre of track behind it. There is
+    /// nothing to see past it, so the deck the player is about to land on is unreadable until it
+    /// clears.
+    ///
+    /// This builds the same volume out of a frame instead of a fill: a bright HEM at the kill line,
+    /// a top header, one mid rail, and seven verticals. Frontal area drops 23.2 → 11.6 u², so
+    /// **half the occlusion is gone**, and what is left is a grille the eye reads through.
+    ///
+    /// Three things it deliberately does NOT do:
+    ///
+    /// - **It does not change the rule.** `Collisions.hangingBarHit` is untouched; the band is still
+    ///   0.95 → 4.0 and still unjumpable from every state including Super Sneakers. The mesh still
+    ///   spans exactly its kill band edge to edge, so decree 2 holds — what is drawn is what kills.
+    /// - **It does not open a hole anyone could believe in.** Seven verticals leave gaps 0.79 u
+    ///   wide against a body 1.0 u across, and the mid rail halves them vertically. Every opening is
+    ///   visibly smaller than the player, so "grille" never reads as "gap".
+    /// - **It does not bury the answer.** The hem is the brightest element and sits ON the kill line,
+    ///   because the single fact the player must extract in one frame is *where the bottom edge is* —
+    ///   everything above it is context.
+    private func hangingBarEntity() -> Entity {
+        let group = Entity()
+        let bottom = Float(Tuning.hangingBarKillBottom)     // 0.95
+        let top = Float(Tuning.hangingBarKillTop)           // 4.0
+        let w: Float = 7.6
+        // Local Y is relative to the entity origin, which the core parks at the band's CENTRE
+        // (`applyThrown`/`apply` set `baseY` to the midpoint), so every piece is placed as an
+        // offset from that midpoint rather than in world space.
+        let mid = (bottom + top) / 2
+        func place(_ e: ModelEntity, y: Float, x: Float = 0) {
+            e.position = SIMD3<Float>(x, y - mid, 0)
+            group.addChild(e)
+        }
+        // The hem — the read. Thick, bright, and its underside IS the kill line.
+        let hemH: Float = 0.55
+        place(boxEntity(w, hemH, 0.75, cWardenHazard), y: bottom + hemH / 2)
+        // Header, capping the band so it reads as a closed structure rather than an open top.
+        let headH: Float = 0.30
+        place(boxEntity(w, headH, 0.55, cWardenHazardDark), y: top - headH / 2)
+        // Mid rail: halves every opening so none of them is body-sized.
+        let railY = (bottom + hemH + top - headH) / 2
+        place(boxEntity(w, 0.20, 0.55, cWardenHazardDark), y: railY)
+        // Seven verticals spanning hem-top to header-bottom.
+        let barsTop = top - headH, barsBottom = bottom + hemH
+        let slatH = barsTop - barsBottom
+        let n = 7
+        for i in 0..<n {
+            let t = Float(i) / Float(n - 1)                  // 0…1 across the span
+            let x = -w / 2 + 0.13 + t * (w - 0.26)
+            place(boxEntity(0.26, slatH, 0.5, cWardenHazardDark),
+                  y: barsBottom + slatH / 2, x: x)
+        }
+        return group
     }
 
     private func boxEntity(_ w: Float, _ h: Float, _ d: Float, _ c: UIColor) -> ModelEntity {

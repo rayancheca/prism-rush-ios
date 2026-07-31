@@ -50,7 +50,15 @@ enum DailyChallenge {
     /// 3,200 m, which changes pattern 13's emitted phase, the lanes `Spawner.movingWallLanes` reports
     /// closed, and therefore its safe-entry breadcrumb and greed line. Zero extra RNG calls; the
     /// track still differs, and a layout version is a promise about the whole run.
-    static func seed(year: Int, month: Int, day: Int, layoutVersion: UInt64 = 11) -> UInt64 {
+    /// layoutVersion 12 = v2.3 — THE WARDEN, MADE A FIGHT (S-013). `wardenArenaLength` 660 → 770.
+    /// Like v10 and for the same reason, the seeded spawn STREAM is byte-identical: `Spawner.fill`
+    /// makes exactly the same `rng` calls in exactly the same order, and the encounter still draws
+    /// only from its own derived stream. What moves is which of those spawns survive
+    /// `Warden.suppresses` at `GameCore.apply` — 110 m more of every third world is now deliberately
+    /// clear deck, because the fight got longer (`wardenMaxSeconds` 14.5 → 17.5) and the arena has
+    /// to outlast it in distance. A layout version is a promise about the whole run, not about the
+    /// RNG, so the shared daily must reshuffle.
+    static func seed(year: Int, month: Int, day: Int, layoutVersion: UInt64 = 12) -> UInt64 {
         let folded = UInt64(year * 10_000 + month * 100 + day)
         var mix = SplitMix64(seed: folded ^ tag ^ (layoutVersion << 48))
         return mix.next()

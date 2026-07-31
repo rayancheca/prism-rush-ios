@@ -27,10 +27,49 @@ enum WardenBand: Sendable, Equatable, CaseIterable {
     case lance    // two tall walls, one lane open → change lane
     case floor    // a chasm blown in the deck     → jump
     case curtain  // a hanging bar                 → slide
+    /// An aimed shot at the lane the player is standing in → move, or blast it (v2.3, rank ≥ 2).
+    ///
+    /// **The fourth shape exists because the owner asked for it**: *"when hes tougher he shoots you
+    /// as well"*. It is also the return of the feature's original pitch — `10_WARDENS.md` records
+    /// him proposing *"alien ships in the space world that shoot at you"* in S-007, and no build
+    /// until now had the craft fire anything.
+    ///
+    /// It shares the lance's VERB and that is not a redundancy, it is the point of the pair. A lance
+    /// leaves a lane open by construction, so it is a READ: look, decide, go. A shot follows you, so
+    /// it is a REACTION: you are already wrong, move. Same input, opposite skill — which is why the
+    /// script never puts them next to each other.
+    case shot
 
-    /// Whether this shape closes lanes individually. Only a lance does; the other two span the deck,
-    /// which is exactly why they cannot be answered laterally.
-    var isLateral: Bool { self == .lance }
+    /// The motor answer a shape demands.
+    ///
+    /// **Two shapes can share one, and that is why this exists as a type.** Until v2.3 "shape" and
+    /// "answer" were the same thing, so `script[i] != script[i-1]` was a sufficient statement of the
+    /// no-repeated-verb rule. `.shot` breaks that identity: it is a different object with different
+    /// timing that is nonetheless answered by the same lane change as a `.lance`, so the script must
+    /// be checked on THIS rather than on the case.
+    enum Answer: Sendable, Equatable { case move, jump, slide }
+
+    var answer: Answer {
+        switch self {
+        case .lance, .shot: return .move
+        case .floor:        return .jump
+        case .curtain:      return .slide
+        }
+    }
+
+    /// Whether this shape closes lanes individually. The two full-span shapes span the deck, which
+    /// is exactly why they cannot be answered laterally.
+    var isLateral: Bool { answer == .move }
+
+    /// The verb that answers this shape, as the word the coaching HUD shows a first-time player.
+    var verb: String {
+        switch self {
+        case .lance:   return "SWIPE TO MOVE"
+        case .floor:   return "SWIPE UP TO JUMP"
+        case .curtain: return "SWIPE DOWN TO SLIDE"
+        case .shot:    return "INCOMING — MOVE!"
+        }
+    }
 }
 
 /// Immutable per-frame view of an encounter, carried inside `GameSnapshot`.
@@ -68,7 +107,11 @@ struct WardenTick: Equatable {
     var threw = false          // it launched a hazard this tick
     var throwBand: WardenBand = .lance   // …of this shape
     var throwLead: Double = 0            // …this many metres ahead of the player
-    var throwOpenLane: Int = 1           // …leaving this lane open (a lance only)
+    /// The lane this throw is ABOUT, and its meaning is the band's:
+    ///   `.lance` — the one lane left OPEN, and never the one the player is standing in.
+    ///   `.shot`  — the lane AIMED AT, which is always the one the player is standing in.
+    /// Meaningless for the two full-span shapes, which close every lane at once.
+    var throwLane: Int = 1
     var brokeOff = false       // the clock ran out with it alive — it leaves, you lose the reward
     var finished = false       // the encounter is over; the core may clear it
 }
@@ -150,9 +193,23 @@ struct WardenEncounter {
     /// so the climax is the moment it has the most presence on screen — the opposite of v2.1, where
     /// it was largest at the start and its own attacks then covered the frame. And the boss's health
     /// becomes SPATIAL: a player can see they are winning because the thing is in their face.
+    /// **It closes on the MAX of two clocks, and the second one exists to fix an inversion (v2.3).**
+    ///
+    /// A landed hazard never calls `registerWardenAnswer` — `GameCore.stepObstacles` staggers the
+    /// player, deletes the whole throw and moves on — so `armourHits + coreHits` stays at 0 for
+    /// exactly the player who is missing everything. Interpolating on damage alone therefore pinned
+    /// the lead at its widest, most forgiving value for the player having the most trouble, and the
+    /// fight never escalated at all. The struggling player got the easiest Warden.
+    ///
+    /// Throw count advances regardless of whether anything connects, so a fight the player is losing
+    /// still visibly tightens. Damage still dominates for anyone competent — five answers into a
+    /// rank-1 fight is 1.0 by damage against 0.63 by clock — so winning is what makes the craft
+    /// close in, and the boss's health stays spatial.
     var throwLead: Double {
         let total = Double(Tuning.wardenAnswersToKill(rank: rank))
-        let done = min(1, Double(armourHits + coreHits) / max(1, total))
+        let byDamage = Double(armourHits + coreHits) / max(1, total)
+        let byClock = Double(throwIndex) / Tuning.wardenLeadClockThrows
+        let done = min(1, max(byDamage, byClock))
         return Tuning.wardenThrowLeadFar
             + (Tuning.wardenThrowLeadNear - Tuning.wardenThrowLeadFar) * done
     }
@@ -196,8 +253,17 @@ struct WardenEncounter {
             // Never launch something that cannot arrive before the clock stops. A hazard still in
             // flight when the encounter ends would be swept off the deck by `GameCore`, which reads
             // as the boss's attack simply evaporating.
+            //
+            // **The divisor gained the closing speed in v2.3, and leaving it out was costing
+            // throws.** A thrown hazard covers its lead at `run + close`, not at `run` — pricing the
+            // flight at `speedCap` alone over-estimated it by ~2× and refused perfectly good throws
+            // for the last seconds of every fight, which is the exact complaint (*"he only attacked
+            // me twice"*) this pass exists to answer. `speedCap` remains the run term because it is
+            // the conservative one: assuming the player is slower would under-reserve and let a
+            // hazard outlive the encounter.
             let lead = throwLead
-            guard totalT + lead / Tuning.speedCap < Tuning.wardenMaxSeconds else { break }
+            let closing = Tuning.speedCap + Tuning.wardenCloseSpeed(rank: rank)
+            guard totalT + lead / closing < Tuning.wardenMaxSeconds else { break }
             throwT = 0
             band = Self.script(rank: rank)[throwIndex % Self.script(rank: rank).count]
             throwIndex += 1
@@ -205,7 +271,14 @@ struct WardenEncounter {
             out.threw = true
             out.throwBand = band
             out.throwLead = lead
-            out.throwOpenLane = band.isLateral ? pickOpenLane(playerLane: playerLane) : 1
+            switch band {
+            case .lance:            out.throwLane = pickOpenLane(playerLane: playerLane)
+            // A shot is AIMED: it takes the lane the player occupies at the moment of launch and is
+            // never revised afterwards. That single choice is what makes it a reaction rather than a
+            // read — standing still is always wrong, and the answer is always "not here".
+            case .shot:             out.throwLane = playerLane
+            case .floor, .curtain:  out.throwLane = 1
+            }
 
         case .dying:
             if phaseT >= Tuning.wardenDieTime { phase = .leaving; phaseT = 0 }
@@ -266,11 +339,26 @@ struct WardenEncounter {
     /// the two new demands, then a lance again), and a fight's difficulty stops being a dice roll —
     /// nobody draws three chasms in a row and nobody draws none. Every rank alternates channels so
     /// no two consecutive throws are answered by the same verb.
+    /// **The rank ladder is mostly THIS** (v2.3). Owner, S-013: *"he should be easier at first and
+    /// tougher on harder levels. so when hes tougher he shoots you as well"*.
+    ///
+    /// Rank 1 fires no shots at all. It is the only Warden most players will ever have met when they
+    /// form an opinion of the feature, so it is strictly the three shapes the track has already
+    /// taught, in an order chosen to introduce them: move, jump, slide, then repeat with the two
+    /// verbs that were newest. Nothing on this rank is a reaction test.
+    ///
+    /// Shots arrive at rank 2 and double at rank 3, which is where the fight stops being readable in
+    /// advance and starts demanding hands.
+    ///
+    /// **The adjacency rule is load-bearing and now has a fourth shape to satisfy.** No two
+    /// consecutive throws may share a verb, counting CYCLICALLY because the script repeats — and
+    /// `.shot` and `.lance` share one (both are answered by a lane change), so they may never touch
+    /// either. Pinned by `WardenTests.testTheShapeOrderIsDesignedNotRolled`.
     static func script(rank: Int) -> [WardenBand] {
         switch rank {
-        case 1:  return [.lance, .floor, .curtain, .lance]
-        case 2:  return [.lance, .floor, .curtain, .lance, .floor]
-        default: return [.floor, .curtain, .lance, .floor, .curtain, .lance]
+        case 1:  return [.lance, .floor, .curtain, .lance, .floor]
+        case 2:  return [.lance, .floor, .shot, .curtain, .lance, .floor]
+        default: return [.floor, .shot, .curtain, .lance, .floor, .shot, .curtain]
         }
     }
 
@@ -339,6 +427,26 @@ enum Warden {
     /// obstacles so the only things on it are the ones the Warden put there (decree 6).
     static func isArena(_ d: Double) -> Bool { arenaWorld(forDistance: d) != nil }
 
+    /// Metres from `d` to the mouth of the NEXT Warden arena, or `nil` when already inside one.
+    ///
+    /// **This is the whole of the "when is it coming" fix, and it is deliberately a pure function
+    /// of distance** (owner, S-013: *"i have no clue when its coming … a first time player would be
+    /// super confused"*). Until v2.3 the first thing that told anybody a Warden existed was the
+    /// Warden, already armed and 34 m away with a wall leaving it. There was no approach.
+    ///
+    /// Being pure is what makes it free: it holds no state, consumes no RNG, is never called from
+    /// the sim, and cannot perturb a seeded run — the HUD simply asks it a question every frame.
+    /// It could not have been a phase on `WardenEncounter` without arming the encounter early, which
+    /// would have moved the arena boundary and cost another layout version.
+    static func metresToNextArena(from d: Double) -> Double? {
+        guard d >= 0, !isArena(d) else { return nil }
+        let w = Int((d / Tuning.worldLength).rounded(.down))
+        // The next multiple of `wardenEveryWorlds` STRICTLY after the world we are in. Strictly,
+        // because a player past the arena of their own Warden world is waiting for the next one.
+        let next = (w / Tuning.wardenEveryWorlds + 1) * Tuning.wardenEveryWorlds
+        return Double(next) * Tuning.worldLength - d
+    }
+
     /// The world whose Warden may ARM at `d`. Stricter than `arenaWorld`: a Warden only appears in
     /// the first `wardenArmWindow` metres, so a checkpoint run that began near the far end of an
     /// arena runs it out as clear track instead of summoning a fight with no room to hold it.
@@ -362,7 +470,8 @@ enum Warden {
     static func suppresses(_ cmd: SpawnCmd) -> Bool {
         switch cmd {
         case let .low(d, _), let .tall(d, _), let .bar(d), let .splitBar(d, _),
-             let .movingTall(d, _), let .chasm(d), let .boostPad(d, _), let .hangingBar(d):
+             let .movingTall(d, _), let .chasm(d), let .boostPad(d, _), let .hangingBar(d),
+             let .bolt(d, _):
             return isArena(d)
         case .gem, .shield, .magnet, .doubler, .chrono, .superSneakers, .ring:
             return false

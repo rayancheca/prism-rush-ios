@@ -24,13 +24,24 @@ final class WardenRig {
     private static let plateHue: UInt32 = 0x4C5F92
     /// **Violet, not the near-white the design table specified.** Verified on the simulator: white
     /// spars on a pale hull under a dome that is taller than they are simply vanish — the health
-    /// readout was invisible in its first build. Violet is far in hue from BOTH reserved meanings
-    /// (hazard red `0xFF3355`, shield cyan `0x66E0FF`), so it can carry a third channel without
-    /// ever being mistaken for "this will kill you" or "this is protected".
+    /// readout was invisible in its first build.
+    ///
+    /// **v2.3 makes this the Warden's whole signature rather than a third channel.** It used to be
+    /// justified as "far in hue from hazard red and shield cyan", and that reasoning died with the
+    /// red: the fight now speaks ONE hostile colour, and everything the Warden owns — its spars, its
+    /// thrown walls, its holes, its portcullises — is violet. The spars can never be confused with a
+    /// thrown hazard despite sharing a hue, because they are 7.4 units up in the sky on a craft and
+    /// a hazard is on the deck; nothing puts them side by side.
     private static let sparHue: UInt32 = 0xC77BFF
     private static let shieldHue: UInt32 = 0x66E0FF   // cool: intact, not yet dangerous
-    private static let hazardHue: UInt32 = 0xFF3355   // hostile: the core, and anything lethal
-    private static let hazardDimHue: UInt32 = 0xD92742
+    /// The hostile violet, matching `RealityRenderer.cWardenHazard` — see there for why the red
+    /// (`0xFF3355`) went. Used for the exposed core and anything that means "this is the fight".
+    private static let hazardHue: UInt32 = 0xC77BFF
+    private static let hazardDimHue: UInt32 = 0x7B3BC4
+    /// The core is the one thing on the craft the player is trying to HIT, so it is deliberately
+    /// the brightest element in the rig — hotter than the spars that share its hue, so "shoot here"
+    /// never has to compete with "this is how much health it has left".
+    private static let coreHue: UInt32 = 0xF2D0FF
 
     /// Where the strike is drawn, in track units ahead of the player. The beam resolves against the
     /// player's own plane, so it is drawn just in front of them — far enough to see coming, close
@@ -185,7 +196,8 @@ final class WardenRig {
 
         // Unscaled by `craftScale` on purpose: it is a lethal-red readability surface, and the one
         // thing on this craft whose size must not follow a presentation decision.
-        core = ModelEntity(mesh: ProceduralMesh.octahedron(0.75), materials: [matHazard])
+        core = ModelEntity(mesh: ProceduralMesh.octahedron(0.75),
+                           materials: [UnlitMaterial(color: Self.rgb(Self.coreHue))])
         // **Slung clearly BELOW the belly, and that is not cosmetic.** The camera sits at y 5.1 and
         // looks DOWN on a craft hovering at 4.2, so anything level with the hull's underside is
         // occluded by an opaque disc 8.3 units across. A first pass placed it at the hull's bottom

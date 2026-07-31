@@ -35,8 +35,14 @@ final class LaggedAutopilotTests: XCTestCase {
     /// Distracted, or not watching the telegraph. Must not be good enough.
     private static let sluggish = 0.75
 
-    /// Drive one run to 6,000 m (worlds 3 and 6, so both a rank-1 and a rank-2 Warden) with every
-    /// Warden response delayed by `reaction` seconds. Returns whether the player survived.
+    /// Drive one run to 7,400 m — worlds 3, 6 AND 9, so **all three ranks** — with every Warden
+    /// response delayed by `reaction` seconds. Returns whether the player survived.
+    ///
+    /// **It stopped at 6,000 m until v2.3, and that hole was load-bearing.** Six thousand metres
+    /// reaches worlds 3 and 6 only, so the gate had never once measured a rank-3 Warden against
+    /// human latency — the hardest fight in the game, the only one that fires two aimed shots per
+    /// cycle, and the one whose reaction window is tightest. Every claim this file made about "the
+    /// fight is fair / the fight is hard" was a claim about ranks 1 and 2 wearing a general name.
     ///
     /// The delay is applied ONLY to Warden reactions. Ordinary obstacle play stays perfect, so a
     /// death can only ever be attributed to an encounter — which is what makes the result readable.
@@ -57,7 +63,7 @@ final class LaggedAutopilotTests: XCTestCase {
         var lockedAt: Double? = nil     // when the telegraph in flight locked
         var elapsed = 0.0
         var ticks = 0
-        while core.mode == .play && core.distance < 6_000 && ticks < 400_000 {
+        while core.mode == .play && core.distance < 7_400 && ticks < 500_000 {
             elapsed += Tuning.tickDt
             ticks += 1
 
@@ -95,7 +101,7 @@ final class LaggedAutopilotTests: XCTestCase {
             caught += out.caught
             if !out.survived { died += 1 }
         }
-        XCTAssertEqual(encounters, 24 * 2, "every run must meet both Wardens or this proves nothing")
+        XCTAssertEqual(encounters, 24 * 3, "every run must meet all three Wardens or this proves nothing")
         XCTAssertEqual(died, 0,
             "\(died)/24 runs died at a \(Self.humanFloor) s reaction. A Warden cannot kill, so a "
             + "death here means its hazards outlived the encounter or leaked outside the arena.")

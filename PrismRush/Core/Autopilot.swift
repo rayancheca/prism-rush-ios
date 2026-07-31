@@ -18,16 +18,61 @@ enum Autopilot {
     /// 12-unit reaction-distance invariant so commitments happen early.
     static let reach: Double = 30
 
+    /// How far away an obstacle **effectively** is: the distance a STATIC obstacle would have to sit
+    /// at to reach the player at the same moment (v2.3).
+    ///
+    /// Every lead in this file (`jumpLead`, `slideCommit`, `chasmLead`, `reach`, the `< 15` move
+    /// horizon) is a distance standing in for a TIME — "how long do I have". That substitution was
+    /// exact while every obstacle was pinned to the deck, and a Warden's closing hazards break it:
+    /// a wall 30 m out closing at +20 m/s arrives in the time a static wall 18 m out would.
+    ///
+    /// So convert once, here, and leave every lead alone. `gap × v / (v + close)` is
+    /// `timeToArrival × v`, which is **identically `gap` when `close == 0`** — so the bot's
+    /// behaviour on ordinary track is not merely similar to before, it is bit-identical, and the
+    /// 200-seed solvability proof and every daily-challenge golden are untouched.
+    ///
+    /// Note this deliberately reads `effectiveSpeed`, so it composes with chrono slow-mo the same
+    /// way `GameCore.advanceClosingHazards` does: both sides scale by the same factor and the ratio
+    /// is unchanged.
+    static func effectiveArrival(_ o: CoreEntity, _ c: GameCore) -> Double {
+        (o.d - c.distance) * closingRatio(o, c)
+    }
+
+    /// The factor that turns a real gap into an effective one. Exactly `1` for anything the spawner
+    /// placed, which is what keeps ordinary play bit-identical. Exposed separately because the chasm
+    /// needs it applied to its RIM rather than to its centre.
+    /// **Both terms must carry the same chrono factor or they do not cancel.** `GameCore` advances a
+    /// hazard's own motion by `hazardCloseScale`, so the denominator has to use the scaled closing
+    /// speed against the already-scaled `effectiveSpeed`. Getting this wrong does not merely bias the
+    /// bot slightly — it makes it read a closing chasm as nearer than it is, launch early into the
+    /// catalogue's only two-sided window, and air-slam into the hole. Caught by the 200-seed proof.
+    ///
+    /// With it right, `d(effective)/dt` is exactly `−effectiveSpeed` — identical to a static
+    /// obstacle — so every distance-as-time lead in this file keeps meaning what it meant.
+    static func closingRatio(_ o: CoreEntity, _ c: GameCore) -> Double {
+        guard o.closeSpeed > 0 else { return 1 }
+        let v = max(0.001, c.effectiveSpeed)
+        return v / (v + o.closeSpeed * c.hazardCloseScale)
+    }
+
     static func decide(_ c: GameCore) -> Decision {
         // 1) Lane choice: score each lane by the distance to the nearest *blocking* obstacle
         //    (a tall in that lane, or a moving wall predicted to arrive over it). Higher = safer.
         var laneScore = [Double](repeating: .infinity, count: 3)   // distance to nearest upcoming tall
         var blockedNow = [Bool](repeating: false, count: 3)        // tall physically in the kill band
         for o in c.activeObstacles {
-            let arrival = o.d - c.distance
+            // TWO different questions, and conflating them is a real bug rather than a rounding one.
+            // "Is it physically on top of me right now" is asked of the REAL gap — a closing wall
+            // 6 m away is 6 m away, whatever it is about to do. "How long have I got" is asked of
+            // the effective gap. Identical for everything the spawner places (`closeSpeed == 0`).
+            let realGap = o.d - c.distance
+            let arrival = effectiveArrival(o, c)
             let lanes: [Int]
             switch o.kind {
-            case .tall:
+            case .tall, .bolt:
+                // A shot closes one lane exactly as a wall does — the bot needs no new rule for it,
+                // only to be told it exists. Without this arm the `default: continue` below would
+                // drop it silently and the bot would stand still while being shot. (v2.3)
                 lanes = [o.lane]
             case .splitBar:
                 // Covered lanes steer the bot toward the gap (o.lane is the OPEN lane); the bar
@@ -44,7 +89,8 @@ enum Autopilot {
             }
             // Still in (or astride) the kill band — never move into or stay drifting through it.
             // The band lingers ~1.3 units PAST the plane because |z| < 0.95 is still fatal.
-            if arrival > -1.3 && arrival < 1.0 {
+            // REAL gap: this is a question about geometry, not about time.
+            if realGap > -1.3 && realGap < 1.0 {
                 for l in lanes { blockedNow[l] = true }
             }
             if arrival > 0 && arrival <= reach {
@@ -110,11 +156,16 @@ enum Autopilot {
         var nearestChasmEdge = Double.infinity
         var overChasm = false
         for o in c.activeObstacles {
-            let arrival = o.d - c.distance
+            let realGap = o.d - c.distance
+            let arrival = effectiveArrival(o, c)
             if o.kind == .chasm {
-                let lead = arrival - Tuning.chasmHalfLength    // leading rim
-                let trail = arrival + Tuning.chasmHalfLength   // trailing rim
-                if lead <= 0 && trail > 0 { overChasm = true }
+                // The rims are REAL geometry, so the extent is subtracted before the time
+                // conversion — never after. "Am I over the void" is a question about where the
+                // body is; "must I launch now" is a question about when the near rim gets here.
+                let realLead = realGap - Tuning.chasmHalfLength    // leading rim
+                let realTrail = realGap + Tuning.chasmHalfLength   // trailing rim
+                if realLead <= 0 && realTrail > 0 { overChasm = true }
+                let lead = realLead * closingRatio(o, c)
                 if lead > 0 && lead <= reach { nearestChasmEdge = min(nearestChasmEdge, lead) }
                 continue
             }

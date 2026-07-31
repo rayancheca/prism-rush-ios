@@ -27,6 +27,17 @@ enum EntityKind: Sendable, Equatable {
     case ring       // prism ring at jump-apex height: thread it for score/coins — never lethal
     case boostPad   // floor chevron strip: grounded contact triggers the overdrive boost
     case chasm      // full-width gap in the deck: be AIRBORNE across its whole span or fall (v1.8)
+    /// A Warden's aimed shot (v2.3): a single-lane projectile fired at the lane the player is
+    /// STANDING IN, closing far faster than anything the deck produces. Answered by moving, or by
+    /// blasting it out of the air. Never spawned by the spawner — only a Warden fires one.
+    ///
+    /// **Why it is its own kind rather than a fast `tall`.** Mechanically it resolves through
+    /// `tallHit` like a wall, and that is deliberate — the player already knows "full-height thing in
+    /// my lane, move". What differs is everything the player uses to PREDICT it: a lance leaves a
+    /// lane open by construction and can be read, while a shot follows you and must be reacted to.
+    /// A different rule deserves a different silhouette, a different sound and a different speed, and
+    /// none of those are expressible if it borrows another kind's identity.
+    case bolt
 }
 
 extension EntityKind {
@@ -45,6 +56,11 @@ extension EntityKind {
     var isBlastable: Bool {
         switch self {
         case .low, .tall, .movingTall, .bar, .splitBar, .hangingBar:
+            return true
+        // Shooting a shot down is the fantasy the blast exists for, and it is the one hazard where
+        // spending a round can be strictly better than dodging: a shot tracks the lane you are in,
+        // so it is the only throw you cannot answer by having already been somewhere else.
+        case .bolt:
             return true
         case .chasm:
             return false

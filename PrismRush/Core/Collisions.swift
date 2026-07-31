@@ -145,7 +145,9 @@ enum Collisions {
                        playerTop: Double, playerBottom: Double, openLane: Int) -> Bool {
         let dx = Tuning.stumbleGrazeDX, dy = Tuning.stumbleGrazeDY
         switch kind {
-        case .tall, .movingTall:
+        case .tall, .movingTall, .bolt:
+            // A shot has one answer — be in another lane — so like a wall its only shallow miss is
+            // lateral. (v2.3)
             return lateralEscape(playerX: playerX, obstacleX: obstacleX) <= dx
         case .low:
             return lateralEscape(playerX: playerX, obstacleX: obstacleX) <= dx

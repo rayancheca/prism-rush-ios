@@ -742,3 +742,101 @@ which with unlimited rolls and no cooldown is the only shape that is both fair a
 *E6, the IAP packs: NO CHANGE, deliberately.* Measured against the new faucet, $0.99 buys 15–20
 minutes and $19.99 buys 8.5–11 hours. The owner's "IAP should genuinely matter" is already satisfied
 by cutting the faucet 6–7×; re-pricing packs on top would have overshot.
+
+## D-032
+**A Warden throws things AT you.** (S-013 — owner feedback, verbatim: *"its not sending walls down
+the lane like i asked … the walls he send come quicker like the trains from subway surfers"*.)
+
+Until v2.3 every obstacle in the game — including a Warden's — was pinned to a fixed `d` and the
+player ran into it. Nothing was ever launched at anybody, so the boss's "attack" was mechanically
+indistinguishable from ordinary track that happened to be red. `CoreEntity.closeSpeed` (0 for
+everything the spawner places, so ordinary track and every seeded proof are untouched) advances a
+hazard toward the player on top of the scroll: **25 / 28 / 32 m/s by rank**, against a 29.5–33 m/s
+run, so a hazard approaches at 1.85–1.97× the speed of the deck under it.
+
+The leads moved OUT to 52/40 m to pay for it. That is not extra reading time — the window is
+`lead / (run + close)`, so it is **0.95 s → 0.62 s** across the ranks against v2.2's flat 1.15 → 0.75.
+The hazard is further away, arrives sooner, and visibly rushes.
+
+**The first attempt used 9/16/24 and `LaggedAutopilotTests` refuted it in one run**: a bot reacting a
+full 0.75 s late killed 48 of 48 Wardens, because 52 m against +9 m/s is a *more* generous window
+than the thing it replaced. Moving leads out without moving closing speed up ships a boss that looks
+faster and plays easier.
+
+## D-033
+**The rank ladder is real, and rank 3 shoots at you.** (S-013 — *"he should be easier at first and
+tougher on harder levels. so when hes tougher he shoots you as well"*.)
+
+v2.2's ladder was two numbers (throw interval, core hits) and a flat 14.5 s clock. v2.3 varies the
+closing speed, the interval (1.55/1.30/1.10), the answers to kill (5/6/7) and the SCRIPT itself.
+
+`WardenBand.shot` → `EntityKind.bolt`: a single-lane projectile aimed at the lane the player is
+standing in at the moment of launch, closing `wardenShotCloseBonus` (6 m/s) faster than the wall
+thrown beside it. **Rank 1 fires none** — the first Warden anybody meets is strictly the three shapes
+the track already taught. A shot shares the lance's ANSWER, so no fourth input was added to the game
+(decree 6); what differs is that a lance is a READ (it leaves a lane open by construction) and a shot
+is a REACTION (it follows you). `WardenBand.Answer` exists so the script's no-repeated-verb rule is
+checked on the verb rather than on the case, and cyclically — the script repeats, so its last entry
+is adjacent to its first.
+
+**This spent the layoutVersion bump, 11 → 12.** `wardenMaxSeconds` 14.5 → 17.5 forced
+`wardenArenaLength` 660 → 770, and the arena decides which spawns reach the deck. Note 18.1 s is a
+hard ceiling on the fight clock, not a preference: `(worldLength − wardenArmWindow) / boostSpeedMax −
+1.9`. Past it an arena would straddle two worlds. That ceiling is why *"too short and boring"* is
+answered with DENSITY (roughly double the hazards per fight) rather than duration.
+
+## D-034
+**The red is gone, and the hanging bar is a portcullis.** (S-013 — *"the wall it created that i had
+to crouch under was blocking the view of everything also i hate the red colour"*.)
+
+Both halves of that sentence are one problem. `0xFF3355` was painted as a flat saturated FILL across
+every surface a Warden owned, and the hanging bar was a solid `7.6 × 3.05 × 0.7` slab of it — 23.2 u²
+of opaque frontal area between the camera and every metre of track behind it.
+
+The replacement is a two-tone treatment rather than a new fill colour: a near-black body carries the
+MASS (the chasm's trick — read by silhouette, not hue) and a bright violet `0xC77BFF` edge carries
+the MEANING. Violet was already the Warden's channel on the craft's spars, so the fight now speaks
+one colour instead of two, and it is far in hue from both reserved meanings on the deck — gold gems
+(`0xFFD23D`, which share the arena with it) and shield cyan (`0x66E0FF`). The bar is rebuilt as a
+frame — bright hem on the kill line, header, mid rail, seven verticals — dropping frontal area
+23.2 → 11.6 u². **Half the occlusion is gone** and every opening is 0.79 u wide against a 1.0 u body,
+so "grille" never reads as "gap". The kill rule is untouched.
+
+## D-035
+**The approach, and the coaching.** (S-013 — *"i have no clue when its coming or what i have to do.
+if its my first time playing instead of being the designer i would be super confused."*)
+
+`Warden.metresToNextArena` is a pure function of distance — no state, no RNG, never called from the
+sim — driving a HUD banner that counts down from 240 m (~8 s). Until now the first thing that
+announced a Warden was the Warden, already armed and throwing; a fight that punctuates the run every
+2,400 m arrived as an ambush every single time.
+
+For a player's first three encounters MET (`Profile.wardensMet`, counted whether they win or lose —
+teaching that only retires on success nags the players who most need it to stop), the answer to
+whatever was last thrown is named in words. It renders in `HUDView.wardenPanel`, NOT as a popup:
+verified on the simulator, a popup lands at frame row 0.52, straight across the hazard it describes —
+the same reason `.wardenCoreHit` has had no popup since v2.2.
+
+## D-036
+**Three defects a hostile reader found in code written the same hour.** (S-013.)
+
+1. **A shield was being spent on something that cannot kill you.** `if shield` preceded
+   `else if e.fromWarden` in the collision cascade, so a held shield absorbed a thrown hazard: it
+   spent the player's rescue on a survivable stagger, deleted the throw WITHOUT paying a Warden
+   answer (so holding a shield made the fight strictly *longer*), and opened 0.4 s of invulnerability
+   in which the next hazard crossed the plane un-hit and collected a free answer from the `passed`
+   branch, which sits outside the `invulnT <= 0` gate. The branches are now ordered the other way.
+2. **The fight never escalated for a player who was losing it.** A landed hazard never calls
+   `registerWardenAnswer`, so `armourHits + coreHits` stays 0 — and a damage-only `throwLead` lerp
+   therefore pinned the lead at its widest, most forgiving value for exactly the player having the
+   most trouble. It now interpolates on `max(damage, throwCount / wardenLeadClockThrows)`.
+3. **A build break `swift test` structurally cannot see.** Adding `.shot` left the `switch band`
+   in `GameView.swift` non-exhaustive, and `GameView.swift` is not in `Package.swift` — 261 SPM tests
+   were green over a target that did not compile. Twelve sessions of "build and run it before you
+   claim anything works" earned its keep again.
+
+Separately, `Autopilot.closingRatio` compared a chrono-scaled `effectiveSpeed` against an *unscaled*
+`closeSpeed`, so the factors stopped cancelling under slow-mo: the bot read a closing chasm as nearer
+than it was, launched early into the catalogue's only two-sided window and air-slammed into the hole.
+Caught by the 200-seed solvability proof, at 1 seed in 200. `GameCore.hazardCloseScale` is now the
+single source both halves read.

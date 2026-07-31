@@ -16,6 +16,10 @@ enum SpawnCmd: Sendable, Equatable {
     case ring(d: Double, lane: Int, y: Double)
     case boostPad(d: Double, lane: Int)
     case chasm(d: Double)          // full-width gap, `d` is its CENTRE
+    /// A Warden's aimed shot (v2.3). **No pattern places one and none ever should** — a shot aims at
+    /// the lane the player is standing in, which only something with a state machine can know. It is
+    /// a `SpawnCmd` purely because `applyThrown` speaks that vocabulary.
+    case bolt(d: Double, lane: Int)
     /// Full-span wall hanging from the sky with no top: slide, and only slide (v2.2).
     ///
     /// **No pattern places one yet.** It exists as a `SpawnCmd` because that is the vocabulary

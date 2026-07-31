@@ -207,6 +207,12 @@ final class WardenTests: XCTestCase {
         XCTAssertEqual(Tuning.wardenThrowKind(.lance), .tall)
         XCTAssertEqual(Tuning.wardenThrowKind(.floor), .chasm)
         XCTAssertEqual(Tuning.wardenThrowKind(.curtain), .hangingBar)
+        // The fourth shape (v2.3). It shares the lance's ANSWER on purpose — read vs reaction — so
+        // the trichotomy of VERBS is unchanged and no fourth input was added to the game.
+        XCTAssertEqual(Tuning.wardenThrowKind(.shot), .bolt)
+        XCTAssertEqual(Set(WardenBand.allCases.map(\.answer)).count, 3,
+                       "a Warden must never demand a verb the running game has not taught")
+        XCTAssertEqual(WardenBand.shot.answer, WardenBand.lance.answer)
 
         // JUMP answers the chasm and is fatal against the hanging bar.
         let apex = Collisions.playerBounds(jumpY: Tuning.jumpV0 * Tuning.jumpV0 / (2 * Tuning.gravity),
@@ -270,9 +276,9 @@ final class WardenTests: XCTestCase {
                 guard ev.threw else { continue }
                 throwsSeen += 1
                 guard ev.throwBand == .lance else { continue }
-                XCTAssertNotEqual(ev.throwOpenLane, lane,
+                XCTAssertNotEqual(ev.throwLane, lane,
                                   "a lance left open the lane the player was standing in")
-                opens.insert(ev.throwOpenLane)
+                opens.insert(ev.throwLane)
             }
             XCTAssertGreaterThan(throwsSeen, 0, "lane \(lane): nothing was thrown at all")
             XCTAssertFalse(opens.isEmpty, "lane \(lane): no lance ever launched")
@@ -289,7 +295,13 @@ final class WardenTests: XCTestCase {
         let slowestArenaSpeed = min(Tuning.speedCap,
                                     Tuning.speedStart + 3 * Tuning.worldLength * Tuning.speedRamp)
         for rank in 1...Tuning.wardenRankCap {
-            let longestTravel = Tuning.wardenThrowLeadFar / slowestArenaSpeed
+            // **The denominator gained a term in v2.3.** A thrown hazard closes under its own power,
+            // so it clears the gap at `run + close` rather than at `run` — which is precisely what
+            // buys the shorter interval. Pricing the flight at the run speed alone (as this did
+            // until v2.3) would now over-estimate it by ~2× and demand an interval the fight does
+            // not need.
+            let closing = slowestArenaSpeed + Tuning.wardenCloseSpeed(rank: rank)
+            let longestTravel = Tuning.wardenThrowLeadFar / closing
             XCTAssertGreaterThan(Tuning.wardenThrowInterval(rank: rank), longestTravel, String(format:
                 "rank %d: %.2f s between throws against %.2f s of flight — two hazards demanding "
                 + "opposite verbs can be on the deck at once",
@@ -303,7 +315,14 @@ final class WardenTests: XCTestCase {
             Autopilot.drive(core)
             core.tick(Tuning.tickDt)
             ticks += 1
-            let ds = Set(core.activeObstacles.filter(\.fromWarden).map { Int($0.d * 100) })
+            // **Only UNPASSED throws count, and that is the invariant rather than a relaxation.**
+            // The claim is that two hazards demanding OPPOSITE VERBS are never live together; a
+            // hazard the player has already cleared demands nothing. It survives a few more metres
+            // only because `recycleObstacleZ` culls at +10 m behind the player, which at v2.3's
+            // shorter intervals now overlaps the next launch — a bookkeeping artefact, not two
+            // things to answer.
+            let ds = Set(core.activeObstacles.filter { $0.fromWarden && !$0.passed }
+                                             .map { Int($0.d * 100) })
             worstDistinctThrows = max(worstDistinctThrows, ds.count)
         }
         XCTAssertLessThanOrEqual(worstDistinctThrows, 1,
@@ -390,16 +409,44 @@ final class WardenTests: XCTestCase {
 
     /// The shape order is scripted, not rolled — so every player's first Warden is the same designed
     /// introduction and no fight is a dice roll.
+    /// The script is designed, and the design has three claims.
+    ///
+    /// **The adjacency rule is checked on the ANSWER and CYCLICALLY** (v2.3). Both halves of that
+    /// sentence were holes before `.shot` existed: checking the case would pass a `.lance` followed
+    /// by a `.shot` even though both are answered by the same lane change, and checking only
+    /// `1..<count` ignores the wrap — the script repeats, so its last entry is adjacent to its first
+    /// on every cycle after the first.
     func testTheShapeOrderIsDesignedNotRolled() async {
         for rank in 1...Tuning.wardenRankCap {
             let script = WardenEncounter.script(rank: rank)
-            XCTAssertGreaterThanOrEqual(script.count, 4)
-            for i in 1..<script.count {
-                XCTAssertNotEqual(script[i], script[i - 1],
-                                  "rank \(rank): two consecutive throws share a verb at index \(i)")
+            // Long enough to kill with: a script shorter than the answer count would repeat inside
+            // a single fight before the player had seen all of it.
+            XCTAssertGreaterThanOrEqual(script.count, Tuning.wardenAnswersToKill(rank: rank),
+                                        "rank \(rank): the script is shorter than the fight")
+            for i in script.indices {
+                let prev = script[(i + script.count - 1) % script.count]
+                XCTAssertNotEqual(script[i].answer, prev.answer, String(
+                    "rank \(rank): \(prev) → \(script[i]) at index \(i) demands the same answer "
+                    + "twice in a row (cyclically) — the fight stops alternating channels"))
             }
-            XCTAssertEqual(Set(script).count, 3, "rank \(rank) never uses all three shapes")
+            // Every rank exercises all three verbs, so no fight leaves one of the player's evasive
+            // inputs inert.
+            XCTAssertEqual(Set(script.map(\.answer)).count, 3,
+                           "rank \(rank) never uses all three verbs")
+            // Shots are the rank ladder: rank 1 must have none, and every later rank must have some.
+            let shots = script.filter { $0 == .shot }.count
+            if rank == 1 {
+                XCTAssertEqual(shots, 0, "the first Warden anyone meets must not shoot at them")
+            } else {
+                XCTAssertGreaterThan(shots, 0, "rank \(rank) never shoots")
+            }
         }
+        // …and the ladder is monotone in shots, which is the owner's "tougher on harder levels".
+        let shotsByRank = (1...Tuning.wardenRankCap).map { r in
+            WardenEncounter.script(rank: r).filter { $0 == .shot }.count
+        }
+        XCTAssertEqual(shotsByRank, shotsByRank.sorted(), "shot count must never fall with rank")
+        XCTAssertGreaterThan(shotsByRank.last ?? 0, shotsByRank.first ?? 0)
     }
 
     // MARK: - 4. determinism (iron rule 2)
@@ -554,7 +601,7 @@ final class WardenTests: XCTestCase {
         var out: [String] = []
         for i in 0..<4_000 {
             let ev = enc.step(Tuning.tickDt, playerLane: i % 3)
-            if ev.threw { out.append("\(ev.throwBand):\(ev.throwOpenLane)") }
+            if ev.threw { out.append("\(ev.throwBand):\(ev.throwLane)") }
         }
         return out
     }
@@ -576,6 +623,161 @@ final class WardenTests: XCTestCase {
             for o in core.activeObstacles where !o.fromWarden { seen[o.id] = ("\(o.kind)", o.d) }
         }
         return seen.keys.sorted().map { seen[$0]! }
+    }
+
+    // MARK: - v2.3: the hazards CLOSE, and only a Warden's do
+
+    /// The headline change. Owner, S-013: *"its not sending walls down the lane like i asked … the
+    /// walls he send come quicker like the trains from subway surfers"*.
+    ///
+    /// A thrown hazard must approach the player FASTER than the deck scrolls under it — i.e. its own
+    /// `d` must fall — or it is not being thrown at anybody, it is being placed.
+    func testAThrownHazardActuallyTravelsTowardThePlayer() async {
+        let core = wardenCore()
+        var ticks = 0
+        var measured = false
+        while core.warden != nil && ticks < 400_000 {
+            if let h = core.activeObstacles.first(where: \.fromWarden), h.closeSpeed > 0 {
+                let dBefore = h.d
+                let distBefore = core.distance
+                core.tick(Tuning.tickDt)
+                ticks += 1
+                guard let after = core.activeObstacles.first(where: { $0.id == h.id }) else { continue }
+                // Its absolute position moved TOWARD the player…
+                XCTAssertLessThan(after.d, dBefore, "a thrown hazard did not travel")
+                // …and the gap therefore closed faster than the player's own motion alone.
+                let gapClosed = (dBefore - distBefore) - (after.d - core.distance)
+                let bySpeedAlone = core.distance - distBefore
+                XCTAssertGreaterThan(gapClosed, bySpeedAlone * 1.2, String(format:
+                    "the gap closed at %.2f× the run speed — a wall the player merely runs into",
+                    gapClosed / max(1e-9, bySpeedAlone)))
+                measured = true
+                break
+            }
+            Autopilot.drive(core)
+            core.tick(Tuning.tickDt)
+            ticks += 1
+        }
+        XCTAssertTrue(measured, "no thrown hazard was ever observed in flight")
+    }
+
+    /// **Nothing the SPAWNER places may ever close**, which is what keeps the 200-seed solvability
+    /// proof and every daily-challenge golden meaningful. If this goes red, ordinary track has
+    /// silently become a different game.
+    func testOnlyAWardensHazardsEverClose() async {
+        let core = GameCore(seed: 1)
+        core.startRun(seed: 0xA11CE)
+        var ticks = 0
+        while core.mode == .play && core.distance < 5_400 && ticks < 400_000 {
+            Autopilot.drive(core)
+            core.tick(Tuning.tickDt)
+            ticks += 1
+            for o in core.activeObstacles where !o.fromWarden {
+                XCTAssertEqual(o.closeSpeed, 0,
+                               "a spawner-placed \(o.kind) is closing — ordinary track has changed")
+            }
+        }
+    }
+
+    /// The bot's distance→time conversion must be the IDENTITY on ordinary track, or its behaviour
+    /// there is no longer byte-identical and every seeded proof in the suite weakens at once.
+    func testTheBotsClosingConversionIsExactlyIdentityForOrdinaryObstacles() async {
+        let core = GameCore(seed: 1)
+        core.startRun(seed: 0xBEEF)
+        var ticks = 0
+        while core.mode == .play && core.distance < 2_000 && ticks < 200_000 {
+            Autopilot.drive(core)
+            core.tick(Tuning.tickDt)
+            ticks += 1
+            for o in core.activeObstacles {
+                XCTAssertEqual(Autopilot.closingRatio(o, core), 1.0,
+                               "closingRatio must be exactly 1 outside a fight")
+                XCTAssertEqual(Autopilot.effectiveArrival(o, core), o.d - core.distance,
+                               "effectiveArrival must be exactly the real gap outside a fight")
+            }
+        }
+    }
+
+    /// A shot AIMS: it takes the lane the player is standing in at the moment of launch, so standing
+    /// still is always wrong. The inverse of a lance, which never closes the lane you are in.
+    func testAShotAlwaysAimsAtTheLaneYouAreStandingIn() async {
+        for lane in 0...2 {
+            var enc = WardenEncounter(world: 9, runSeed: 0xC0FFEE)   // rank 3 — shots exist
+            var shots = 0
+            for _ in 0..<8_000 {
+                let ev = enc.step(Tuning.tickDt, playerLane: lane)
+                guard ev.threw, ev.throwBand == .shot else { continue }
+                shots += 1
+                XCTAssertEqual(ev.throwLane, lane, "a shot was not aimed at the player")
+            }
+            XCTAssertGreaterThan(shots, 0, "lane \(lane): no shot was ever fired at rank 3")
+        }
+    }
+
+    /// **A shield must not be spent on something that cannot kill you.** Ordered above the shield
+    /// branch in `stepObstacles` — see the note there. Before v2.3 a held shield absorbed a thrown
+    /// hazard, which spent the player's rescue, deleted the throw WITHOUT paying a Warden answer
+    /// (so holding a shield made the fight strictly longer), and opened an invulnerability window
+    /// in which the next hazard crossed the plane un-hit and collected a free answer.
+    func testAShieldIsNeverSpentOnAWardensHazard() async {
+        let core = wardenCore()
+        XCTAssertTrue(core.deployShield(), "the probe failed to arm a shield")
+        var ticks = 0
+        var absorbed = false
+        core.onFX = { if case .shieldAbsorbed = $0 { absorbed = true } }
+        // Never move: every hazard lands, so if a shield can be spent here it will be.
+        while core.warden != nil && ticks < 400_000 { core.tick(Tuning.tickDt); ticks += 1 }
+        XCTAssertFalse(absorbed, "a Warden's hazard consumed the player's shield")
+        XCTAssertTrue(core.shield, "the shield did not survive a fight it can play no part in")
+    }
+
+    /// The fight must escalate for a player who is LOSING it, not only for one who is winning.
+    ///
+    /// A landed hazard never registers an answer, so a damage-only lerp pinned `throwLead` at its
+    /// widest for exactly the player having the most trouble — the struggling player got the most
+    /// generous Warden and the fight never tightened.
+    func testTheFightTightensEvenWhenNothingIsLanding() async {
+        var enc = WardenEncounter(world: 3, runSeed: 0xD00D)
+        var first: Double? = nil
+        var last: Double = 0
+        var launches = 0
+        for _ in 0..<8_000 {
+            let ev = enc.step(Tuning.tickDt, playerLane: 1)     // never answers anything
+            guard ev.threw else { continue }
+            launches += 1
+            if first == nil { first = ev.throwLead }
+            last = ev.throwLead
+        }
+        XCTAssertGreaterThan(launches, 4, "not enough throws to measure escalation")
+        XCTAssertEqual(first ?? 0, Tuning.wardenThrowLeadFar, accuracy: 0.001)
+        XCTAssertLessThan(last, (first ?? 0) - 5, String(format:
+            "the lead only moved %.1f m across %d throws with zero damage dealt — a player who is "
+            + "missing everything never meets a harder Warden", (first ?? 0) - last, launches))
+    }
+
+    // MARK: - v2.3: the approach
+
+    /// The pre-arena warning is a pure function of distance: no state, no RNG, nothing that could
+    /// perturb a seeded run. Owner, S-013: *"i have no clue when its coming"*.
+    func testTheApproachWarningCountsDownToTheRightArena() async {
+        // Inside an arena there is nothing to warn about — the fight IS the signal.
+        XCTAssertNil(Warden.metresToNextArena(from: 2_400 + 10))
+        // From open track it points at the next Warden world and counts down monotonically.
+        var prev = Double.infinity
+        for d in stride(from: 0.0, to: 2_399.0, by: 37.0) {
+            guard let togo = Warden.metresToNextArena(from: d) else {
+                return XCTFail("no warning available at d=\(d)")
+            }
+            XCTAssertEqual(d + togo, 2_400, accuracy: 0.001, "the countdown must target world 3")
+            XCTAssertLessThan(togo, prev)
+            prev = togo
+        }
+        // Past its own arena, a Warden world points at the NEXT one, not back at itself.
+        let past = 2_400 + Tuning.wardenArenaLength + 20
+        XCTAssertEqual(past + (Warden.metresToNextArena(from: past) ?? -1), 4_800, accuracy: 0.001)
+        // And the warning window is long enough to be a build-up rather than a jump-scare.
+        XCTAssertGreaterThan(Tuning.wardenWarnDistance / Tuning.speedCap, 5.0,
+                             "the approach warning lasts under 5 s at top speed")
     }
 
     private func shift(_ cmd: SpawnCmd, to d: Double) -> SpawnCmd {

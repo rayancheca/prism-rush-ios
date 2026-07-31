@@ -74,6 +74,7 @@ struct HUDView: View {
             // — 1.6× wider than the entire ship — painted across it in full-saturation red against
             // the hull's desaturated grey. The player was reading the label instead of the boss.
             // Down here it is still centred and still unmissable, but the sky it describes is clear.
+            wardenInbound(snap)
             wardenPanel(snap)
             xpBar(snap)
         }
@@ -88,7 +89,9 @@ struct HUDView: View {
 
     // MARK: Wardens (v1.9)
 
-    private static let hazard = Theme.color(0xFF3355)
+    /// The Warden's hostile violet (v2.3, was `0xFF3355`). Matches the craft, its thrown hazards and
+    /// the rig, so the HUD and the deck name the same enemy in the same colour.
+    private static let hazard = Theme.color(0xC77BFF)
     private static let shieldHue = Theme.color(0x66E0FF)
     /// The calm tint for a state that is normal but not yet actionable — a reloading blast bank.
     /// Deliberately NOT `hazard`: having no ammo is an expected situation, and decree 3 says an
@@ -131,6 +134,49 @@ struct HUDView: View {
         }
     }
 
+    /// **THE APPROACH** (v2.3): a counting-down warning before the arena mouth.
+    ///
+    /// Owner, S-013: *"i have no clue when its coming … if its my first time playing instead of
+    /// being the designer i would be super confused."* Until now the first thing that announced a
+    /// Warden was the Warden — already armed, already throwing. There was no approach at all, so a
+    /// fight that punctuates the run every 2,400 m arrived as an ambush every single time.
+    ///
+    /// Driven entirely by `Warden.metresToNextArena`, a pure function of distance: no new Core
+    /// state, no RNG, nothing that can perturb a seeded run. It counts DOWN in metres rather than
+    /// simply appearing, because a number that visibly runs out is the part that answers "when".
+    ///
+    /// It sits in the same slot the fight's own panel will occupy, so the warning becomes the panel
+    /// rather than the two competing for the eye — and it disappears the instant the fight is live
+    /// (`metresToNextArena` returns nil inside an arena), so nothing is ever drawn twice.
+    @ViewBuilder
+    private func wardenInbound(_ snap: GameSnapshot) -> some View {
+        if snap.warden == nil,
+           let togo = Warden.metresToNextArena(from: snap.distance),
+           togo <= Tuning.wardenWarnDistance {
+            // Ramps 0 → 1 as the mouth approaches, so the warning grows rather than blinking on.
+            let urgency = 1 - togo / Tuning.wardenWarnDistance
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12, weight: .black))
+                Text("WARDEN AHEAD")
+                    .font(.system(size: 12, weight: .heavy, design: .rounded)).tracking(1.6)
+                Text("\(Int(togo)) m")
+                    .font(.system(size: 12, weight: .black, design: .rounded)).monospacedDigit()
+                    .opacity(0.85)
+            }
+            .foregroundStyle(Self.hazard)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(
+                Capsule().fill(.black.opacity(0.34))
+                    .overlay(Capsule().stroke(Self.hazard.opacity(0.30 + 0.5 * urgency), lineWidth: 1))
+            )
+            .padding(.bottom, 6)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Warden ahead in \(Int(togo)) metres")
+            .transition(.opacity)
+        }
+    }
+
     /// The encounter readout: what is left of the shield, and how much of the core is gone.
     ///
     /// Centre-top, below the score row, because during a fight this is the only thing that matters
@@ -140,6 +186,27 @@ struct HUDView: View {
         if let w = snap.warden, w.phase != .leaving {
             let broken = w.shieldFraction <= 0
             VStack(spacing: 5) {
+                // **THE COACHING** (v2.3). Owner, S-013: *"i have no clue … what i have to do. if
+                // its my first time playing instead of being the designer i would be super
+                // confused."* For a player's first `wardenCoachEncounters` fights, the answer to
+                // whatever was last thrown is named in words.
+                //
+                // It lives HERE rather than as a mid-screen popup for the same reason the hit-pip
+                // row does: popups are drawn at row 0.52, straight across the hazard they describe.
+                // Down here it is in the player's peripheral vision alongside the health readout,
+                // where a glance costs nothing.
+                //
+                // Reads `ProfileStore.shared` live in `body` rather than caching a flag into a
+                // `let` (G3), and the count is of encounters MET, so it retires itself after three
+                // fights whether or not the player won any of them.
+                if ProfileStore.shared.profile.wardensMet < Tuning.wardenCoachEncounters {
+                    Text(w.band.verb)
+                        .font(.system(size: 13, weight: .black, design: .rounded)).tracking(1.2)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(Self.hazard.opacity(0.28)))
+                        .transition(.opacity)
+                }
                 Text(broken ? "CORE EXPOSED" : "WARDEN")
                     .font(.system(size: 11, weight: .heavy, design: .rounded))
                     .tracking(1.6)

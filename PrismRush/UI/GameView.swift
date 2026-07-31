@@ -242,8 +242,12 @@ final class GameModel {
         // charge bank, so the encounter can be inspected without running 2,400 m and collecting
         // ~520 gems to earn one. Uses the same checkpoint path a real world-start would, so the
         // arena, the arm window and the suppression all behave exactly as they do in a live run.
-        if ProcessInfo.processInfo.environment["PR_WARDEN"] == "1" {
-            beginRun(fromWorld: Tuning.wardenEveryWorlds, seed: 7)
+        // `PR_WARDEN=2` / `=3` start at the SECOND or THIRD Warden instead, which is the only way to
+        // inspect a rank-2 or rank-3 fight without running 4,800–7,200 m: aimed shots do not exist
+        // at rank 1 by design, so `=1` can never show one.
+        if let rankArg = ProcessInfo.processInfo.environment["PR_WARDEN"], let rank = Int(rankArg),
+           (1...Tuning.wardenRankCap).contains(rank) {
+            beginRun(fromWorld: Tuning.wardenEveryWorlds * rank, seed: 7)
             core.debugFillWardenCharge()
         }
         // Debug: drop a shield just ahead AND deploy one now (so the HUD chip + in-world dome show).
@@ -629,10 +633,17 @@ final class GameModel {
         // Bespoke Warden synthesis belongs to the audio pass (PR-0456) — nothing in this program
         // can hear a sound, so inventing four new DSP voices unheard would be guesswork shipped.
         case .wardenArrived:
-            addPopup("WARDEN", color: Theme.color(0xFF3355), worldX: 0)
+            addPopup("WARDEN", color: Theme.color(0xC77BFF), worldX: 0)
             synth.play(.worldSweep)
             flash(0.4)
         case let .wardenThrew(band, _):
+            // NOTE: the first-time coaching does NOT live here. A popup would be drawn by
+            // `EffectsOverlay` at row 0.52 of the frame — inside the exact band the player is
+            // reading, which is why `.wardenCoreHit` below has no popup either. Verified on the
+            // simulator: "SWIPE DOWN TO SLIDE" landed straight across the approaching hazard it was
+            // describing. It is rendered by `HUDView.wardenPanel` instead, in the calm strip along
+            // the bottom, off the snapshot's own `warden.band`.
+            //
             // One cue per shape, and the pitch direction names the verb (Synth §Warden telegraphs).
             // The three voices survive the v2.2 rebuild unchanged and are now BETTER placed: they
             // fire when the hazard leaves the craft, so the sound and the object appear together
@@ -641,6 +652,11 @@ final class GameModel {
             case .floor:   synth.play(.wardenFloorCue)
             case .curtain: synth.play(.wardenCurtainCue)
             case .lance:   synth.play(.wardenLanceCue)
+            // Reuses the lance cue deliberately: a shot shares the lance's ANSWER, so the sound
+            // that already means "get out of a lane" is the honest one to fire. A bespoke shot
+            // voice belongs with the Warden audio pass (PR-0456) — nothing in this program can hear
+            // a sound, so inventing a fourth DSP voice unheard is guesswork shipped.
+            case .shot:    synth.play(.wardenLanceCue)
             }
         case .wardenCoreHit:
             // **No popup during the fight (v2.2).** `EffectsOverlay` draws popups at row 0.52 of the
@@ -678,8 +694,12 @@ final class GameModel {
         case let .stumbled(x, fromWarden):
             // The multiplier reset is the cost, so the call-out names it. "CLOSE ONE" would read as
             // praise — this is the same word the HUD chip uses, and it is a warning.
-            addPopup(fromWarden ? "HIT — ONE MORE ENDS IT" : "STUMBLE  ×1",
-                     color: Theme.color(0xFF3355), worldX: x)
+            // **The Warden copy was a lie and had been since D-028** (v2.2 made the boss unable to
+            // kill anybody; this string still threatened the run). Naming the real cost is also the
+            // clearer teach: a landed hazard is one answer the player did not get, and the fight is
+            // decided by how many they miss.
+            addPopup(fromWarden ? "HIT — IT SHRUGS IT OFF" : "STUMBLE  ×1",
+                     color: Theme.color(fromWarden ? 0xC77BFF : 0xFF3355), worldX: x)
             // Reuses the shatter, which is what a survivable hard knock already sounds like in this
             // game. A bespoke stagger voice belongs with the Warden audio pass (PR-0456) — nothing
             // in this program can hear a sound, so inventing one unheard is guesswork shipped.
@@ -927,6 +947,7 @@ final class GameModel {
             summary.distance = distanceDelta
             summary.nearMissCloses = closesThisRun
             summary.wardensDefeated = wardensDefeatedThisRun
+            summary.wardensMet = core.wardensMetThisRun
             summary.slicks = slicksThisRun
             summary.slides = slidesThisRun
             summary.bestStreak = core.bestStreak           // max-style: engine maxes

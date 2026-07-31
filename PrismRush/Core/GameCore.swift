@@ -28,8 +28,25 @@ struct CoreEntity {
     /// Thrown by a Warden rather than drawn by the spawner (v2.2). Three consequences, all of them
     /// the reason the flag exists rather than a lookup: inside an arena it can only ever STAGGER
     /// (the boss has no kill move), answering it damages the Warden, and the renderer tints it in
-    /// the Warden's own hazard red so the player can tell whose wall it is.
+    /// the Warden's own hazard colour so the player can tell whose wall it is.
     var fromWarden: Bool = false
+    /// Metres per second this entity travels TOWARD the player, on top of the track scroll (v2.3).
+    ///
+    /// **This is what "sending walls down the lane" means** (owner, S-013: *"its not sending walls
+    /// down the lane like i asked … the walls he send come quicker like the trains from subway
+    /// surfers"*). Until v2.2 every obstacle in the game — including a Warden's — was pinned to a
+    /// fixed `d` and the player simply ran into it. Nothing was ever launched AT anybody, so the
+    /// boss's "attack" was indistinguishable from ordinary track that happened to be red.
+    ///
+    /// A closing hazard is launched from further out and arrives sooner, which buys three things at
+    /// once: it visibly rushes (the Subway Surfers train read), the reaction window becomes a TIME
+    /// budget the rank ladder can tighten, and because it clears the deck faster the throw interval
+    /// can shrink without ever putting two opposite verbs on the deck at once.
+    ///
+    /// **Zero by default, and every spawner-placed obstacle leaves it zero** — so the seeded stream,
+    /// the 200-seed solvability proof and every daily-challenge golden are untouched by this field's
+    /// existence. Only `applyThrown` ever sets it.
+    var closeSpeed: Double = 0
 }
 
 /// The deterministic, renderer-agnostic game engine.
@@ -111,6 +128,8 @@ final class GameCore {
     @ObservationIgnored private(set) var obstaclesShattered: Int = 0
     /// Wardens killed this run — the meta layer banks this once, in `applyRunSummary`.
     @ObservationIgnored private(set) var wardensDefeatedThisRun: Int = 0
+    /// Wardens MET this run, won or lost (v2.3). Gates the first-time verb coaching.
+    @ObservationIgnored private(set) var wardensMetThisRun: Int = 0
     /// Warden bounty coins earned this run. Kept OUT of `gemCount` so a kill never inflates the
     /// run's gem stat, its gem missions or its per-gem XP — see the payout site in `stepWarden`.
     @ObservationIgnored private(set) var bountyCoins: Int = 0
@@ -188,6 +207,21 @@ final class GameCore {
         return v
     }
 
+    /// The factor applied to a closing hazard's OWN motion (v2.3).
+    ///
+    /// Chrono and only chrono: slow-mo is the promise that the world slows while the player's
+    /// reflexes do not, so a thrown hazard has to slow with it. A boost is the opposite — the player
+    /// chose to close the gap faster and the hazard's ground speed is none of their business — so it
+    /// is absent here and shows up in `effectiveSpeed` instead, where the two velocities simply add.
+    ///
+    /// **`advanceClosingHazards` and `Autopilot.closingRatio` must both read THIS.** They are two
+    /// halves of one arithmetic: the bot converts a real gap into a time-to-arrival by dividing by
+    /// the same total closing rate the simulation moves the hazard at. When they disagreed (the bot
+    /// briefly compared a chrono-scaled `effectiveSpeed` against an unscaled `closeSpeed`) the
+    /// factors stopped cancelling, the bot read a closing chasm as nearer than it was, launched
+    /// early into the one obstacle with a two-sided window, and slammed itself into the hole.
+    var hazardCloseScale: Double { chronoT > 0 ? Tuning.chronoFactor : 1 }
+
     /// Vertical launch velocity for a fresh/buffered jump — boosted while Super Sneakers is active.
     /// Read at the takeoff sites only; ballistic gem-arc/ring PLACEMENT (Patterns) deliberately
     /// never reads this, so the buff over-clears rather than perturbing the seeded track.
@@ -200,7 +234,8 @@ final class GameCore {
         let s = seed ?? .random(in: .min ... .max)
         rng = SplitMix64(seed: s)
         runSeed = s
-        warden = nil; wardenWorldDone = -1; wardenCharge = 0; wardensDefeatedThisRun = 0
+        warden = nil; wardenWorldDone = -1; wardenCharge = 0
+        wardensDefeatedThisRun = 0; wardensMetThisRun = 0
         blastWave = nil; blastsFired = 0; obstaclesShattered = 0
         spawner = Spawner()
         mode = .menu; distance = 0; scoreOffset = 0; speed = Tuning.menuSpeed; revivesUsed = 0
@@ -476,6 +511,7 @@ final class GameCore {
         guard mode == .play else { return }
         if warden == nil, let w = Warden.armableWorld(forDistance: distance), w != wardenWorldDone {
             warden = WardenEncounter(world: w, runSeed: runSeed)
+            wardensMetThisRun += 1
             emit(.wardenArrived(world: w))
         }
         guard var w = warden else { return }
@@ -488,7 +524,7 @@ final class GameCore {
         // consumes rng from the run's stream (iron rule 2) — the only draw is the open lane, and
         // that comes from the encounter's own derived generator.
         if ev.threw {
-            throwHazard(band: ev.throwBand, lead: ev.throwLead, openLane: ev.throwOpenLane)
+            throwHazard(band: ev.throwBand, lead: ev.throwLead, lane: ev.throwLane)
             emit(.wardenThrew(band: ev.throwBand, lead: ev.throwLead))
         }
 
@@ -513,15 +549,24 @@ final class GameCore {
     ///   `.lance`   → two `tall` walls with one lane open → change lane
     ///   `.floor`   → a `chasm` blown in the deck          → jump (with a two-sided window)
     ///   `.curtain` → a `hangingBar`                       → slide, and only slide
-    private func throwHazard(band: WardenBand, lead: Double, openLane: Int) {
+    private func throwHazard(band: WardenBand, lead: Double, lane openLane: Int) {
         let d = distance + lead
+        // Every member of one throw closes at the SAME rate, which is what keeps a lance's two walls
+        // bit-identical in `d` — `hasUnpassedThrownTwin` and the lance sweep both identify a pair by
+        // exact `Double` equality (see `advanceClosingHazards`).
+        let close = Tuning.wardenCloseSpeed(rank: warden?.rank ?? 1)
         switch band {
         case .lance:
-            for lane in 0..<3 where lane != openLane { applyThrown(.tall(d: d, lane: lane)) }
+            for lane in 0..<3 where lane != openLane { applyThrown(.tall(d: d, lane: lane), close: close) }
         case .floor:
-            applyThrown(.chasm(d: d))
+            applyThrown(.chasm(d: d), close: close)
         case .curtain:
-            applyThrown(.hangingBar(d: d))
+            applyThrown(.hangingBar(d: d), close: close)
+        case .shot:
+            // Fired FASTER than anything else the craft throws. A shot is the rank ladder's reaction
+            // test, and the extra closing speed is where the pressure comes from — the lead is the
+            // same, so the window is `wardenShotCloseBonus` shorter than the wall thrown beside it.
+            applyThrown(.bolt(d: d, lane: openLane), close: close + Tuning.wardenShotCloseBonus)
         }
     }
 
@@ -606,7 +651,33 @@ final class GameCore {
         blastWave = w.frontD >= w.limitD ? nil : w
     }
 
+    /// Advance everything travelling toward the player under its own power (v2.3).
+    ///
+    /// One pass over the whole pool BEFORE the collision loop, deliberately, for two reasons.
+    ///
+    /// 1. **The exact-equality invariants survive.** `hasUnpassedThrownTwin` and the lance sweep in
+    ///    `stepObstacles` both identify a throw's members by `o.d == e.d` on raw `Double`s. A lance's
+    ///    two walls are launched at one `d` with one `closeSpeed`, and this loop subtracts the same
+    ///    product from both in the same pass — bit-identical arithmetic, so they stay equal forever.
+    ///    Advancing them inside the collision loop instead would interleave the decrement with
+    ///    removals and make that far harder to see.
+    /// 2. Every obstacle has moved before ANY of them is tested, so a tick never resolves one hazard
+    ///    against a stale position and its twin against a fresh one.
+    ///
+    /// **Chrono scales it, boost does not, and that asymmetry is the point.** Slow-mo is the promise
+    /// that the world slows while the player's reflexes do not, so a thrown hazard has to slow with
+    /// the world or the power-up would quietly make the boss HARDER. A boost is the opposite: the
+    /// player chose to close the gap faster, and a hazard's own ground speed is none of their
+    /// business — the two velocities simply add.
+    private func advanceClosingHazards(_ dt: Double) {
+        let scale = hazardCloseScale
+        for i in activeObstacles.indices where activeObstacles[i].closeSpeed > 0 {
+            activeObstacles[i].d -= activeObstacles[i].closeSpeed * scale * dt
+        }
+    }
+
     private func stepObstacles(_ dt: Double) {
+        advanceClosingHazards(dt)
         let pb = Collisions.playerBounds(jumpY: jumpY, scaleY: sy)
         var i = 0
         while i < activeObstacles.count {
@@ -633,19 +704,25 @@ final class GameCore {
                 case .low: hit = Collisions.lowHit(playerBottom: pb.bottom, playerX: px, obstacleX: ox, z: z)
                 case .tall, .movingTall: hit = Collisions.tallHit(playerX: px, obstacleX: ox, z: z,
                                                                    playerBottom: pb.bottom, canVault: superSneakersT > 0)
+                // A shot resolves exactly like a wall in its lane, and deliberately so: the player
+                // already knows that rule, and a boss is the wrong place to teach a new collision.
+                // It is NOT vaultable — Super Sneakers is a jump buff, and a shot fired at your
+                // chest is not answered by being slightly higher.
+                case .bolt: hit = Collisions.tallHit(playerX: px, obstacleX: ox, z: z)
                 default: hit = false
                 }
                 if hit {
-                    if shield {
-                        // The grace window outlives the kill band: patterns 3/7/9 pair talls at the
-                        // same `d`, and the partner wall stays lethal for several more ticks.
-                        shield = false; invulnT = Tuning.invulnDuration; streak = 0; mult = 1
-                        flowStreak = 0   // taking a hit (even absorbed) breaks the flow
-                        emit(.shieldAbsorbed(x: px))
-                        activeObstacles.swapAt(i, activeObstacles.count - 1)
-                        activeObstacles.removeLast()
-                        continue
-                    } else if e.fromWarden {
+                    // **The Warden branch is tested BEFORE the shield, and the order is the fix**
+                    // (v2.3). A shield exists to absorb something that would otherwise END the run,
+                    // and inside an arena nothing can (D-028) — so letting it fire here was wrong
+                    // three separate ways at once. It spent the player's one rescue on a survivable
+                    // stagger; it deleted the throw WITHOUT paying a Warden answer, so holding a
+                    // shield made the fight strictly longer; and it opened `invulnDuration` (0.4 s)
+                    // of invulnerability during which the next hazard crossed the player plane
+                    // un-hit and collected a FREE answer from the `passed` branch below, which sits
+                    // outside the `invulnT <= 0` gate. Shields are deliberately left in arenas as
+                    // ammunition for what comes after the fight; they are not part of it.
+                    if e.fromWarden {
                         // **A WARDEN CAN NEVER KILL YOU (v2.2, D-028).** Not "forgives once", not
                         // "stumbles then kills" — never. This is the owner's instruction and it is
                         // the model every shipped runner boss uses: the boss is an OPPORTUNITY
@@ -668,6 +745,15 @@ final class GameCore {
                         // attack that just landed on you — credit for failing.
                         let throwD = e.d
                         activeObstacles.removeAll { $0.fromWarden && $0.d == throwD }
+                        continue
+                    } else if shield {
+                        // The grace window outlives the kill band: patterns 3/7/9 pair talls at the
+                        // same `d`, and the partner wall stays lethal for several more ticks.
+                        shield = false; invulnT = Tuning.invulnDuration; streak = 0; mult = 1
+                        flowStreak = 0   // taking a hit (even absorbed) breaks the flow
+                        emit(.shieldAbsorbed(x: px))
+                        activeObstacles.swapAt(i, activeObstacles.count - 1)
+                        activeObstacles.removeLast()
                         continue
                     } else if stumbleT <= 0,
                               Collisions.grazes(kind: e.kind, playerX: px, obstacleX: ox,
@@ -1003,21 +1089,28 @@ final class GameCore {
     ///
     /// Consumes no rng and does not touch `spawner`, so a fight still cannot perturb the seeded
     /// stream (iron rule 2; pinned by `WardenTests.testAFightCanNeverPerturbTheSpawnStream`).
-    private func applyThrown(_ cmd: SpawnCmd) {
+    private func applyThrown(_ cmd: SpawnCmd, close: Double) {
         let before = activeObstacles.count
         switch cmd {
         case let .tall(d, lane):
             activeObstacles.append(CoreEntity(id: takeId(), kind: .tall, lane: lane, d: d,
                                               x: Tuning.laneX[lane], baseY: 1.6, phase: 0,
-                                              passed: false, fading: false, fromWarden: true))
+                                              passed: false, fading: false, fromWarden: true,
+                                              closeSpeed: close))
         case let .chasm(d):
             activeObstacles.append(CoreEntity(id: takeId(), kind: .chasm, lane: -1, d: d, x: 0,
                                               baseY: 0, phase: 0, passed: false, fading: false,
-                                              fromWarden: true))
+                                              fromWarden: true, closeSpeed: close))
         case let .hangingBar(d):
             activeObstacles.append(CoreEntity(id: takeId(), kind: .hangingBar, lane: -1, d: d, x: 0,
                                               baseY: (Tuning.hangingBarKillBottom + Tuning.hangingBarKillTop) / 2,
-                                              phase: 0, passed: false, fading: false, fromWarden: true))
+                                              phase: 0, passed: false, fading: false, fromWarden: true,
+                                              closeSpeed: close))
+        case let .bolt(d, lane):
+            activeObstacles.append(CoreEntity(id: takeId(), kind: .bolt, lane: lane, d: d,
+                                              x: Tuning.laneX[lane], baseY: 1.6, phase: 0,
+                                              passed: false, fading: false, fromWarden: true,
+                                              closeSpeed: close))
         default:
             // A Warden throws exactly three things. Anything else is a programming error, and
             // silently ignoring it would produce a fight with an attack that never arrives.
@@ -1034,6 +1127,13 @@ final class GameCore {
         // is which of those spawns reach the deck — which is a layout change, hence layoutVersion 10.
         if Warden.suppresses(cmd) { return }
         switch cmd {
+        case .bolt:
+            // **The spawner may never place a shot.** A shot aims at the lane the player occupies
+            // at the moment of launch, which no pattern can know — a "pattern-placed bolt" would be
+            // a wall wearing a projectile's mesh, teaching the player that shots are readable in
+            // advance. It reaches the deck only through `applyThrown`. Trapped rather than ignored,
+            // for the same reason `applyThrown` traps the inverse case.
+            assertionFailure("a bolt reached the spawner path; only a Warden may fire one")
         case let .low(d, lane):
             guard obstacleCount(where: { $0 == .low }) < Tuning.capLow else { return }
             activeObstacles.append(CoreEntity(id: takeId(), kind: .low, lane: lane, d: d, x: Tuning.laneX[lane], baseY: 0.425, phase: 0, passed: false, fading: false))

@@ -36,6 +36,8 @@ struct Profile: Codable, Equatable, Sendable {
     /// here yet: phase 1 ships one Warden template, and a dictionary added before it has a consumer
     /// would be a schema guess.
     var wardensDefeated: Int = 0
+    /// Lifetime Wardens MET, killed or not — the gate for the first-time verb coaching (v2.3).
+    var wardensMet: Int = 0
     var bestStreak: Int = 0
 
     // Progression — highest world ordinal reached (enables level select / checkpoint start).
@@ -116,6 +118,7 @@ extension Profile {
         case coins, slowMoCharges, speedUpCharges, shieldCharges, headStartCharges, coinSurgeCharges
         case bestScore, totalRuns, totalDistance, totalGems, totalCoinsEarned, bestStreak
         case wardensDefeated
+        case wardensMet
         case maxWorldReached, ownedSkins, selectedSkin
         case lastDailyClaim, loginStreak, lastChestOpen
         case missionProgress, claimedMissions, achievementTier, dailyMissionDate
@@ -143,6 +146,7 @@ extension Profile {
         totalGems = try c.decodeIfPresent(Int.self, forKey: .totalGems) ?? d.totalGems
         totalCoinsEarned = try c.decodeIfPresent(Int.self, forKey: .totalCoinsEarned) ?? d.totalCoinsEarned
         wardensDefeated = try c.decodeIfPresent(Int.self, forKey: .wardensDefeated) ?? d.wardensDefeated
+        wardensMet = try c.decodeIfPresent(Int.self, forKey: .wardensMet) ?? d.wardensMet
         bestStreak = try c.decodeIfPresent(Int.self, forKey: .bestStreak) ?? d.bestStreak
         maxWorldReached = try c.decodeIfPresent(Int.self, forKey: .maxWorldReached) ?? d.maxWorldReached
         ownedSkins = try c.decodeIfPresent(Set<String>.self, forKey: .ownedSkins) ?? d.ownedSkins
