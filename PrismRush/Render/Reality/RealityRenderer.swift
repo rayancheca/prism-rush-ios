@@ -148,6 +148,7 @@ final class RealityRenderer: RendererPort {
     // hit, then the glass-shatter FX plays). Snapshot-driven so it can never get stuck on/off.
     private var shieldBubble: ModelEntity!
     private var stumbleAura: ModelEntity!   // v2.0: lit while a stumble leaves the player vulnerable
+    private var blastRing: ModelEntity!     // v2.2: the shockwave front, driven by snapshot geometry
     // Live craft position, mirrored from the last synced snapshot so FXEvents can land on it.
     private var wardenX: Float = 0
     private var wardenY: Float = Float(Tuning.wardenHoverY)
@@ -399,6 +400,26 @@ final class RealityRenderer: RendererPort {
             stumbleAura.isEnabled = reduceMotion || sin(elapsed * 44) > -0.35
         } else if stumbleAura.isEnabled {
             stumbleAura.isEnabled = false
+        }
+
+        // THE BLAST's travelling front (v2.2). `blastFrontZ` uses the entity sign convention
+        // (negative = ahead), and RealityKit's −z is into the screen, so the position is a straight
+        // negation exactly as every obstacle's is. It widens as it runs so the wave reads as
+        // expanding rather than as a hoop sliding down the track, and it dims toward the end of its
+        // reach so the player can see where the range stops. Never rotated: face-on IS the read.
+        if let fz = snap.blastFrontZ {
+            let travelled = Float(min(1, max(0, -fz / Tuning.blastRange)))
+            blastRing.position = SIMD3<Float>(Float(snap.playerX) * (1 - travelled), 1.35, Float(fz))
+            // 1.6 → 4.6 world units of radius. Tuned on the simulator against a first attempt at
+            // 2.6 → 7.0, which was wrong for a reason worth writing down: perspective already makes
+            // a ring near the camera enormous, so a scale curve that *also* starts wide paints a
+            // fat cyan hoop across the exact rows the player is trying to read (decree 6). Born at
+            // roughly the body's own width and grown just enough to hold its apparent size as it
+            // recedes, it reads as a wave leaving without ever hiding the track it is clearing.
+            blastRing.scale = SIMD3<Float>(repeating: 1.6 + 3.0 * travelled)
+            blastRing.isEnabled = true
+        } else if blastRing.isEnabled {
+            blastRing.isEnabled = false
         }
 
         // Dust kicked up during a slide — grounded OR mid air-slam — so it's unmistakable.
@@ -686,6 +707,30 @@ final class RealityRenderer: RendererPort {
             // still be shaking the frame while the player reads the obstacle that might kill them.
             if !reduceMotion { shake = max(shake, 0.70) }
             kickFOV(5)
+        // MARK: THE BLAST (v2.2)
+        case let .blastFired(x, y, chargeLeft):
+            // The muzzle: a hard forward-directed spray in the SKIN's colour, because this is the
+            // player's own act and decree 1 says the player's colour is the player's identity. The
+            // hazard red belongs to things that hurt you; this is the one thing you do to them.
+            particles.burst(x: Float(x), y: Float(y) + 0.7, z: 0, color: skinTrailColor,
+                            count: 34, power: 3.4, spread: 0.3, life: 0.42,
+                            velZ: -34, stretchZ: 2.6)
+            particles.burst(x: Float(x), y: Float(y) + 0.7, z: 0, color: cWhite,
+                            count: 14, power: 2.2, spread: 0.18, life: 0.3, velZ: -22)
+            // The last round in the bank kicks harder than the first two — the player should feel
+            // the difference between "I have more" and "that was it" without reading the meter.
+            let last = chargeLeft < Tuning.blastCost
+            if !reduceMotion { shake = max(shake, last ? 0.55 : 0.34) }
+            kickFOV(last ? 5 : 3)
+        case let .obstacleShattered(_, x, y, z):
+            // Debris where the wall WAS. Hazard red, because the thing that just came apart was a
+            // thing that was going to kill you — this is the only place the player sees that colour
+            // lose. Positive z bias throws it back toward the camera: the path opens toward you.
+            particles.burst(x: Float(x), y: Float(y), z: Float(z), color: cWardenHazard,
+                            count: 26, power: 4.6, spread: 0.5, life: 0.55, velZ: 9)
+            particles.burst(x: Float(x), y: Float(y), z: Float(z), color: cWhite,
+                            count: 10, power: 3.2, spread: 0.3, life: 0.34, velZ: 6)
+
         case let .died(x):
             // First (colored) burst shatters in the skin's own color; the white flash stays global.
             particles.burst(x: Float(x), y: 1, z: 0, color: skinTrailColor, count: 120, power: 7.5, spread: 0.55, life: 1.2)
@@ -833,6 +878,7 @@ final class RealityRenderer: RendererPort {
         ringPulse.isEnabled = false
         shieldBubble.isEnabled = false
         stumbleAura.isEnabled = false
+        blastRing.isEnabled = false
         for i in skids.indices { skidLife[i] = 0; skids[i].isEnabled = false }
         // Re-seed decor around 0. Checkpoint starts (distance > 0) self-heal on the first
         // update: the recycle-while loop walks every slot forward and restyles it once.
@@ -961,6 +1007,20 @@ final class RealityRenderer: RendererPort {
         stumbleAura.orientation = simd_quatf(angle: .pi / 2, axis: SIMD3<Float>(1, 0, 0))
         stumbleAura.isEnabled = false
         root.addChild(stumbleAura)
+
+        // THE BLAST's front (v2.2). Drawn as a real entity positioned from `snapshot.blastFrontZ`
+        // rather than as particles, for one reason: the shockwave IS the rule. Where the ring is
+        // drawn is exactly where the core has already destroyed things, so a player can learn the
+        // range by watching it. Particles drift with gravity and the world scroll (see
+        // `ParticleSystem.step`) and would draw the wave somewhere the sim never put it.
+        //
+        // Face-on to the track (no x-rotation, unlike `stumbleAura`) so it reads as a wall of force
+        // travelling away from you rather than a halo lying on the deck.
+        blastRing = ModelEntity(mesh: ProceduralMesh.torus(major: 1.0, minor: 0.10,
+                                                           majorSeg: 28, minorSeg: 6),
+                                materials: [UnlitMaterial(color: cWardenShield)])
+        blastRing.isEnabled = false
+        root.addChild(blastRing)
 
         // The rig itself must live under root — buildCharacter() only parents the body parts to
         // the rig. Without this line the whole character is orphaned and never rendered (this is

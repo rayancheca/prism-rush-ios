@@ -1,6 +1,19 @@
 import Foundation
 import Observation
 
+/// A live blast shockwave (v2.2).
+///
+/// Pure geometry in the distance domain — no RNG, no entity references, no renderer. It starts on
+/// the player's own plane and runs forward to `limitD`, shattering every destructible obstacle whose
+/// spawn distance it passes. Modelled in ABSOLUTE distance rather than relative `z` for the same
+/// reason every entity is: the world scrolls under the player, so an absolute anchor is the only one
+/// that stays put while the front travels.
+struct BlastWave: Sendable, Equatable {
+    var startD: Double    // where the front was born (the player's plane at the instant of firing)
+    var frontD: Double    // how far it has reached
+    var limitD: Double    // where it dies — `startD + Tuning.blastRange`
+}
+
 /// One live spawned thing inside the simulation (pre-snapshot, mutable).
 struct CoreEntity {
     var id: Int
@@ -79,8 +92,18 @@ final class GameCore {
     @ObservationIgnored private(set) var warden: WardenEncounter?
     /// The last world whose Warden is finished — stops an arena re-arming behind the player.
     @ObservationIgnored private(set) var wardenWorldDone: Int = -1
-    /// Charge bank, 0…1: earned one gem at a time, spent breaking a Warden's shield.
+    /// Charge bank, 0…1: earned one gem at a time, spent one BLAST at a time (v2.2). Still named
+    /// `wardenCharge` because it is still the Warden's ammunition — it is simply no longer *only*
+    /// that, which is the whole point: the meter now means something from the first gem of the first
+    /// run rather than from the first Warden 104 seconds later.
     @ObservationIgnored private(set) var wardenCharge: Double = 0
+    /// The shockwave in flight, or `nil`. At most one at a time — a second blast while one is
+    /// travelling simply replaces it, which is what the `guard` in `blast()` prevents anyway.
+    @ObservationIgnored private(set) var blastWave: BlastWave?
+    /// Blasts fired this run, and obstacles they destroyed. Run statistics only — nothing in the
+    /// simulation reads them, but the missions layer and the session log both want them.
+    @ObservationIgnored private(set) var blastsFired: Int = 0
+    @ObservationIgnored private(set) var obstaclesShattered: Int = 0
     /// Whether THIS encounter has already landed a shot on the player. Per-encounter and not a timer,
     /// which is the only shape that can deliver "stumble first, then kill": strikes are 1.05–1.20 s
     /// apart and any recovery window short enough to feel like a stagger expires before the next one
@@ -178,6 +201,7 @@ final class GameCore {
         rng = SplitMix64(seed: s)
         runSeed = s
         warden = nil; wardenWorldDone = -1; wardenCharge = 0; wardensDefeatedThisRun = 0
+        blastWave = nil; blastsFired = 0; obstaclesShattered = 0
         spawner = Spawner()
         mode = .menu; distance = 0; scoreOffset = 0; speed = Tuning.menuSpeed; revivesUsed = 0
         deathDistance = 0; usedCheckpoint = false
@@ -217,6 +241,11 @@ final class GameCore {
         if mode == .play { spawn() }
         stepPlayer(dt)
         stepWarden(dt)   // after the player has moved: a beam resolves against where the body IS
+        // BEFORE `stepObstacles`, and that ordering is the whole reliability of the verb: a wall the
+        // shockwave reaches on this tick must be gone before the collision pass looks for it, or a
+        // blast fired in time would still kill you. At `blastFrontSpeed` the front covers 1.25 m per
+        // tick, so anything inside the kill band when you fire is cleared on the very next step.
+        stepBlast(dt)
         stepObstacles(dt)
         stepGems(dt)
         stepPickups(dt)
@@ -257,6 +286,44 @@ final class GameCore {
         } else {
             jumpBuf = Tuning.jumpBuffer   // buffered: fires on landing
         }
+    }
+
+    /// **THE BLAST (v2.2)** — the game's first offensive verb, fired by a double tap.
+    ///
+    /// Spends `Tuning.blastCost` of the charge bank and launches a shockwave that destroys every
+    /// destructible obstacle inside `Tuning.blastRange` ahead. Returns false (and costs nothing) when
+    /// the bank is short, so the caller can fall through to a jump and the verb can never eat an
+    /// input.
+    ///
+    /// **The chasm is immune, and that is a rule rather than an omission**: you cannot knock down a
+    /// hole. It is the same carve-out the stumble already makes (`Collisions.grazes` returns false
+    /// for `.chasm`) and for the same reason — the chasm's answer is timing, and neither of the
+    /// game's two rescues is allowed to become "the chasm has a second answer".
+    ///
+    /// Consumes NO rng and touches no spawn state, exactly like `jump()` / `slide()` / the four
+    /// deploy verbs, so the seeded stream stays byte-identical and no `layoutVersion` bump is owed.
+    /// **A blast with nothing to hit is refused rather than wasted.** Without this, a reflexive
+    /// double tap on empty track — or, worse, anywhere inside a Warden arena, which `Warden.suppresses`
+    /// deliberately sweeps clear of obstacles — silently burns a third of the bank for no effect and
+    /// gives the player no way to learn that it did. Refusing costs them nothing: `handleGesture`
+    /// falls through to the jump, which is exactly what a single tap would have done.
+    private var hasBlastTarget: Bool {
+        let limit = distance + Tuning.blastRange
+        let floor = distance - Tuning.obstacleZHalf
+        for o in activeObstacles where o.kind.isBlastable && o.d > floor && o.d <= limit { return true }
+        return false
+    }
+
+    @discardableResult
+    func blast() -> Bool {
+        guard mode == .play, wardenCharge >= Tuning.blastCost, hasBlastTarget else { return false }
+        wardenCharge = max(0, wardenCharge - Tuning.blastCost)
+        blastWave = BlastWave(startD: distance - Tuning.obstacleZHalf,
+                              frontD: distance - Tuning.obstacleZHalf,
+                              limitD: distance + Tuning.blastRange)
+        blastsFired += 1
+        emit(.blastFired(x: px, y: jumpY, chargeLeft: wardenCharge))
+        return true
     }
 
     /// Manually deploy a banked slow-mo — the player-triggered power-up. Same effect as the chrono
@@ -513,6 +580,32 @@ final class GameCore {
         }
     }
 
+    /// Advance the shockwave and shatter what it reaches.
+    ///
+    /// The front sweeps a half-open interval `(startD, frontD]` exactly once, so an obstacle can
+    /// never be destroyed twice and one already behind the player when the trigger was pulled is
+    /// never touched. The wave dies the tick it reaches `limitD`, whether or not it hit anything.
+    private func stepBlast(_ dt: Double) {
+        // `.over` keeps ticking for the death decel, and a wave left travelling through it would go
+        // on demolishing the track behind a dead player — visible in the game-over camera drift.
+        guard mode == .play else { blastWave = nil; return }
+        guard var w = blastWave else { return }
+        w.frontD = min(w.limitD, w.frontD + Tuning.blastFrontSpeed * dt)
+
+        var i = 0
+        while i < activeObstacles.count {
+            let e = activeObstacles[i]
+            guard e.kind.isBlastable, e.d > w.startD, e.d <= w.frontD else { i += 1; continue }
+            activeObstacles.swapAt(i, activeObstacles.count - 1)
+            activeObstacles.removeLast()
+            obstaclesShattered += 1
+            if mode == .play { bonus += Tuning.blastScorePerObstacle * mult }
+            emit(.obstacleShattered(kind: e.kind, x: obstacleX(e), y: e.baseY, z: distance - e.d))
+        }
+
+        blastWave = w.frontD >= w.limitD ? nil : w
+    }
+
     private func stepObstacles(_ dt: Double) {
         let pb = Collisions.playerBounds(jumpY: jumpY, scaleY: sy)
         var i = 0
@@ -642,7 +735,7 @@ final class GameCore {
                 // Charge counts GEMS, never currency: the doubler and the boost multiply the coin
                 // payout, and letting them multiply Warden damage too would make a consumable the
                 // way to win a fight the design says only dodging can win.
-                wardenCharge = min(1, wardenCharge + Tuning.wardenChargePerGem)
+                wardenCharge = min(1, wardenCharge + Tuning.chargePerGem)
                 streak += 1
                 bestStreak = max(bestStreak, streak)
                 mult = clampI(1 + streak / Tuning.streakPerMult, 1, Tuning.multCap)
@@ -786,6 +879,7 @@ final class GameCore {
         activeObstacles.removeAll(keepingCapacity: true)
         activeGems.removeAll(keepingCapacity: true)
         activePickups.removeAll(keepingCapacity: true)
+        blastWave = nil   // else a wave from the previous scenario shatters the next one's props
         spawner.cursor = .greatestFiniteMagnitude
     }
 
@@ -823,6 +917,10 @@ final class GameCore {
         activeObstacles.removeAll()
         activeGems.removeAll()
         activePickups.removeAll()
+        // A shockwave in flight has nothing left to travel through, and leaving it live would draw a
+        // ring across a board that was cleared out from under it. The charge it cost is NOT refunded
+        // — it was spent, exactly as the Warden bank is (see `wardenWorldDone` above).
+        blastWave = nil
         spawner.cursor = distance + 70
         rebuildSnapshot()
     }
@@ -940,6 +1038,7 @@ final class GameCore {
             entities: entityScratch,
             warden: warden?.state(charge: wardenCharge, playerX: px),
             wardenCharge: wardenCharge,
+            blastFrontZ: blastWave.map { distance - $0.frontD },
             score: score, gems: gemCount, mult: mult, best: best
         )
     }

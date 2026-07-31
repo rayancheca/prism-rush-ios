@@ -179,6 +179,57 @@ enum Tuning {
     static let magnetGemXRate: Double = 7, magnetGemYRate: Double = 7   // y fast enough to reel in arc gems
     static let nearMissBonus: Int = 40, gemBaseScore: Int = 10
 
+    // MARK: - THE BLAST (v2.2) — the game's first offensive verb
+    //
+    // Until now every input in the game was evasion: three verbs, all of them "get out of the way".
+    // The owner's own idea closes that gap — *"maybe double tap sends a blast originating from the
+    // player that knocks things down and clears a path"* — and it is also the answer to a second
+    // problem, which is that the CHARGE meter appears 1.5 s into the first run anybody ever plays
+    // and its referent (a Warden) does not exist for another 104 seconds. **Charge is now ammo.**
+    // Gems fill it, a double tap spends it, and the meter means something from the first gem.
+    //
+    // **The input costs nothing, because the window it takes was already dead.** A tap is a jump and
+    // stays a jump — tap 1 fires `jump()` on the same frame it always did. A second tap inside
+    // `blastTapWindow` is the blast. That window is entirely inside the span where a second tap is
+    // ALREADY swallowed: a buffered jump only survives to touchdown if it is tapped within
+    // `jumpBuffer` (0.25 s) of landing, i.e. later than 0.565 s into an 0.815 s arc — so every tap in
+    // [0, 0.565 s] after a launch is discarded today. Taking [0, 0.30 s] of that costs the player
+    // nothing they could previously do. Pinned by `BlastTests.testTheDoubleTapWindowStealsNoLiveJump`.
+    //
+    // A blast with no charge falls through to today's `jump()`, so the verb can never eat an input.
+
+    /// Seconds after a tap during which a second tap reads as a BLAST rather than a jump.
+    /// 0.30 s is the iOS double-tap idiom and sits wholly inside the dead buffer span above.
+    static let blastTapWindow: Double = 0.30
+
+    /// Gems needed to fill the bank from empty. **240, down from v2.1's 520.** 520 was sized for a
+    /// bank that was spent once per Warden; a bank that is spent three times a minute has to refill
+    /// on a play-session timescale. At the solvability bot's measured collection rate (~637 gems by
+    /// 2,400 m ≈ 6 gems/s perfect, call it 2–3/s for a human) 240 gems is ~80–120 s to fill from
+    /// empty, i.e. roughly one blast every 27–40 s of good play.
+    static let chargeFullGems: Double = 240
+    static var chargePerGem: Double { 1.0 / chargeFullGems }
+
+    /// What one blast costs. A third of the bank → three shots when full, and the meter reads as
+    /// three pips rather than a percentage nobody can act on.
+    static let blastCost: Double = 1.0 / 3.0
+
+    /// How far ahead of the player the shockwave reaches, in metres of track. 46 m is ~1.4 s of
+    /// track at the speed cap and comfortably inside both the ~65 m readable lead (the backdrop
+    /// plane) and the 115 m spawn horizon, so a blast can never destroy something the player has
+    /// not been given a chance to see.
+    static let blastRange: Double = 46
+
+    /// How fast the front travels, in metres per second, in the WORLD frame. Fast enough to read as
+    /// a shot rather than a wave (the full 46 m in 0.31 s), slow enough that the shatters arrive as
+    /// a sequence and the player sees the path open.
+    static let blastFrontSpeed: Double = 150
+
+    /// Score per obstacle destroyed, before the multiplier. Deliberately well under `nearMissBonus`
+    /// (40): dodging is the skilful answer and must always pay better than spending ammo. Blasting
+    /// pays NO coins and NO streak — it is safety bought with a resource, not a flourish.
+    static let blastScorePerObstacle: Int = 15
+
     // MARK: - the coin faucet (v2.1, S-011 — see docs/agent/audits/AUDIT_011_ECONOMY.md)
     //
     // The owner: *"why am i getting so many coins. why would anyone spend 20$ on 40 coins if they
@@ -567,21 +618,15 @@ enum Tuning {
     static let wardenChargeDPS: Double = 16
     static let wardenChargeDrain: Double = 0.08
 
-    /// Gems needed to fill the bank from empty. Measured, not guessed: the solvability bot banks
-    /// ~637 gems by the first encounter at 2,400 m (24 seeds, min 586, max 686), so 520 fills a
-    /// well-run first act with margin and the 0.80 threshold lands at ~416 gems — reachable by
-    /// collecting, missable by ignoring. Charge is SPENT, so every later Warden must be re-armed.
-    static let wardenChargeFullGems: Double = 520
-    static var wardenChargePerGem: Double { 1.0 / wardenChargeFullGems }
-
     /// Charge granted per world skipped by a checkpoint / purchased start.
     ///
-    /// A checkpoint run begins with an empty bank, and an empty bank cannot break a shield — so
-    /// buying a start at a Warden world guaranteed that the first encounter withdrew. This grants
-    /// what a player would plausibly have banked reaching that distance: the bot collects ~637 gems
-    /// by world 3, i.e. ~0.41 of a bank per world, rounded up slightly so world 3 clears the ~0.744
-    /// threshold with a little margin rather than landing exactly on it.
-    static let wardenCheckpointChargePerWorld: Double = 0.27
+    /// A checkpoint run begins with an empty bank, i.e. with no ammo, which made a bought start at a
+    /// Warden world the one place in the game where you arrived at a fight unarmed. This grants what
+    /// a player would plausibly have banked reaching that distance. At `chargeFullGems` 240 and the
+    /// bot's measured ~212 gems per world, a world is worth ~0.88 of a bank; 0.34 is deliberately
+    /// well under that (a bought start is a shortcut, not a stockpile) while still handing over one
+    /// full blast per world skipped.
+    static let wardenCheckpointChargePerWorld: Double = 0.34
 
     /// How often a beam closes a SECOND lane as well as the player's own.
     ///

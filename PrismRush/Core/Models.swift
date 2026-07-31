@@ -28,6 +28,31 @@ enum EntityKind: Sendable, Equatable {
     case chasm      // full-width gap in the deck: be AIRBORNE across its whole span or fall (v1.8)
 }
 
+extension EntityKind {
+    /// Whether THE BLAST (v2.2) destroys this kind.
+    ///
+    /// The switch is deliberately exhaustive with no `default:` arm — this is one of the seven
+    /// places in `Core/` that must be told about a new `EntityKind`, and the compiler is the only
+    /// reliable way to be told. (See the note on `WardenEncounter` for the other six and for why a
+    /// silently-defaulted case is worse than a compile error.)
+    ///
+    /// **The chasm is immune by rule.** You cannot knock down a hole, and more to the point the
+    /// chasm is the catalogue's only two-sided timing window: giving it a second answer would undo
+    /// the one thing it was added to teach. `Collisions.grazes` makes exactly the same carve-out for
+    /// exactly the same reason. Collectibles are not "destroyed" either — a blast that ate the gems
+    /// in front of you would spend ammo to destroy the ammo.
+    var isBlastable: Bool {
+        switch self {
+        case .low, .tall, .movingTall, .bar, .splitBar:
+            return true
+        case .chasm:
+            return false
+        case .gem, .shield, .magnet, .doubler, .chrono, .superSneakers, .ring, .boostPad:
+            return false
+        }
+    }
+}
+
 /// One pooled entity's render state for a single frame.
 /// `z` is distance-relative to the player: negative = ahead of the player, positive = behind.
 /// `lane` is -1 for full-span entities (bars, chasms); for a `splitBar` it is the OPEN (safe) lane.
@@ -93,6 +118,10 @@ struct GameSnapshot: Sendable {
     /// the snapshot (not just inside `warden`) because the HUD meter must be readable BEFORE an
     /// encounter, which is the whole reason collecting gems matters early.
     var wardenCharge: Double
+    /// The live blast front's distance-relative `z` (negative = ahead), or `nil` when no shockwave
+    /// is travelling. Same sign convention as `EntityState.z`, so the renderer places it with the
+    /// same arithmetic it uses for every obstacle.
+    var blastFrontZ: Double?
     var score: Int
     var gems: Int
     var mult: Int
@@ -127,6 +156,7 @@ struct GameSnapshot: Sendable {
         entities: [],
         warden: nil,
         wardenCharge: 0,
+        blastFrontZ: nil,
         score: 0,
         gems: 0,
         mult: 1,
@@ -162,6 +192,14 @@ enum FXEvent: Sendable, Equatable {
     /// — and because only one of them is a boss telling you the next one is fatal.
     case stumbled(x: Double, fromWarden: Bool)
     case died(x: Double)
+
+    // MARK: THE BLAST (v2.2)
+    /// A double tap spent `Tuning.blastCost` and launched a shockwave. `chargeLeft` is the bank
+    /// AFTER the spend, so the HUD/audio can pitch the cue to how much ammo is left.
+    case blastFired(x: Double, y: Double, chargeLeft: Double)
+    /// The shockwave reached an obstacle and destroyed it. One per obstacle, in the order the front
+    /// passed them, so the renderer's shatters read as a path opening rather than one explosion.
+    case obstacleShattered(kind: EntityKind, x: Double, y: Double, z: Double)
 
     // MARK: Wardens (v1.9)
     case wardenArrived(world: Int)              // the craft drops in — the arena has begun

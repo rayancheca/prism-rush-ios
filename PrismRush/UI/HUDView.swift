@@ -90,28 +90,44 @@ struct HUDView: View {
 
     private static let hazard = Theme.color(0xFF3355)
     private static let shieldHue = Theme.color(0x66E0FF)
+    /// The calm tint for a state that is normal but not yet actionable — a reloading blast bank.
+    /// Deliberately NOT `hazard`: having no ammo is an expected situation, and decree 3 says an
+    /// expected situation never gets a red.
+    private static let dim = Theme.color(0x8C93B8)
 
-    /// The charge bank: gems collected become Warden fire rate.
+    /// The charge bank — **ammunition for THE BLAST** (v2.2).
     ///
-    /// It is on screen during ordinary running on purpose. Charge is the one system in the game
-    /// whose payoff arrives minutes after the input that earns it, so if the bar only appeared once
-    /// a Warden did, a player would meet their first encounter with no idea why their gun was slow
-    /// — and no way to learn. It stays a single thin rule rather than a labelled gauge so the calm
-    /// of the HUD survives (decree 6).
+    /// It used to read `CHARGE · 37%`, and a percentage was the wrong unit twice over. It appears
+    /// 1.5 s into the first run anybody ever plays, and until v2.2 the thing it fed (a Warden's fire
+    /// rate) did not exist for another 104 seconds — so a new player watched a bar fill for nearly
+    /// two minutes with no way to learn what it was for. And even during a fight, "37%" is not a
+    /// decision: nobody can act on a fraction of a gun.
+    ///
+    /// Charge is now ammo and this reads as ammo. The unit is ROUNDS — `⚡︎ ×2` — because rounds are
+    /// what the player spends, and the fractional remainder rides the chip's own progress rule so
+    /// the next round still visibly fills. Below one round it says `RELOADING`, which is the honest
+    /// word for a bar that cannot yet be spent, and it says it in the calm tint rather than the
+    /// hazard one: having no ammo is a normal state, not a failure (decree 3).
     @ViewBuilder
     private func chargeMeter(_ snap: GameSnapshot) -> some View {
         if snap.wardenCharge > 0.001 {
-            let full = snap.wardenCharge >= 0.999
-            StatusChip(tint: full ? Self.hazard : Self.shieldHue,
-                       label: full ? "CHARGED" : "CHARGE",
-                       progress: snap.wardenCharge) {
+            let rounds = Int((snap.wardenCharge / Tuning.blastCost).rounded(.down))
+            // Progress toward the NEXT round, so the bar always measures the thing it is filling.
+            // At the cap it pins full rather than snapping back to zero.
+            let toNext = min(1, (snap.wardenCharge / Tuning.blastCost) - Double(rounds))
+            let armed = rounds > 0
+            StatusChip(tint: armed ? Self.shieldHue : Self.dim,
+                       label: armed ? "BLAST" : "RELOADING",
+                       progress: snap.wardenCharge >= 0.999 ? 1 : toNext) {
                 Image(systemName: "bolt.fill").font(.system(size: 12, weight: .black))
             } value: {
-                Text("\(Int(snap.wardenCharge * 100))%")
+                Text(armed ? "×\(rounds)" : "\(Int(toNext * 100))%")
                     .font(.system(size: 13, weight: .black, design: .rounded)).monospacedDigit()
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Warden charge \(Int(snap.wardenCharge * 100)) percent")
+            .accessibilityLabel(armed
+                ? "Blast charges: \(rounds). Double tap to fire."
+                : "Blast reloading, \(Int(toNext * 100)) percent to the next charge.")
         }
     }
 

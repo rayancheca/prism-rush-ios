@@ -55,6 +55,11 @@ final class GameModel {
     /// True while the current run is today's shared challenge (revive is disabled — fair, shared
     /// track; checkpoint starts are structurally impossible, the entry point always seeds world 0).
     private(set) var isChallengeRun = false
+    /// Monotonic timestamp of the last play-surface tap, for the blast's double-tap chain (v2.2).
+    /// `@ObservationIgnored` because it changes on every tap and drives no view — observing it would
+    /// re-render the whole hierarchy on each jump. Seeded far in the past so the first tap of a
+    /// session can never chain.
+    @ObservationIgnored private var lastTapAt: Double = -.greatestFiniteMagnitude
     /// First-run tutorial gate (AUDIT D6-1): non-nil while the tutorial is interposed before a
     /// run. Holds the ORIGINAL deferred start (menu PLAY, the rail's DAILY RUSH cell, or Worlds'
     /// PLAY FROM HERE / world cards) so LET'S GO proceeds to the run the player actually chose;
@@ -93,6 +98,10 @@ final class GameModel {
     @ObservationIgnored private var wardensDefeatedThisRun = 0
     @ObservationIgnored private var slicksThisRun = 0
     @ObservationIgnored private var slidesThisRun = 0
+    /// Blasts fired this run (v2.2) — mirrored from the core for the run summary.
+    @ObservationIgnored private var blastsThisRun = 0
+    /// Edge latch so a blast that shatters five walls plays ONE shatter voice, not five.
+    @ObservationIgnored private var shatterVoicedThisBlast = false
     var nearMisses: Int { nearMissesThisRun }
 
     // Pre-run loadout (v1.5): transient arm-state toggled on the hub. Consumed at run start in
@@ -106,6 +115,9 @@ final class GameModel {
     @ObservationIgnored private let autoplay = ProcessInfo.processInfo.environment["PR_AUTOPLAY"] == "1"
     @ObservationIgnored private let demo = ProcessInfo.processInfo.environment["PR_DEMO"] == "1"
     @ObservationIgnored private let stumbleDebug = ProcessInfo.processInfo.environment["PR_STUMBLE"] == "1"
+    /// `PR_BLAST=1` (QA/screenshot capture): fire a blast every 1.6 s during autoplay.
+    @ObservationIgnored private let blastDebug = ProcessInfo.processInfo.environment["PR_BLAST"] == "1"
+    @ObservationIgnored private var blastDebugT: Double = 0
 
     // First-run contextual control hints (the just-in-time tutorial): the first time each obstacle
     // type approaches on a brand-new player's first run, a "SWIPE UP/DOWN/SIDE" prompt appears so
@@ -323,6 +335,20 @@ final class GameModel {
                 if self.stumbleDebug, self.core.mode == .play, self.core.stumbleT <= 0 {
                     self.core.debugStumble()
                 }
+                // PR_BLAST=1: fire THE BLAST on a cadence so an autoplay capture can show it.
+                // Deliberately driven from HERE and not from `Autopilot.decide` — the 200-seed
+                // solvability proof means "every pattern is survivable by dodging", and a bot that
+                // could delete a pattern instead would turn that into "survivable or destructible".
+                // `BlastTests.testTheSolvabilityBotNeverBlasts` is the guard; this hook keeps the
+                // verb capturable without touching it.
+                if self.blastDebug, self.core.mode == .play {
+                    self.blastDebugT += dt
+                    if self.blastDebugT >= 1.6 {
+                        self.blastDebugT = 0
+                        self.core.debugFillWardenCharge()
+                        self.core.blast()
+                    }
+                }
 
                 self.core.advance(realDt: dt)
                 self.updateTutorialHints(dt: dt)
@@ -455,6 +481,8 @@ final class GameModel {
         wardensDefeatedThisRun = 0
         slicksThisRun = 0
         slidesThisRun = 0
+        blastsThisRun = 0
+        shatterVoicedThisBlast = false
         statsRecorded = false
         newBestCelebrated = false
         // Teach controls in-context only on a genuine brand-new player's first run.
@@ -653,6 +681,36 @@ final class GameModel {
             // in this program can hear a sound, so inventing one unheard is guesswork shipped.
             synth.play(.shieldBreak)
             flash(0.3)
+        // MARK: THE BLAST (v2.2)
+        case let .blastFired(x, _, chargeLeft):
+            blastsThisRun += 1
+            shatterVoicedThisBlast = false
+            // **No popup for an ordinary blast.** The first build called out "BLAST · 2 LEFT" on
+            // every shot and it was wrong twice over on the simulator: it duplicated the HUD chip,
+            // which already reads `⚡ BLAST ×2` (decree 4 — nothing on screen should be decoration),
+            // and it printed cyan text across the middle of the frame at the exact moment the player
+            // is watching a cyan shockwave open a path through it (decree 6). The ring and the
+            // shatters ARE the feedback; the chip is the readout.
+            //
+            // Running dry is the one state change worth a word, because it is the one the player
+            // cannot infer from what just happened on screen.
+            //
+            // `.boostStart` is a rising whoosh, the closest existing voice to a shockwave leaving.
+            // A bespoke one belongs with the standing audio pass (PR-0456): nothing in this program
+            // can hear a sound, and inventing one unheard is guesswork shipped — the same call
+            // S-010 made for the stumble.
+            if chargeLeft < Tuning.blastCost {
+                addPopup("BLAST EMPTY", color: Theme.color(0x8C93B8), worldX: x)
+            }
+            synth.play(.boostStart)
+        case .obstacleShattered:
+            // ONE shatter voice per blast, not one per obstacle: a full-range blast can destroy
+            // five walls inside 0.31 s, and five overlapping glass breaks is noise, not feedback.
+            // This is the same edge-triggering `.slid` needed (v1.8) for the same reason.
+            if !shatterVoicedThisBlast {
+                shatterVoicedThisBlast = true
+                synth.play(.shieldBreak)
+            }
         case .died:
             flash(0.5)
             synth.play(.crash)
@@ -1015,16 +1073,41 @@ final class GameModel {
     }
 
     /// Translate a finished drag/tap into game input. 22pt threshold separates tap from swipe.
+    ///
+    /// **The tap is never delayed (v2.2).** A double-tap recogniser would have to hold the first tap
+    /// for its window before deciding, which is pure added latency on the game's most-used input —
+    /// 0.30 s against a readable lead of 1.97 s at the speed cap, i.e. 15% of the entire reaction
+    /// budget, on every jump in the game. So tap 1 fires `jump()` on the frame it arrives exactly as
+    /// it always has, and a second tap inside `blastTapWindow` fires THE BLAST instead of the jump
+    /// it would otherwise have buffered.
+    ///
+    /// Nothing is lost by that. A buffered jump only survives to touchdown if it is tapped within
+    /// `jumpBuffer` (0.25 s) of landing — later than 0.565 s into an 0.815 s arc — so the whole of
+    /// [0, 0.30 s] after a tap is input the game already discards. And when the bank is short,
+    /// `core.blast()` returns false and we fall through to the jump, so the verb can never eat a tap.
+    ///
+    /// The chain resets after each blast (tap → jump, tap → blast, tap → jump …) so a burst of taps
+    /// can never drain the bank, and a tap is only ever chained to the immediately preceding one.
     func handleGesture(_ t: CGSize) {
         let adx = abs(t.width), ady = abs(t.height)
         if max(adx, ady) < 22 {
             switch core.mode {
             case .menu: break    // the menu PLAY button starts a run
             case .over: break    // game-over uses explicit CONTINUE / RUN AGAIN / MENU buttons
-            case .play: core.jump()
+            case .play:
+                let now = ProcessInfo.processInfo.systemUptime   // monotonic; a wall clock can jump
+                if now - lastTapAt <= Tuning.blastTapWindow, core.blast() {
+                    lastTapAt = -.greatestFiniteMagnitude   // break the chain: the next tap jumps
+                } else {
+                    lastTapAt = now
+                    core.jump()
+                }
             }
             return
         }
+        // A swipe is a deliberate, different verb — it must not leave a live tap chain behind that a
+        // following tap could complete into a blast the player never asked for.
+        lastTapAt = -.greatestFiniteMagnitude
         guard core.mode == .play else { return }
         if adx > ady {
             core.changeLane(t.width > 0 ? 1 : -1)

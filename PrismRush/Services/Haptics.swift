@@ -13,6 +13,7 @@ final class Haptics {
 
     private var clock: Double = 0
     private var lastGem: Double = -1
+    private var lastShatter: Double = -1   // v2.2: rate-limits a multi-obstacle blast to one buzz
     private var prepareT: Double = 0
     var enabled = true
 
@@ -60,6 +61,18 @@ final class Haptics {
         case .died:
             notify.notificationOccurred(.error)
             heavy.impactOccurred()
+
+        // MARK: THE BLAST (v2.2)
+        //
+        // The only OUTGOING event in the whole table — everything else here is something happening
+        // TO the player. It gets `heavy` (the recoil) while a shatter gets `rigid` (the impact), so
+        // firing and connecting are two different sensations even though they land 20 ms apart.
+        case .blastFired:
+            heavy.impactOccurred(intensity: 0.95)
+        case .obstacleShattered:
+            // Rate-limited exactly as `.gemCollected` is: a full-range blast can shatter five walls
+            // inside 0.31 s, and five heavy taps in a third of a second is a buzz, not a signal.
+            if clock - lastShatter > 0.07 { rigid.impactOccurred(intensity: 0.7); lastShatter = clock }
 
         // MARK: Wardens (v1.9)
         //
