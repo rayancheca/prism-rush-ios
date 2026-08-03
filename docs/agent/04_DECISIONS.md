@@ -1007,3 +1007,102 @@ speaks one colour, and red returns at the exact moment the strike budget is spen
 Verified on screen at rank 2 and rank 3: three violet strikes, then a red frame and the honest
 warning, then either the shield absorbing the fatal one or `THE WARDEN GOT YOU` on the death panel —
 which is also new, because until now a run a boss ended looked exactly like clipping a wall.
+
+## D-042
+**A BOSS THAT DOES NOT REACT TO BEING HIT IS WEATHER. THE WARDEN DID NOT, AND THE CONSTANT THAT
+WAS SUPPOSED TO MAKE IT WAS WIRED TO THE OPPOSITE EVENT.** (S-015.)
+
+`Tuning.wardenHitRecoil` shipped in v2.2 with the doc comment *"How far it recoils backward when
+the core takes a hit — the visible consequence of a dodge."* Its one use was
+`Warden.swift:450`, `let recoil = flash * Tuning.wardenHitRecoil` — and `flash` is the **muzzle
+flash the craft emits when it THROWS** (`throwFlash` in the snapshot). So the only recoil in the
+game fired when the Warden *attacked*. Answering one of its hazards — the entire win condition —
+moved nothing on screen at all. Someone noticed in passing and wrote a code comment describing the
+throw behaviour (`:448-449`) without correcting the constant it contradicted, so the two have
+disagreed in the same file since.
+
+Split into two fields on two constants that cannot collapse into each other again:
+`wardenThrowKick` (2.2) rides `throwFlash` and preserves v2.2's behaviour exactly;
+`wardenHitRecoil` (3.4) rides a new `hitFlash`, set on **every** answered hazard — armour chips
+included, which previously produced no feedback of any kind — and decayed over
+`wardenHitFlashTime` (0.45 s, longer than the 0.35 s throw flash because a hit must survive being
+read while the player is still landing their own input).
+
+The rig banks the hull on **roll**. Axis choice is the same argument D-038 used for pitch: roll is
+the last channel nothing else on this rig uses, so "it got hurt" can never be misread as the
+nose-down pitch that means "it is about to throw". Composed over a held `aim` quaternion rather
+than replacing the orientation, so a hit landing mid-throw still flinches without unfreezing the
+yaw halt the telegraph depends on. Verified at 12 fps on a recorded rank-3 encounter: the craft
+visibly banks on contact and returns level between throws.
+
+**Taking damage reads louder than dealing it** (3.4 vs 2.2) on purpose. The player has one signal
+that they are winning and it has to beat the one saying the boss is working.
+
+## D-043
+**D-039 BUILT A STAKE AND DREW IT NOWHERE. `secondsRemaining` HAD BEEN COMPUTED EVERY FRAME SINCE
+v2.3 AND READ BY NOTHING.** (S-015.)
+
+Three additions to `HUDView.wardenPanel`, all presentation, no RNG:
+
+1. **The rank** (`WARDEN · III`). Five things differ by rank — throw interval, reaction window,
+   script length, hits-to-kill, and how many landed hazards you survive — and the player could
+   name none of them. Nothing on screen distinguished a rank-1 fight from a rank-3 one.
+2. **The clock.** A boss whose failure state is *it leaves with the bounty* was running a hidden
+   timer. Its last quarter takes **the Warden's violet, not red**: D-041 spent red down to exactly
+   one meaning and it stays spent — "it is about to escape" is a Warden-channel statement, so it
+   takes the Warden's channel (D-034).
+3. **The strike budget, as dots.** D-039 gave the fight a per-encounter life count and the only
+   time it appeared on screen was one red popup on the very last survivable hit; before that the
+   player could not know the number existed. Dots rather than the wide capsules used for damage the
+   player *deals* — the two rows are opposite in meaning and must not be confusable at a glance.
+   **Absent entirely at rank 1**, where `strikesSurvived` is `nil` because that Warden cannot kill.
+   The absence is the teaching signal and must not be faked with greyed-out pips.
+
+## D-044
+**THE CHASM WAS SIZED AGAINST THE WRONG REFERENCE: AN OBSTACLE HAS TO COVER THE LANES, A HOLE HAS
+TO COVER THE FLOOR.** (S-015. Owner: *"the whole in the ground doesnt even look like a whole as it
+doesnt een cover the whole ground."*)
+
+Every visual part of the chasm was 7.6 wide, and `RealityRenderer.swift:214` says why —
+*"3.8 either side, matching the bar mesh"*. The bar mesh is an obstacle; it only has to span the
+three lanes. The deck's neon cross-rungs are **9** (`|x| ≤ 4.5`), so **0.7 u of lit rung survived
+on each shoulder of the void for its whole 8 m**. The grid did not stop; it got a dark patch
+painted in the middle of it. Both numbers now derive from one `RealityRenderer.deckHalfWidth` so
+they cannot drift apart again.
+
+Gameplay is untouched and provably so: `Collisions.chasmHit(playerY:z:)` takes no `x` at all, so
+the chasm was always lane-agnostic and only its *picture* was narrow.
+
+Two things this does NOT fix, both confirmed by a hostile re-read and left deliberately for a pass
+that can be judged on screen: the well geometry is **completely invisible** (an unbroken 16-wide
+ground plane at y −0.02 sits above it, and the chasm's own opaque lid at y +0.045 covers the mouth
+regardless), and the lid at `0x07060E` is chromatically indistinguishable from the deck at
+`white 0.02`, so the hole reads only as *"the grid is missing here"* and never as a dark hole
+against a lighter floor.
+
+## D-045
+**"THE PYRAMID RENDERS IN FRONT OF THE GROUND" IS NOT A DEPTH BUG — THERE WAS NO GROUND OUT THERE
+TO OCCLUDE IT.** (S-015.)
+
+Nothing in the renderer sets `ModelSortGroup`, `renderingOrder`, `.depthTest`, `readsDepth`,
+`writesDepth` or `faceCulling` — grep returns NOT FOUND across `PrismRush/`. Every material is an
+opaque `UnlitMaterial` on RealityKit's default depth state. **Draw order was always correct.**
+
+The only floor in the scene was a 16-unit ribbon (`|x| ≤ 8`) while the frustum sees out to
+`|x| ≈ 23` at the backdrop. All twelve world skies are authored as if an infinite floor existed at
+y = 0 — they park ridges, dune cards, planet limbs and the volcano *below* zero and rely on the
+floor to clip the overhang. Anything wider than 8 therefore had its underside drawn straight
+against the void, terminated by a hard horizontal cut **below** where the deck's far edge projects.
+That reads as the backdrop standing in front of the ground. Solar Sands' pyramids are the clearest
+case: they stand at `|x| = 8.4…12.5`, entirely beyond the old floor edge, on nothing at all.
+
+Fixed with an **invisible occluder apron** — a second 70-wide plane 0.01 below the deck, same
+near-black, chosen over widening the lit deck because it changes nothing where the deck already
+covers and merely continues the same value outward. Verified A/B on Solar Sands at 1,600 m.
+
+**It does not fix elements that straddle y = 0 INSIDE the lane corridor**, which are genuinely
+nearer than the deck behind them: Ashfall's volcano (base y −6.5…−4.5, half-extent to 10.2, near
+corner projecting 24 pt below the deck's far edge) and Orbital's planet limb (centre y −6.46,
+r 11.66, cutting the deck across `x ∈ [−8, 2.21]`). Those need their placement moved, not an
+occluder. Per-element verdicts for all twelve worlds:
+`docs/agent/audits/scratch/s015_r4_zorder.md` §4.

@@ -112,9 +112,11 @@ with a decree, the doc is wrong — amend the doc, never "ship the doc". Current
    `DailyChallenge.layoutVersion`** (goldens pinned in `DailyChallengeTests` **and** in
    `MissionsTests.testTodaysChallengeSeedMatchesUTCGoldens`, which pins the same seeds from the meta
    layer and is easy to miss). Consuming one extra `rng.unit()` anywhere in the spawn path silently
-   changes every seeded run. **Currently at layoutVersion 11** (v2.1, S-011 — the unlock ladder
-   pulled forward to 150/350/600/900/1,200 m and the moving-wall swing made permanent); a v12 pin is
-   pre-armed and unspent.
+   changes every seeded run. **Currently at layoutVersion 12** (v2.3, S-013 — `wardenArenaLength`
+   660 → 770, which changed which spawns survive `apply` even though the RNG stream is
+   byte-identical); the **v13** pin is pre-armed and unspent at `0x9E49_3424_C18A_59C5`. *(This line
+   claimed "layoutVersion 11, a v12 pin is pre-armed" until S-015 — v12 had already been spent two
+   sessions earlier. Check `DailyChallenge.seed`'s default argument, not this comment.)*
    Derive goldens in Python from the SplitMix64 constants, never read them off the Swift they pin —
    reproduce the existing pins first, then trust the new ones. A green bot proves nothing if it
    never MET the hazard: `SolvabilityBotTests.testTheSoakActuallyDrivesTheBotAcrossChasms` is the

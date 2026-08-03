@@ -4,9 +4,43 @@
 > wins** and the other file gets fixed. That includes `state.md` and `README.md` at the repo root,
 > which are the project's human-facing history, not the agent's source of truth.
 
-- **Last written by:** session 014 (2026-08-03) — **THE WARDEN, made able to kill you, and its arena
-  made a place.** One commit, `f95363a` (`PR-0462`). Recovery tag `pre-s014`. Decisions **D-039**
-  (lethality), **D-040** (the arena), **D-041** (the red is spent, not deleted).
+- **Last written by:** session 015 (2026-08-03) — **the owner opened a broad mandate mid-session and
+  four of his named defects were root-caused; three are fixed and verified on the simulator.** Two
+  commits, `1ad384c` (`PR-0463`) and `2513c30` (`PR-0464`). Recovery tag `pre-s015`. Decisions
+  **D-042** (the Warden reacts to damage), **D-043** (the fight's stake is drawn), **D-044** (the
+  chasm covers the floor), **D-045** (the backdrops stand on ground).
+- **EVERYTHING IS NOW PUSHED TO GITHUB.** S-015 pushed `e42ac8b..b95f6d4` — 17 commits reaching back
+  to S-010 that had only ever existed locally — on the owner's instruction. Keep pushing.
+- **THE OWNER'S S-015 MANDATE IS THE GOVERNING DOCUMENT**, verbatim in
+  `docs/agent/audits/scratch/s015_mandate.md`. Headline: *"warden needs a lot of work … many many
+  brainstorming sessions and passes and reviews and tests and changes … think about every single
+  aspect of it and perfect it … use as many references as you need from other games. copy other
+  games if you have to its fine … we still have a lot of passes for all aspects of the game."*
+  Four named defects, all now root-caused with `file:line` evidence:
+  **R1** ~15 s of dead air after the Warden — **measured at 14.75 s, still OPEN**;
+  **R2** the Warden opens its world instead of climaxing it — **root-caused, still OPEN**;
+  **R3** the hole did not cover the ground — **FIXED** (D-044);
+  **R4** the pyramid rendered in front of the ground — **FIXED** (D-045).
+- **R1 AND R2 ARE THE SAME BUG AND THE NEXT SESSION'S ONE JOB.** The arena is 770 m of an 800 m
+  world, starts at offset **0.0 m**, and the fight only uses ~297 m of it. `Warden.suppresses` keys
+  on `isArena(d)` — a pure distance function that does not know whether the encounter is still
+  alive — so after the kill the deck stays deliberately empty for **473.3 m = 14.75 s**. The owner
+  said "a good 15 seconds"; it is exactly that. Measured independently on the simulator too:
+  withdrawal at 2,851 m, first obstacle at ~3,121 m. Full arithmetic + fix + blast radius in
+  `docs/agent/audits/scratch/s015_r1_deadair.md` and `…_r2_placement.md`.
+- **266 SPM tests green AND 285 Xcode tests green** (273 unit + 12 XCUITest, run after both
+  commits). Goldens included — nothing this session moved the RNG.
+  `DailyChallenge.layoutVersion` is **STILL 12**; the pre-armed **v13 golden is still UNSPENT** at
+  `0x9E49_3424_C18A_59C5`, and R1+R2 should spend it together in one bump.
+- **Six investigations, each adversarially verified, are on disk** at
+  `docs/agent/audits/scratch/s015_*.md`. `s015_r5a_fightdesign.md` is a 697-line exhaustive
+  inventory of the Warden plus **thirteen ranked changes W1–W13** with code seams, borrowed-from
+  game references, and RNG risk. **W1 and W2 are done (D-042, D-043). W3–W13 are the roadmap the
+  owner asked for — start there, do not re-derive it.**
+- **The boss does not own the frame, now with numbers.** At rank 3 the world-9 horizon ring is
+  **13.63% of the frame at L\* 76.1**; the entire Warden craft is **1.82%**. Craft rim vs that ring
+  is **1.61:1** contrast — below even the 3:1 non-text floor. The wallpaper outweighs the boss
+  7.5× in area and beats it on luminance. `s015_r5b_presentation.md`.
 - **266 SPM tests green** (was 261). Simulator build green. **Every claim below was verified by
   running the app**, at all three Warden ranks.
 - **SOMEBODY FINALLY PLAYED THE GAME.** Thirteen sessions verified it with `Autopilot` (perfect
