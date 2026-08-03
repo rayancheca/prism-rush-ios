@@ -1140,3 +1140,224 @@ preloading (RealityKit's loaders are async and this game must not hitch), and an
 the absence of assets.
 
 Full mandate, verbatim and decomposed into M1–M10: `docs/agent/audits/scratch/s016_mandate.md`.
+
+## D-047
+**THE R1 FIX AS DESIGNED BREAKS DETERMINISM. THE DEAD AIR IS THE CONTAINMENT MARGIN, AND YOU CANNOT
+DELETE IT WITHOUT PAYING FOR IT SOMEWHERE.** (S-016. Not implemented — this is the reason.)
+
+S-015 root-caused R1 (14.75 s of empty deck after the Warden) and prescribed the obvious fix: AND
+`Warden.suppresses` with encounter liveness at `GameCore.swift:1220`, so obstacles resume when the
+*fight* ends instead of at a fixed distance. S-016 designed it in detail and then two independent
+agents killed it, converging from different directions:
+
+> **The fight's end distance is a function of player behaviour** — how many hazards were answered
+> versus landed. Gate suppression on liveness and *which patterns survive `apply` becomes
+> player-dependent*, so the deck stops being a pure function of the seed.
+
+That is not a test problem, it is **iron rule 2's headline sentence** ("a seed must fully determine a
+run") and it is the **Daily Challenge's entire shipped promise** — the same track for every player on
+a date (`DailyChallenge.swift:5-7`, `MissionsTests.swift:194-197`). `GameCore.freeLaneNear`
+(`:513-532`) reads `activeObstacles`, so *which cadence power-ups drop* would go player-dependent too.
+`WardenTests.testAFightCanNeverPerturbTheSpawnStream` (`:586-597`) goes red **by construction**, and
+it is right to.
+
+Note the trap: `RNGTests.runHash` would stay green because the Autopilot is deterministic, so
+`DailyChallengeTests.testSameDailySeedYieldsIdenticalRun` would keep passing **while the property it
+names is false**. It also runs only 10,000 ticks ≈ 1,773 m and the first arena is at 2,400 m, so it
+structurally cannot observe an arena at all.
+
+### The actual shape of the problem
+
+Three properties, and you may have any two:
+
+| | wants |
+|---|---|
+| **containment** — no obstacle ever shares the deck with a fight | a window sized for the WORST fight (698.4 m boosted, 607.7 m realistic clock-out) |
+| **no dead air** | a window sized for the ACTUAL fight (296.7 m clean rank-1 kill) |
+| **determinism** | a window that does not depend on the player |
+
+The 473 m of dead air *is* the gap between the worst fight and a good one. It is the price of
+containment, paid in advance, every time.
+
+### Recommendation for the next session (not yet ruled on)
+
+**Keep determinism** — it is an iron rule and a shipped promise, and it is the only one of the three
+a player can catch us lying about. Then buy the dead air down from *both* ends:
+
+1. **Offset the arena 200 m into the world** (`Tuning.wardenArenaOffset`). This is R2, it is
+   independent of R1, it costs nothing in determinism, and the arithmetic is settled — see D-048.
+2. **Shrink `wardenArenaLength` toward the realistic worst rather than the boosted theoretical
+   worst.** At 480 m a clean rank-1 kill leaves ~183 m ≈ 5.7 s of tail instead of 14.75 s. The cost
+   is that a **clock-out** (567.8 / 607.7 m — a player who lands nothing) would overrun and meet
+   obstacles while the craft is still on screen. That is a deliberate amendment to
+   `WardenTests.testAnEncounterCanNeverOutrunItsArena`, and it must be made as an explicit product
+   decision with the solvability bot re-proving fairness — **not** by quietly widening the bound.
+3. **Fill what remains with the victory outro (W3).** 5.7 s of designed aftermath — the craft
+   breaking up, the arena shell retracting, the deck relighting, a kill stamp — is a resolution beat.
+   14.75 s of gem field is dead air. **W3 carries no layout risk at all and can ship on its own.**
+   Design: `docs/agent/audits/scratch/s016_outro.md`.
+
+If a future session still wants liveness-gated suppression, the honest version is to make it apply
+**only outside the Daily Challenge**, and to replace `testAFightCanNeverPerturbTheSpawnStream` with a
+test asserting the property that survives — that the *command stream `Spawner.fill` emits* is
+player-independent. That needs a trace hook on `apply`'s input, which does not exist today
+(`GameCore`'s debug hooks at `:1079-1112` observe none of it).
+
+## D-048
+**THE ARENA OFFSET IS SETTLED AT 200 m, AND IT DOES NOT NEED THE FIGHT TO MOVE.** (S-016.)
+
+R2 ("the warden shouldnt come at the very beggining of a world") is separable from R1 and much
+cheaper. Arenas begin at offset **0.0 m** into worlds 3/6/9 by construction and by asserted test
+(`Warden.swift:491` states it as intent; `WardenTests.swift:32` pins it) — so the palette crossfade
+and the Warden's arrival fire on the *same tick*, and the first hazard lands ~0.9 s later while the
+~1.67 s fade is still running.
+
+Two prior numbers for the delay budget were both wrong, and a third is right:
+
+- S-015's R2 doc said **41.6 m** (measured against `worldLength` 800). Wrong — that is not the pinned
+  inequality.
+- Its hostile verifier said **11.6 m** (against `wardenArenaLength` 770). Right *for the design R2 was
+  describing* — a delayed ARM with the arena still anchored at the world head — and wrong as a general
+  ceiling.
+- The real answer is **740 m**, via an option neither document had: **capture `arenaStart` as
+  encounter state at arm time** instead of re-deriving it from `floor(d/800)` on every query. The only
+  thing that then needs to stay world-local is the 60 m ARM window, so the no-straddle constraint
+  collapses from `X + 770 ≤ 800` to `X + 60 ≤ 800`. Containment is untouched — a rigid-body move
+  cancels the offset out of `WardenTests.swift:628` — so **no threshold is lowered and no test is
+  weakened.** Full adjudication: `docs/agent/audits/scratch/s016_budget.md` §2–§5.
+
+**200 m** buys 6.67 s at world 3 and 6.06 s at worlds 6/9 — the crossfade finishes, the world gets
+~5 s of ordinary track with real obstacles on it, then the mouth gate. It also fixes for free the
+worst instance of R2, which is not the debug hook but the **paid checkpoint start**: buying a world-3
+start currently opens the run standing in the arena mouth with the Warden arming on tick 1.
+
+**Rejected: deferring the world crossfade while a fight is live** (the "Warden as the bridge between
+worlds" idea in the S-016 handoff). At X = 200 no clean kill comes within 300 m of the boundary — it
+would fire *only* when the player loses on the clock, delivering "the new world bursts in as the
+Warden dies" exclusively in the runs where the Warden does not die. Break-even is X ≥ 468.6 m. It
+also cannot be spelled the obvious way: `stepWorld` (`GameCore.swift:485-490`) is **edge-triggered on
+`wn > maxWorld`**, so skipping the block does not defer the world change, it *loses* it forever.
+Detail: `docs/agent/audits/scratch/s016_world-deferral.md`.
+
+**Also found while proving this, and worth fixing in whatever PR touches these constants:**
+`Tuning.swift:793-798` computes the `wardenMaxSeconds` ceiling as `(800 − 60)/36 − 1.9 = 18.1 s`. The
+division is wrong (720/36 instead of 740/36) *and* it is measured against the wrong constant. The
+real ceiling against the pinned bound is `(770 − 60)/36 − 1.9 = **17.822 s**`. The comment advertises
+0.6 s of headroom where there is 0.32 s, and names a "wall" at 18.1 that is already past the real
+one — a future session raising `T` to 18.0 on the strength of that comment would turn
+`WardenTests:628` red and have no idea why the doc said it was safe.
+
+## D-049
+**A REWARD IS NOW A MOMENT, NOT A SENTENCE.** (S-016, owner item M11 — shipped and verified.)
+
+Owner, verbatim: *"fix the claim daily reward needs cool animations . things need to be rewarding
+with sounds and aimations and colors bro lpease think . also after the reward it says iopen chest and
+it just says chest opened."*
+
+There is no literal "chest opened" string in the app — `grep -rn "OPENED\|Opened\|opened"` across
+`PrismRush/UI/` returns only an unrelated comment and a mission icon. What he saw was the whole
+reward implementation:
+
+```swift
+func claimDailyReward() {
+    guard let r = ProfileStore.shared.claimDailyReward() else { return }
+    showToast("DAY \(r.streak)  ·  +\(r.coins)")      // a gold capsule, 2.4 s
+    synth.play(.chime)                                 // one sound
+}
+```
+
+Fourteen lines including the chest path. The two highest-intent moments the meta layer has — the
+thing that brings a player back tomorrow, and the thing that makes them wait thirty minutes — were
+the least-dressed screens in the game.
+
+**Replaced with `PrismRush/UI/RewardBurstView.swift`:** a near-opaque scrim, a slow ray fan, a real
+chest whose lid hinges back off the body, a deterministic confetti burst thrown upward under
+gravity, a count that **rolls** from zero rather than appearing, and — for the daily — the seven-rung
+login ladder with today ringed and every future tier's value legible, so the reward reads as
+*progress* instead of *a number*. Audio is a three-layer timeline on the same clock as the motion
+(`.flowSurge` rise → `.newBestFanfare` on the lid pop → a rising `.gem(streak:)` cascade under the
+rolling count, so the payout is heard getting bigger). `haptics.levelUp()` on the open.
+
+Decisions worth keeping:
+- **`RewardBurst` carries its own ladder** rather than reading `ProfileStore.dailyTiers`. That
+  static is `@MainActor`-isolated and the struct is `Sendable`; copying the table in at construction
+  keeps the view a pure function of a value and needs no actor hop. (Swift 6 caught this — the first
+  draft did not compile.)
+- **The scrim is 0.975, not 0.78.** Verified on the simulator twice: at 0.78 the hub's gold Claim
+  card and the PLAY gradient punched through and collided with this overlay's own type; at 0.94 PLAY
+  still read through "TAP TO CONTINUE". This is a modal moment — decree 6, clarity beats spectacle.
+- **The lid hinges at `.bottom`**, the joint with the body. Anchored at `.top` it swung away and
+  read as a detached bar floating above the chest.
+- Confetti uses a fixed LCG seeded from a constant, not `Double.random`. Core's determinism rule
+  does not reach `UI/`, but a reward that looks identical every time is easier to judge and there is
+  no reason to reach for a global generator mid-render.
+- Reduce Motion collapses the whole sequence to its final frame.
+
+Verified on the simulator on both paths: daily 2,200 → 2,300 (+100, day 1 ringed on the ladder) and
+chest 2,300 → 2,485 (+185, "ANOTHER IN 30 MINUTES"). Build green, 266 SPM tests green.
+
+**Not done, and it is the honest gap:** the sounds are composed from the existing SFX catalogue
+because nobody in this program can hear one. `.newBestFanfare` may be the wrong colour for a daily
+bonus. This still needs Rayan's ears — it is the same standing blocker as the Warden's voice.
+
+## D-050
+**FOUR OWNER RULINGS FROM THE S-016 REVIEW.** (S-016. Answers to the mockup's five questions.)
+
+The review artefact asked five questions. He answered four; question 2 (should menu previews become
+live renders of the real rig) went unanswered and is **still open** — it matters more now, not less,
+because of ruling 1.
+
+1. **Characters — "new art for all please."** Not the recommended minimum. All 24 get new art, not
+   just the nine duplicated silhouettes. Note what this collides with: every character is currently
+   built **twice** — a RealityKit rig for the run and a hand-drawn SwiftUI `Canvas` cartoon for every
+   meta surface (`CharacterSwatch.swift:76-147` vs `RealityRenderer.swift:1185-1209`) — and they
+   agree only where a human kept them agreeing, with **zero** test coverage of the crest/aura half of
+   that seam. 24 new assets multiply that seam by 24. **Ruling 1 makes question 2 load-bearing.**
+   Confirmed by eye this session: Prism, Ember and Bolt are the same sphere in three colours.
+2. **Monetization — "all three please."** Near-miss reveals, real countdown offers, and a post-death
+   starter bundle all ship. Recorded as an owner ruling on the three mechanics the review flagged as
+   straddling his own decree 5. **Decree 5 is not revoked** — "advertised bonuses are always
+   delivered" and "no fake urgency" both still stand, so a countdown offer's deadline must be real
+   and enforced in code, not decorative. The two mechanics sorted as *needing a revocation*
+   (odds that shift toward a sale, fake scarcity) were **not** asked for and do not ship.
+3. **Deep worlds — "keep the forfeit it protects the leaderboard."** `ProfileStore.swift:274-292`
+   stays as it is. This closes a question carried open since S-002. It is a deliberate trade: 71 % of
+   the coin catalogue makes runs count for less, and he prefers that to a purchasable leaderboard.
+4. **The slowdown — "just browsing the characters and catalog. sometimes during the warden. but
+   mostly just regular scrolling not even in gameplay."** This is the single most useful sentence of
+   the session. It rules out the leak hypothesis entirely (measured flat at ~360 MB in-run, releasing
+   −54 MB cleanly on death) and points at **menu-side SwiftUI invalidation**, which is exactly what
+   the perf investigation independently ranked #1 and #2. See D-051.
+
+## D-051
+**THE SIMULATION RAN AT FULL RATE BEHIND EVERY OPAQUE META SHEET.** (S-016, first fix for M5.)
+
+`GameCore.snapshot` is the **only** non-`@ObservationIgnored` property on an `@Observable`
+(`GameCore.swift:59`) and `core.advance(realDt:)` rewrote it **every frame, in every mode** — Swift
+Observation fires on every *write*, not on every *change*. `GameView.body` reads that snapshot nine
+times, so while the player scrolled the character list the entire SwiftUI root was being invalidated
+60–120 times a second, on top of 24 `Canvas` swatches redrawing and a RealityKit scene still ticking
+under a sheet that covered it completely.
+
+Sheets only ever present outside `.play` (the sheet gate in `body`), so the fix is one guard in the
+`SceneEvents.Update` handler, mirroring the existing `paused` early-out: when `activeSheet != nil`
+and we are not playing, skip `core.advance`, `renderer.advanceVisuals` and `renderer.sync`; keep the
+music pump and the UI clock alive so timers and the bed carry on.
+
+**Measured A/B on the simulator, characters sheet open, 36 samples each:**
+`23.9 % → 19.7 %` mean CPU — a **17.6 % reduction**. Hub for reference: 28.6 %.
+
+**Do not oversell this and do not close M5 on it.** It removes one confirmed source; it is not the
+whole complaint. The simulator is a Mac and its percentages do not map to an iPhone. The bigger item
+is still open: narrowing snapshot observation itself, which is **not** as simple as it looks —
+`EffectsOverlay` and `HUDView` also read the snapshot every frame, so fixing only `GameView.body`
+leaves the hub invalidating at frame rate (caught by the hostile verifier, `s016_verify_perf.md`).
+And "sometimes during the warden" is a *third* symptom this fix does not touch at all — the prime
+suspect there is `RealityRenderer.boxEntity` calling `.generateBox` on every call so no two obstacles
+share geometry, with mesh builds landing synchronously mid-run as act-two density lifts pool
+high-water marks. Full ranking, all 14 mechanisms with `file:line`: `s016_perf.md`, refuted in
+places by `s016_verify_perf.md` — **read both**.
+
+Nothing has ever been instrumented: zero signposts and zero performance tests exist repo-wide. Land
+the instrumentation before the next fix, or the asset import from D-046 will get blamed for a
+stutter that predates it.

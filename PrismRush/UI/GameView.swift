@@ -15,8 +15,11 @@ final class GameModel {
     @ObservationIgnored private var sub: EventSubscription?
     private(set) var muted = false
     private(set) var paused = false
-    private(set) var rewardToast: String?
-    @ObservationIgnored private var toastClearAt: Double = 0
+    /// The celebration overlay for a claimed reward, or nil. Replaces the old 2.4 s text capsule —
+    /// a payout is the most rewarding moment the meta layer has and it was the least dressed.
+    private(set) var rewardBurst: RewardBurst?
+    /// The reward's audio timeline. Held so a second claim cancels the first rather than layering.
+    @ObservationIgnored private var rewardCue: Task<Void, Never>?
 
     /// Which meta screen is open over the menu (nil = the menu hub itself).
     enum MetaScreen { case characters, shop, levels, stats, settings, missions }
@@ -319,6 +322,18 @@ final class GameModel {
                     return   // freeze the simulation while paused; keep music + UI alive
                 }
 
+                // A meta sheet (characters, shop, worlds, missions, stats, settings) covers the
+                // scene completely — sheets only ever present outside `.play` (see the sheet gate
+                // in `body`). Advancing the sim and syncing the renderer behind one is not merely
+                // wasted work: `core.advance` rewrites `core.snapshot`, which is the ONE observed
+                // property on an @Observable, so every frame invalidated the entire SwiftUI tree
+                // while the player was scrolling a list of characters. Freeze exactly as `paused`
+                // does and keep music + the UI clock alive so timers and the bed carry on.
+                if self.activeSheet != nil, self.core.mode != .play {
+                    self.synth.musicPump(dt: dt, world: self.core.snapshot.worldOrdinal)
+                    return
+                }
+
                 if self.core.mode == .play { self.playTimeThisRun += dt }
 
                 if (self.autoplay || self.demo), self.core.mode == .play {
@@ -561,19 +576,45 @@ final class GameModel {
     // Retention rewards (menu).
     func claimDailyReward() {
         guard let r = ProfileStore.shared.claimDailyReward() else { return }
-        showToast("DAY \(r.streak)  ·  +\(r.coins)")
-        synth.play(.chime)
+        present(RewardBurst(kind: .daily(streak: r.streak), coins: r.coins,
+                            ladder: ProfileStore.dailyTiers))
     }
 
     func openChest() {
         guard let amount = ProfileStore.shared.openFreeChest() else { return }
-        showToast("CHEST  ·  +\(amount)")
-        synth.play(.purchaseChime)
+        present(RewardBurst(kind: .chest, coins: amount))
     }
 
-    private func showToast(_ text: String) {
-        rewardToast = text
-        toastClearAt = uiClock + 2.4
+    func dismissReward() {
+        rewardCue?.cancel()
+        rewardCue = nil
+        rewardBurst = nil
+        synth.play(.uiTick)
+    }
+
+    /// Show the celebration and run its audio timeline alongside `RewardBurstView`'s motion.
+    /// The two are on the same clock by construction — the delays below match the view's phases —
+    /// because a reward that sounds a beat after it looks is worse than one that does neither.
+    private func present(_ burst: RewardBurst) {
+        rewardCue?.cancel()
+        rewardBurst = burst
+        haptics.levelUp()
+        synth.play(.flowSurge)                       // the rise
+
+        rewardCue = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(220))
+            guard let self, !Task.isCancelled else { return }
+            self.synth.play(.newBestFanfare)         // the lid pops
+
+            // A rising gem cascade under the rolling count — the pitch ladder climbs with the
+            // number, so the payout is heard getting bigger rather than just landing.
+            try? await Task.sleep(for: .milliseconds(160))
+            for step in 0..<10 {
+                guard !Task.isCancelled else { return }
+                self.synth.play(.gem(streak: step * 2))
+                try? await Task.sleep(for: .milliseconds(68))
+            }
+        }
     }
 
     /// Abandon the current run/over state and return to the menu hub (the "BACK TO MENU" path).
@@ -1044,7 +1085,6 @@ final class GameModel {
             haptics.levelUp()
             nextMilestoneAt = uiClock + Self.milestoneSpacing
         }
-        if rewardToast != nil, uiClock > toastClearAt { rewardToast = nil }
     }
 
     // MARK: pre-run loadout (hub chips) — arm a consumable to bring into the next run.
@@ -1488,20 +1528,10 @@ struct GameView: View {
                     .transition(.opacity)
             }
 
-            if let toast = model.rewardToast {
-                VStack {
-                    Text(toast)
-                        .font(.system(size: 16, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.black)
-                        .padding(.horizontal, 22).padding(.vertical, 12)
-                        .background(LinearGradient(colors: [Theme.color(0xFFD23D), Theme.color(0xFF9F1C)],
-                                                   startPoint: .leading, endPoint: .trailing), in: Capsule())
-                        .shadow(color: Theme.color(0xFFD23D).opacity(0.5), radius: 16)
-                        .padding(.top, 80)
-                    Spacer()
-                }
-                .allowsHitTesting(false)
-                .transition(.move(edge: .top).combined(with: .opacity))
+            if let burst = model.rewardBurst {
+                RewardBurstView(burst: burst) { model.dismissReward() }
+                    .transition(.opacity)
+                    .zIndex(9)
             }
 
             // Launch splash — topmost, covering the booting RealityKit scene. The calm hub bed
@@ -1513,7 +1543,7 @@ struct GameView: View {
             }
         }
         .statusBarHidden(true)
-        .animation(.spring(duration: 0.3), value: model.rewardToast)
+        .animation(.easeOut(duration: 0.22), value: model.rewardBurst)
         .animation(.easeInOut(duration: 0.3), value: model.tutorialHint)
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.pauseForBackground() }
