@@ -4,46 +4,45 @@
 > wins** and the other file gets fixed. That includes `state.md` and `README.md` at the repo root,
 > which are the project's human-facing history, not the agent's source of truth.
 
-- **Last written by:** session 012 (2026-07-31) — built the three things the owner had already
-  answered in S-011 and that S-011 had no room for: **THE BLAST** (the game's first offensive verb),
-  the **WARDEN REBUILD** (it can never kill you; it throws real hazards), and the **unbuilt half of
-  the economy audit** (E6/E7). Three commits: `3b1cb21`, `ae68fc7`, `7871dd5`. Recovery tag
-  `pre-s012`.
-- **254 SPM tests green** (was 231). Xcode build OK. Every commit was run on the simulator before it
-  was claimed, and five defects were found that way or by the hostile integration reader — none of
-  them by the test suite.
-- **`DailyChallenge.layoutVersion` is STILL 11.** Nothing this session touched the spawner, the
-  patterns or RNG consumption. The pre-armed v12 golden is **still UNSPENT**, and putting the new
-  `hangingBar` into the pattern catalogue is now the one obvious thing that would spend it.
-- **THE BLAST (D-028).** A double tap spends `blastCost` (1/3 of the bank) and destroys every
-  destructible obstacle within 46 m. **Tap 1 still jumps on the frame it arrives** — the double-tap
-  window lies entirely inside the span where a buffered jump is already discarded, so the verb costs
-  the player nothing. The chasm is immune by rule. A blast with no target is refused, not wasted.
-  **The Autopilot never fires it**, so the 200-seed proof still means "survivable by dodging".
-- **CHARGE IS AMMO.** `chargeFullGems` 520 → 240, and the HUD reads `⚡ BLAST ×2` instead of
-  `CHARGE · 37%`. The meter now means something from the first gem instead of from the first Warden
-  104 seconds later.
-- **THE WARDEN CAN NEVER KILL YOU (D-029).** It has no attack of its own and no collision rule at
-  all. It throws real obstacles — two `tall` walls / a `chasm` / a `hangingBar` — and the S-009 verb
-  trichotomy survives one-for-one. Travel time is the telegraph. A landed hazard costs the
-  multiplier, the tempo, one blast round and the answer it would have been worth; miss enough and the
-  clock runs out and it leaves with the bounty.
-- **The three red bands are DELETED from `WardenRig`**, along with the strike plane. That is the
-  direct answer to the owner's "a red thing that covers the screen" and to nine of the S-011 render
-  findings.
-- **The throw lead was measured, not guessed.** 46 m made the fight unloseable (a 0.75 s-lagged bot
-  took zero hits and killed 48/48). At 34 m the two-sided gate reads: 0.40 s → untouched, every
-  Warden killed; 0.75 s → 68 hazards landed, 31/48 killed.
-- **`hangingBar` is the catalogue's first mandatory slide (D-030)** — but **no pattern places one
-  yet.** Every bar in the game can be jumped, so slide has been decorative for the whole of the
-  catalogue; this one has an unreachable ceiling (4.0 against a 3.748 m maximum reachable underside).
-- **The economy is finished (D-031).** The Mystery Box was −19% EV *and* the last violation of D-026
-  (an 8% Coin Surge band on a 300-coin spend); both fixed by one edit. The level ladder paid 1.6–2.2×
-  the entire run faucet over the same 73–81 minutes and is cut 4.3×. **The IAP packs deliberately did
-  NOT change** — S-011's faucet cut already put $0.99 at 15–20 minutes of play.
+- **Last written by:** session 014 (2026-08-03) — **THE WARDEN, made able to kill you, and its arena
+  made a place.** One commit, `f95363a` (`PR-0462`). Recovery tag `pre-s014`. Decisions **D-039**
+  (lethality), **D-040** (the arena), **D-041** (the red is spent, not deleted).
+- **266 SPM tests green** (was 261). Simulator build green. **Every claim below was verified by
+  running the app**, at all three Warden ranks.
+- **SOMEBODY FINALLY PLAYED THE GAME.** Thirteen sessions verified it with `Autopilot` (perfect
+  information, zero latency) and autoplay captures. S-014 drove real touch input via
+  `mcp__Claude_Code_iOS_Simulator__control`. Report: `docs/agent/audits/scratch/s014_play_report.md`.
+  Three findings the suite structurally could not produce, all now fixed:
+  `HIT — IT SHRUGS IT OFF` fired ~10× per encounter; **D-034's "the red is gone" was false**
+  (`0xFF3355` survived as the hit vignette and the player ring — ~15 of 42 frames were red-framed);
+  and **`WorldDecor` gives worlds 3/6/9 no side decor at all**, so the boss arena was emptier than
+  open track.
+- **A WARDEN CAN KILL YOU (D-037/D-039).** Per-encounter strike budget `[nil, 3, 2]` by rank — rank 1
+  never, rank 2 on the 4th landed hazard, rank 3 on the 3rd. **S-013's recommended 3/2/1 was refuted
+  by playing it**: a rank-1 Warden lands ~10 hazards on a motionless player, so a budget of 3 there
+  kills a first-timer 5.6 s in. Also gated on `Profile.wardensMet` — the counter that retires the
+  verb coaching — because rank is a property of the WORLD and buying world 9 would otherwise make a
+  rank-3 arena somebody's first Warden.
+- **The gate is a gradient, not a step.** 0/24 runs touched at a 0.40 s reaction; 24/24 killed at
+  0.75 s; first deaths at 0.65 s (1/12), 3/12 at 0.70 s. Printed by
+  `LaggedAutopilotTests.testTheDifficultyCurveBetweenTheTwoGatesIsMonotonic`.
+- **`ArenaShell.swift` (new).** Ribs, kerb, mouth/exit gates, deck tint. Nothing crosses a lane,
+  nothing moves in world space, **nothing draws from any RNG** — it cannot perturb a seeded run even
+  in principle. The craft now winds up in the last 38% of every gap (`WardenState.throwCharge`).
+- **`DailyChallenge.layoutVersion` is STILL 12** — nothing this session touched the spawner, the
+  patterns or RNG consumption. The pre-armed v13 golden is **still UNSPENT**.
+- **Carried, and now four sessions old: the Warden has no voice.** A landed hazard plays
+  `.shieldBreak` — the same buffer as a wall clip, a shield breaking, armour breaking and a blast
+  shattering walls. One buffer, five meanings. Design is costed in
+  `docs/agent/audits/scratch/s014_audio.md`; **it needs Rayan's ears, not another session's guess.**
 - **Rayan's standing instruction (2026-07-28):** *"never be limited by arbitrary rules — just work
   however you think is best."* Read D-005 before reinstating any process.
 - **Direction:** submission IS the goal, timing is open. **Polish first, publish at the end.**
+
+> **The rest of this file below this line is from session 012 and describes a v1.7 codebase.** It is
+> still broadly accurate about the Completeness Ledger and the backlog, and deliberately unrewritten
+> — but treat any specific number in it as stale. Sessions 013 and 014 changed the Warden, the
+> economy, the HUD and the arena.
 
 ---
 
