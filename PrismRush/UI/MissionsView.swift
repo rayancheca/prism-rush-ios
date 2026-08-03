@@ -38,9 +38,9 @@ struct MissionsView: View {
                 VStack(spacing: 22) {
                     summaryStrip(store: store, now: now)
                     claimAllRow(claimables: claimables, store: store, now: now)
-                    sectionBlock(missions: store.dailyMissions(now: now), tint: Self.todayTint,
+                    sectionBlock(missions: store.dailyMissionSlots(now: now), tint: Self.todayTint,
                                  store: store, now: now) { todayHeader(now: now) }
-                    sectionBlock(missions: store.weeklyMissions(now: now), tint: Self.weekTint,
+                    sectionBlock(missions: store.weeklyMissionSlots(now: now), tint: Self.weekTint,
                                  store: store, now: now) { weekHeader(now: now) }
                     sectionBlock(missions: MissionCatalog.perRun, tint: Self.featTint,
                                  store: store, now: now) { featsHeader }
@@ -54,6 +54,15 @@ struct MissionsView: View {
                 .animation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.15),
                            value: store.profile.achievementTier)
             }
+        }
+        // The board is rendered from PURE reads (`dailyMissionSlots` / `weeklyMissionSlots`, and a
+        // `missionState` that applies the rollover rule without writing), so `body` never persists.
+        // The actual wipe of a rolled-over board happens HERE, once, off the render pass — PR-0006.
+        // It must not simply disappear: the hub badge and this board both have to survive a UTC
+        // rollover that lands while the screen is open, and the read side handles the display half.
+        .task {
+            ProfileStore.shared.refreshDailyMissions()
+            ProfileStore.shared.refreshWeeklyMissions()
         }
         .sensoryFeedback(trigger: claimPulse) { _, _ in
             ProfileStore.shared.profile.hapticsEnabled ? .success : nil
@@ -157,8 +166,8 @@ struct MissionsView: View {
 
     /// Every mission the board is currently showing, in render order.
     private func activeMissions(store: ProfileStore, now: Date) -> [Mission] {
-        MissionCatalog.perRun + store.dailyMissions(now: now)
-            + store.weeklyMissions(now: now) + MissionCatalog.achievements
+        MissionCatalog.perRun + store.dailyMissionSlots(now: now)
+            + store.weeklyMissionSlots(now: now) + MissionCatalog.achievements
     }
 
     private func claimableMissions(store: ProfileStore, now: Date) -> [Mission] {

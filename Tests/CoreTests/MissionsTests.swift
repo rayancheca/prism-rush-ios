@@ -306,4 +306,101 @@ final class MissionsTests: XCTestCase {
     func testEmptyBoardIsAllClear() {
         XCTAssertEqual(ProfileStore.MissionBoardSummary.of([]), .allClear)
     }
+
+    // MARK: PR-0006 — the board is readable without writing the profile
+    //
+    // `MissionsView.body` and the hub badge (`MenuView.swift:345`, inside a TimelineView) both
+    // render from these calls. Before the fix they ran `refreshDailyMissions`, which mutates and
+    // calls `save()` + `cloud.synchronize()` — a disk and iCloud write from inside a SwiftUI
+    // render pass. These pin the read side as pure AND still correct across a rollover.
+
+    func testReadingTheBoardNeverWritesTheProfile() async {
+        let store = ProfileStore(testing: Profile())
+        let day1 = utc(2026, 6, 10)
+        let day2 = utc(2026, 6, 11)
+
+        // Establish a stored board on day 1, then complete and claim one slot.
+        let slot = store.dailyMissions(now: day1).first { $0.metric != .chestsOpened }!
+        store.applyRunSummary(summary(slot.metric, slot.target), now: day1)
+        XCTAssertEqual(store.claimMission(slot.id, now: day1), slot.rewardCoins)
+
+        // Snapshot everything a refresh would touch, then do only READS at the next UTC day.
+        let storedDate = store.profile.dailyMissionDate
+        let storedProgress = store.profile.missionProgress
+        let storedClaims = store.profile.claimedMissions
+
+        _ = store.dailyMissionSlots(now: day2)
+        _ = store.weeklyMissionSlots(now: day2)
+        _ = store.unclaimedCount(now: day2)
+        for m in store.dailyMissionSlots(now: day2) { _ = store.missionState(m, now: day2) }
+
+        XCTAssertEqual(store.profile.dailyMissionDate, storedDate,
+                       "a pure read must not stamp the board date")
+        XCTAssertEqual(store.profile.missionProgress, storedProgress,
+                       "a pure read must not wipe stored progress")
+        XCTAssertEqual(store.profile.claimedMissions, storedClaims,
+                       "a pure read must not wipe stored claims")
+    }
+
+    /// The refresh MOVED off the render pass; it did not disappear. So the read side has to apply
+    /// the rollover rule itself, or a board left open across UTC midnight would show yesterday's
+    /// progress — and worse, yesterday's claims — until some unrelated action flushed them.
+    func testAStaleDailyBoardReadsAsResetBeforeAnyRefreshRuns() async {
+        let store = ProfileStore(testing: Profile())
+        let day1 = utc(2026, 6, 10)
+        let day2 = utc(2026, 6, 11)
+
+        let slot = store.dailyMissions(now: day1).first { $0.metric != .chestsOpened }!
+        store.applyRunSummary(summary(slot.metric, slot.target), now: day1)
+        XCTAssertEqual(store.claimMission(slot.id, now: day1), slot.rewardCoins)
+        XCTAssertTrue(store.missionState(slot, now: day1).claimed)
+
+        // Same stored profile, one day later, WITHOUT calling any refresh.
+        XCTAssertTrue(store.dailyBoardIsStale(now: day2))
+        let rolled = store.missionState(slot, now: day2)
+        XCTAssertEqual(rolled.progress, 0, "a rolled-over daily reads as zero progress")
+        XCTAssertFalse(rolled.claimed, "a rolled-over daily is no longer claimed")
+
+        // And the stored bytes are still untouched — the write happens on the next action.
+        XCTAssertNotNil(store.profile.missionProgress[slot.id],
+                        "the display rule must not have secretly written the reset")
+    }
+
+    /// Same guarantee for the weekly board, whose key is `daysSinceEpoch / 7`.
+    func testAStaleWeeklyBoardReadsAsResetBeforeAnyRefreshRuns() async {
+        let store = ProfileStore(testing: Profile())
+        let w0 = utc(2026, 6, 10)
+        let w1 = w0.addingTimeInterval(7 * 86_400)
+
+        let slot = store.weeklyMissions(now: w0).first { $0.metric != .runsFinished }!
+        store.applyRunSummary(summary(slot.metric, slot.target), now: w0)
+        XCTAssertTrue(store.missionState(slot, now: w0).claimable)
+
+        XCTAssertTrue(store.weeklyBoardIsStale(now: w1))
+        let rolled = store.missionState(slot, now: w1)
+        XCTAssertEqual(rolled.progress, 0, "a rolled-over weekly reads as zero progress")
+        XCTAssertFalse(rolled.claimable, "a rolled-over weekly is not still claimable")
+    }
+
+    /// A per-run feat and an achievement ladder are lifetime state — a UTC rollover must NOT
+    /// reset them. This is the test that catches the staleness rule being applied too widely.
+    func testRolloverDoesNotResetPerRunFeatsOrAchievementLadders() async {
+        let store = ProfileStore(testing: Profile())
+        let day1 = utc(2026, 6, 10)
+        let farLater = utc(2026, 9, 22)
+
+        let feat = MissionCatalog.perRun.first { $0.metric == .gems }!
+        store.applyRunSummary(summary(.gems, feat.target), now: day1)
+        XCTAssertTrue(store.missionState(feat, now: day1).claimable)
+
+        // Months later, with both the daily and weekly boards long stale:
+        XCTAssertTrue(store.dailyBoardIsStale(now: farLater))
+        XCTAssertTrue(store.weeklyBoardIsStale(now: farLater))
+        XCTAssertTrue(store.missionState(feat, now: farLater).claimable,
+                      "per-run feats are claimable forever — they do not roll over")
+
+        let ladder = MissionCatalog.achievements.first { $0.id == "ach.gems" }!
+        XCTAssertGreaterThan(store.missionState(ladder, now: farLater).progress, 0,
+                             "achievement ladders are lifetime totals — they do not roll over")
+    }
 }

@@ -374,17 +374,35 @@ final class ProfileStore {
 
     /// Today's 3 daily mission slots (deterministic per UTC day). Also rolls progress over if the
     /// stored slots belong to a previous day.
+    ///
+    /// **This mutates and persists** (via `refreshDailyMissions`). Call it from actions, never from
+    /// a SwiftUI `body` — use `dailyMissionSlots` there instead (PR-0006).
     func dailyMissions(now: Date = Date()) -> [Mission] {
         refreshDailyMissions(now: now)
         return MissionCatalog.dailySlots(daysSinceEpoch: Self.daysSinceEpoch(now))
+    }
+
+    /// The same 3 slots, as a **pure read** — no mutation, no `save()`, no `cloud.synchronize()`.
+    /// `MissionCatalog.dailySlots` is already a pure function of the UTC day, so a view can render
+    /// the correct post-rollover board without writing anything; `missionState` pairs with this by
+    /// reporting stale daily progress as zero (see `dailyBoardIsStale`). PR-0006.
+    func dailyMissionSlots(now: Date = Date()) -> [Mission] {
+        MissionCatalog.dailySlots(daysSinceEpoch: Self.daysSinceEpoch(now))
+    }
+
+    /// Whether the stored daily board belongs to a previous UTC day — i.e. whether the next
+    /// `refreshDailyMissions` would wipe it. Pure; the read side uses it so a rollover that happens
+    /// while the board is on screen is *displayed* immediately and *written* on the next action.
+    func dailyBoardIsStale(now: Date = Date()) -> Bool {
+        guard let last = profile.dailyMissionDate else { return true }
+        return Self.utcDayKey(min(last, now)) != Self.utcDayKey(now)
     }
 
     /// If the UTC day changed since the last visit, wipe daily progress + claims so the new board
     /// starts clean. (A future-dated stored day is clamped by `sanitized`/read order — setting the
     /// clock back simply re-rolls the board; nothing becomes claimable twice in one real day.)
     func refreshDailyMissions(now: Date = Date()) {
-        let today = Self.utcDayKey(now)
-        if let last = profile.dailyMissionDate, Self.utcDayKey(min(last, now)) == today { return }
+        guard dailyBoardIsStale(now: now) else { return }
         let dailyIDs = Set(MissionCatalog.dailyPool.map(\.id))
         mutate {
             $0.dailyMissionDate = now
@@ -397,18 +415,30 @@ final class ProfileStore {
 
     /// This week's 3 weekly mission slots (deterministic per UTC week). Also rolls progress over
     /// if the stored slots belong to a previous week — mirrors `dailyMissions`.
+    ///
+    /// **This mutates and persists.** Views use `weeklyMissionSlots` (PR-0006).
     func weeklyMissions(now: Date = Date()) -> [Mission] {
         refreshWeeklyMissions(now: now)
         return MissionCatalog.weeklySlots(weeksSinceEpoch: Self.daysSinceEpoch(now) / 7)
+    }
+
+    /// The same 3 slots, as a **pure read**. Mirrors `dailyMissionSlots`. PR-0006.
+    func weeklyMissionSlots(now: Date = Date()) -> [Mission] {
+        MissionCatalog.weeklySlots(weeksSinceEpoch: Self.daysSinceEpoch(now) / 7)
+    }
+
+    /// Whether the stored weekly board belongs to a previous UTC week. Pure; mirrors
+    /// `dailyBoardIsStale`.
+    func weeklyBoardIsStale(now: Date = Date()) -> Bool {
+        guard let last = profile.weeklyMissionDate else { return true }
+        return Self.daysSinceEpoch(min(last, now)) / 7 != Self.daysSinceEpoch(now) / 7
     }
 
     /// If the UTC week changed since the last visit, wipe weekly progress + claims so the new
     /// board starts clean. `min(last, now)` is the clock-rollback clamp: setting the clock back
     /// keeps the current board (and its claims) instead of re-rolling a claimable one.
     func refreshWeeklyMissions(now: Date = Date()) {
-        let thisWeek = Self.daysSinceEpoch(now) / 7
-        if let last = profile.weeklyMissionDate,
-           Self.daysSinceEpoch(min(last, now)) / 7 == thisWeek { return }
+        guard weeklyBoardIsStale(now: now) else { return }
         let ids = Set(MissionCatalog.weeklyPool.map(\.id))
         mutate {
             $0.weeklyMissionDate = now
@@ -539,10 +569,21 @@ final class ProfileStore {
     }
 
     func missionState(_ m: Mission, now: Date = Date()) -> MissionState {
-        let progress = profile.missionProgress[m.id] ?? 0
+        // A daily/weekly board whose stored date has rolled over is ALREADY reset as far as the
+        // player is concerned — `refreshDailyMissions` just hasn't written it yet. Reporting the
+        // stale numbers here would show yesterday's progress (and yesterday's claims) until some
+        // action happened to flush them, so the read side applies the same rule the writer does.
+        // This is what lets `body` render a correct board without mutating anything (PR-0006).
+        let stale: Bool
+        switch m.scope {
+        case .daily:  stale = dailyBoardIsStale(now: now)
+        case .weekly: stale = weeklyBoardIsStale(now: now)
+        case .perRun, .lifetimeTiered: stale = false
+        }
+        let progress = stale ? 0 : (profile.missionProgress[m.id] ?? 0)
         switch m.scope {
         case .perRun, .daily, .weekly:
-            let claimed = profile.claimedMissions.contains(m.id)
+            let claimed = !stale && profile.claimedMissions.contains(m.id)
             return MissionState(progress: min(progress, m.target), target: m.target, reward: m.rewardCoins,
                                 claimable: !claimed && progress >= m.target, claimed: claimed,
                                 tier: 0, tierCount: 1)
@@ -590,10 +631,12 @@ final class ProfileStore {
     }
 
     /// How many missions/achievement tiers are ready to claim (menu badge).
+    /// **Pure** — no refresh, no `save()`, no `cloud.synchronize()`. The hub renders this badge from
+    /// inside a `TimelineView` in `body` (`MenuView.swift:345`), and the old version wrote the
+    /// profile to disk and iCloud from there on every UTC rollover (PR-0006). `missionState` now
+    /// applies the rollover rule on the read side, so the count is correct without the write.
     func unclaimedCount(now: Date = Date()) -> Int {
-        refreshDailyMissions(now: now)
-        refreshWeeklyMissions(now: now)
-        let active = MissionCatalog.perRun + dailyMissions(now: now) + weeklyMissions(now: now)
+        let active = MissionCatalog.perRun + dailyMissionSlots(now: now) + weeklyMissionSlots(now: now)
             + MissionCatalog.achievements
         return active.filter { missionState($0, now: now).claimable }.count
     }
