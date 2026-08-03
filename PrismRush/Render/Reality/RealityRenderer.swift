@@ -1057,6 +1057,32 @@ final class RealityRenderer: RendererPort {
         ground.position = SIMD3<Float>(0, -0.02, -110)
         root.addChild(ground)
 
+        // THE APRON (S-015) — an invisible occluder, and the fix for "the pyramid renders in front
+        // of the ground".
+        //
+        // All twelve world backdrops are authored as if an infinite floor existed at y = 0: they
+        // park ridges, dune cards, planet limbs and the volcano BELOW zero and rely on the ground to
+        // clip the part that hangs under. But the only floor in the scene was the 16-wide ribbon
+        // above — `|x| ≤ 8` — while the frustum sees out to `|x| ≈ 23` at the backdrop. So every
+        // element wider than the floor had its underside drawn against the void, cut off by a hard
+        // horizontal line BELOW where the deck's far edge projects. That reads exactly as the owner
+        // described it: the backdrop standing in front of the ground rather than behind it. Solar
+        // Sands' pyramids are the clearest case — they stand at `|x| = 8.4…12.5`, entirely beyond
+        // the old floor edge, on nothing at all.
+        //
+        // Same near-black as the deck and 0.01 below it, so it is invisible where the deck already
+        // covers and merely continues the same value outward. It is a depth occluder, not a
+        // surface: nothing about the lit 16-wide deck, its rungs or its lane lines changes.
+        //
+        // This does NOT fix elements that straddle y = 0 *inside* the lanes and are therefore
+        // genuinely nearer than the deck behind them — Ashfall's volcano and Orbital's planet limb
+        // both do, and both need their own placement fixed (see
+        // `docs/agent/audits/scratch/s015_r4_zorder.md` §4, class A).
+        let apron = ModelEntity(mesh: .generatePlane(width: 70, depth: 260),
+                                materials: [UnlitMaterial(color: UIColor(white: 0.02, alpha: 1))])
+        apron.position = SIMD3<Float>(0, -0.03, -110)
+        root.addChild(apron)
+
         for x in [Float(-3.3), -1.1, 1.1, 3.3] {
             let line = ModelEntity(mesh: .generateBox(width: 0.06, height: 0.02, depth: 260), materials: [UnlitMaterial(color: .magenta)])
             line.position = SIMD3<Float>(x, 0, -110)
