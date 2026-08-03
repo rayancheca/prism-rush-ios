@@ -64,36 +64,91 @@ if the workflow fails again.
      glyph that reads as a close/cancel X.
   3. **Nine rows, identical visual weight.** A +140 daily and a +900 weekly are the same card. There
      is no hierarchy, no "you're close to this one", no sense of a set being completed.
-  4. **The header already says "19 OPEN · UP TO 4,380 COINS"** — the number is right there and it is
-     not small. Which points hard at the real problem below.
+  4. **The header already says "19 OPEN · UP TO 4,380 COINS"** — the number is right there and it
+     is not small. Which points hard at the real problem below: the board's payout is not the
+     defect.
 
-## THE ECONOMIC READING — this is the spine of the pass
+## THE ECONOMIC READING — the spine of the pass, and it is NOT what you would guess
 
-From s016_coins-economy.md, measured, not guessed:
-  - A 15-min/day player earns **~3,118 coins/day**.
-  - **62% of that arrives without playing well.**
-  - The entire finite catalogue is 83,500 coins → **free in 26.8 days just by showing up.**
+**One agent survived the rate limit and its finding overturns the obvious reading. Read
+`docs/agent/audits/scratch/s017_missions-plan.md` §0 and §1 before anything else.**
 
-Now put missions next to that. The whole board is 4,380 coins, and a typical daily is +140.
-**+140 against 3,118/day is 4.5% of a day.** That is why it feels like nothing — not because the
-number is small in isolation, but because the baseline is so generous that nothing you *choose* to
-do can move it. A mission cannot feel rewarding in an economy that already pays you for breathing.
+Measured from `MissionCatalog.swift` literals against `s016_coins-economy.md`:
 
-So the honest ordering of the four complaints is:
+  3 daily slots, mean 115      →   345 coins/day
+  3 weekly slots, amortised    →   318 coins/day
+                                  ------------
+  recurring board              →   663 coins/day  =  34.1 % of the whole meta faucet
+                                                  =  21.3 % of EVERYTHING a 15-min/day player earns
+  one-time (6 feats + 7 ladders) → 12,320 coins   =  83.7 % of all one-time meta income
 
-  "does nothing" and "not rewarding" are THE SAME ROOT PROBLEM, and they must be fixed before a
-  single pixel moves. A beautiful screen in front of a system that cannot move your balance is
-  still a screen nobody opens.
+> **The owner looked at a system paying 21 % of his income and said "does nothing."**
 
-Attack that reading if you can — but if you accept it, the pass is: fix the consequence, then the
-legibility, then the craft. Not the other way round.
+That sentence is the thesis. It **rules out** "the numbers are too small", and it means
+**raising mission rewards would make all four complaints worse** — it accelerates a catalogue that
+is already free in 26.8 days, and it makes an invisible claim moment carry a bigger number.
+*(An earlier draft of this handoff said missions were 4.5 % of daily earn and told you to bring
+Rayan a bigger reward curve. That was wrong — it compared one +140 daily against the whole day.
+Do not act on it.)*
 
-## THE OWNER MUST RULE ON ONE THING, and you cannot decide it for him
+**The defect is downstream of the source.** The board pays a currency whose sink is finite and
+nearly free, and it pays it through a 13 pt "+N" that rises 38 pt over 0.8 s and fades
+(`MissionsView.swift:548-576`).
 
-Raising mission rewards devalues the coin IAPs. Lowering the passive baseline makes missions matter
-but makes the game stingier. **Both are revenue decisions.** Bring him NUMBERS — "missions go from
-4.5% to X% of daily earn, which moves time-to-catalogue from 26.8 days to Y" — and let him choose.
-Do not ship a reward curve as if it were a bug fix.
+### The corrected principle — not "economy before pixels"
+
+> **Decide the reward LEDGER before the first line of code. Then build in whatever order keeps the
+> app green, and never rebuild a component twice.**
+
+The binding constraint is not that economy outranks craft — it is that **a mission card cannot be
+drawn until you know what a mission pays.** A card rendering a coin amount and a card rendering a
+box object are different components.
+
+### "Not rewarding" is TWO defects with a 20× cost difference — do not collapse them
+
+- **(4a) the reward is not FELT.** S-016 shipped `RewardBurstView` (D-049) — scrim, hinging lid,
+  confetti, a count rolling from zero, three-layer audio — and wired it to exactly two callers:
+  `GameView.swift:579` (daily) and `:585` (chest). **Missions were not one of them.** The mission
+  board is the one reward surface in the app that does not use the app's own reward moment.
+  **Cost: one call site plus a `RewardBurst.kind` case. Economy risk: zero.** Do this early; it is a
+  same-afternoon, immediately visible win, and collapsing it into (4b) queues it behind an owner
+  ruling for no reason.
+- **(4b) the reward is not WORTH WANTING.** Coins into a finite sink. This one the owner must price.
+
+### The move that makes the consequence half fit in ONE session
+
+**A mission that pays a MYSTERY BOX instead of coins.** `openMysteryBox` already exists, is pure
+meta (`ProfileStore.swift:135-144`), and never touches the Core seeded RNG. A free-on-a-timer grant
+is ~20 lines mirroring `chestReady`/`openFreeChest` (`ProfileStore.swift:328-331`, `:339-348`) — a
+shape this codebase already proves.
+
+That converts the board from the fourth-biggest coin faucet into **the game's primary box faucet**:
+it answers "does nothing" (the reward becomes a thing with variance and a ceremony, not a number
+added to a pile that is already too big), it answers M7 *"getting boxes should be more prominent"*
+on a surface the owner was going to open anyway, and it costs a `Profile` field and a reward-kind
+enum rather than a new currency. **This is the load-bearing design claim of the plan — put it to
+Rayan as question 1.** If he rejects it, cut those steps and the pass becomes craft + moment only,
+which still answers three of the four complaints. The plan is built to degrade that way.
+
+**If that ships, one thing becomes blocking:** the Mystery Box **displays odds it does not roll** —
+3 % jackpot shown, 2.5 % rolled (`ShopValue.swift:157-158` vs `:149-150`), with
+`grep -rn "mysteryOdds" Tests/` → NOT FOUND. Guideline 3.1.1 requires disclosed odds to be the real
+odds and the error favours the house. Fix it and pin it in the same pass.
+
+### "Ugly" and "not easy to understand" are ONE fix, and it is visual work
+
+19 rows in one scroll carrying **four different reset semantics** — never / UTC day / UTC week /
+lifetime — signalled by **four bespoke tints declared in that one file** (`MissionsView.swift:26-29`),
+more hues than the rest of the app combined. Progress is a `.trim` arc (`:404-422`) — a shape you
+cannot count. On this screen the pixels **are** the information architecture, so deferring them as
+"just craft" mis-prices them.
+
+## WHAT THE OWNER MUST RULE ON
+
+1. **Do missions pay boxes?** (the load-bearing claim above)
+2. **Anything that changes the coin ledger** — it trades against coin IAP revenue. Bring numbers,
+   never ship a curve as if it were a bug fix. But note the finding above: the answer is probably
+   *not* "pay more coins".
 
 ## HARD CONSTRAINTS
 
