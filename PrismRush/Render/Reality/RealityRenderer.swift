@@ -61,6 +61,17 @@ final class RealityRenderer: RendererPort {
     private let rungSpacing: Float = 4
     private let rungCount = 36
 
+    /// Half the width of the LIT deck — the neon cross-rungs, which are the widest thing on screen
+    /// that says "this is the ground". The near-black 16-wide ground plane reads as void, not floor,
+    /// so it is not the reference.
+    ///
+    /// Anything that must interrupt the floor (today: the chasm) has to be at least this wide, and
+    /// this constant exists so those two numbers can never drift apart again. They had: v1.8 sized
+    /// the chasm to 3.8 "matching the bar mesh", which is the width an OBSTACLE needs (cover the
+    /// lanes) rather than the width a HOLE needs (cover the floor), and the 0.7 u of rung left
+    /// glowing on each side is what the owner saw (S-015).
+    static let deckHalfWidth: Float = 4.5
+
     private let gemMesh: MeshResource
     private let magnetMesh: MeshResource
     private let doublerMesh: MeshResource   // twin octahedron (coin-doubler pickup, see makeEntity)
@@ -211,18 +222,31 @@ final class RealityRenderer: RendererPort {
         ringMesh = ProceduralMesh.torus(major: 0.88, minor: 0.09, majorSeg: 28, minorSeg: 10)
         padMesh = ProceduralMesh.chevronStrip()
         sneakerArmMesh = .generateBox(width: 0.36, height: 0.11, depth: 0.11, cornerRadius: 0.035)
-        // Chasm: the shaft spans the full deck width (3.8 either side, matching the bar mesh) and
-        // the exact collision length, so what you see IS what kills you — the length comes from
-        // `Tuning.chasmHalfLength`, never a literal. 1.7 deep reads as a drop without the far floor
-        // vanishing under the backdrop.
-        chasmShaftMesh = ProceduralMesh.chasmWalls(halfWidth: 3.8,
+        // Chasm: the hole must be at least as wide as the widest thing that says "this is the
+        // ground", and the exact collision length, so what you see IS what kills you — the length
+        // comes from `Tuning.chasmHalfLength`, never a literal. 1.7 deep reads as a drop without the
+        // far floor vanishing under the backdrop.
+        //
+        // **The width is `deckHalfWidth`, not 3.8, and that took an owner report to find** (S-015).
+        // v1.8 sized every chasm part to 3.8 "matching the bar mesh" — but an obstacle only has to
+        // cover the LANES, while a hole has to cover the FLOOR, and those are different numbers. The
+        // deck's neon rungs are `deckRungWidth` 9 wide (`buildScene`), so a 7.6-wide chasm left 0.7 u
+        // of lit cross-bar glowing on each side of the void for its whole 8 m. The owner's words were
+        // *"the whole in the ground doesnt even look like a whole as it doesnt even cover the whole
+        // ground"* — that surviving 0.7 u ledge is literally it. Anything wider than the rungs is
+        // free: past ±4.5 there is only the near-black 16-wide ground plane, so the overhang is
+        // invisible. Gameplay is untouched — `Collisions.chasmHit` takes no `x` at all, so the chasm
+        // was always lane-agnostic and only its PICTURE was narrow.
+        chasmShaftMesh = ProceduralMesh.chasmWalls(halfWidth: Self.deckHalfWidth,
                                                    halfLength: Float(Tuning.chasmHalfLength),
                                                    depth: 1.7)
-        chasmFloorMesh = ProceduralMesh.chasmFloor(halfWidth: 3.8,
+        chasmFloorMesh = ProceduralMesh.chasmFloor(halfWidth: Self.deckHalfWidth,
                                                    halfLength: Float(Tuning.chasmHalfLength),
                                                    depth: 1.7)
-        chasmLidMesh = .generatePlane(width: 7.6, depth: Float(Tuning.chasmHalfLength) * 2)
-        chasmRimMesh = .generateBox(width: 7.6, height: 0.14, depth: 0.5, cornerRadius: 0.03)
+        chasmLidMesh = .generatePlane(width: Self.deckHalfWidth * 2,
+                                      depth: Float(Tuning.chasmHalfLength) * 2)
+        chasmRimMesh = .generateBox(width: Self.deckHalfWidth * 2, height: 0.14, depth: 0.5,
+                                    cornerRadius: 0.03)
         matGemGold = UnlitMaterial(color: UIColor(red: 1, green: 210/255.0, blue: 61/255.0, alpha: 1))
         matGemHot = UnlitMaterial(color: UIColor(red: 1, green: 0.95, blue: 0.75, alpha: 1))
         buildScene()
@@ -1041,7 +1065,7 @@ final class RealityRenderer: RendererPort {
         }
 
         for _ in 0..<rungCount {
-            let r = ModelEntity(mesh: .generateBox(width: 9, height: 0.04, depth: 0.14), materials: [UnlitMaterial(color: .magenta)])
+            let r = ModelEntity(mesh: .generateBox(width: Self.deckHalfWidth * 2, height: 0.04, depth: 0.14), materials: [UnlitMaterial(color: .magenta)])
             root.addChild(r)
             rungs.append(r)
         }

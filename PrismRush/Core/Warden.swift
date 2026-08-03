@@ -98,6 +98,13 @@ struct WardenState: Sendable, Equatable {
     /// 1 → 0 over the beat after a throw. The craft's muzzle flash: the ONE moment the player should
     /// look up, because something just left it.
     var throwFlash: Double
+    /// 1 → 0 over the beat after the craft TAKES a hit — a clean dodge or a blasted hazard, armour
+    /// or core alike. The opposite of `throwFlash` in meaning: that one is the Warden acting, this
+    /// one is the Warden being acted upon.
+    ///
+    /// Added in S-015 because the fight had no damage feedback whatsoever. Presentation only — the
+    /// rig reads it, nothing else — so it consumes no RNG and cannot reach a collision or a spawn.
+    var hitFlash: Double
     /// 0 → 1 as the next throw approaches, resetting to 0 the instant one leaves (v2.4).
     ///
     /// **This is the answer to the dead air, and it is deliberately NOT a shorter gap.** D-038
@@ -191,6 +198,10 @@ struct WardenEncounter {
     private var throwT: Double = 0     // seconds since the last throw
     private var throwIndex = 0         // how many throws have happened — indexes the script
     private var flash: Double = 0      // muzzle-flash decay after a throw
+    /// 1 → 0 after the craft TAKES damage. Distinct from `flash`, which is the muzzle flash it emits
+    /// when it throws — the two are opposite in meaning and, until S-015, the game only had the
+    /// second one. See `wardenHitRecoil`.
+    private var hitFlash: Double = 0
     /// Whether this encounter ended in a KILL rather than a withdrawal — the two must not look alike.
     private var wasKilled = false
     private var rng: SplitMix64
@@ -295,6 +306,7 @@ struct WardenEncounter {
         phaseT += dt
         totalT += dt
         if flash > 0 { flash = max(0, flash - dt / Tuning.wardenThrowFlashTime) }
+        if hitFlash > 0 { hitFlash = max(0, hitFlash - dt / Tuning.wardenHitFlashTime) }
 
         // The hard ceiling, and the whole of the failure state: run out of time with it alive and it
         // leaves with the bounty. The player keeps the run — that is the point of the rebuild.
@@ -366,6 +378,13 @@ struct WardenEncounter {
     /// fight must not damage a corpse).
     mutating func registerAnswer() -> WardenDamage? {
         guard isFighting else { return nil }
+        // **The craft reacts to every hit, including the ones its armour eats.** Before S-015 it
+        // reacted to none of them: `wardenHitRecoil` was documented as "how far it recoils backward
+        // when the core takes a hit" and was wired to `flash`, the muzzle flash it emits when it
+        // THROWS — so the only recoil in the game fired when the Warden attacked, and answering one
+        // of its hazards moved nothing on screen at all. That is most of why the fight read as
+        // weather rather than as an opponent (owner, S-015: *"warden needs a lot of work"*).
+        hitFlash = 1
         if phase == .shielded {
             armourHits += 1
             if armourHits >= Tuning.wardenShieldHits {
@@ -445,9 +464,17 @@ struct WardenEncounter {
         let leave = (phase == .leaving && !wasKilled) ? min(1, phaseT / Tuning.wardenLeaveTime) : 0
         let fall = (wasKilled && (phase == .dying || phase == .leaving))
             ? min(1, phaseT / Tuning.wardenDieTime) : 0
-        // The recoil rides the muzzle flash: the craft rocks back on the throw, which is the beat
-        // that says the thing now on the track came from up there.
-        let recoil = flash * Tuning.wardenHitRecoil
+        // TWO separate kicks, and keeping them separate is the point (S-015).
+        //   · `kick` rides the muzzle flash — the craft rocks back as it THROWS, the beat that says
+        //     the thing now on the track came from up there.
+        //   · `recoil` rides `hitFlash` — the craft is knocked back when the player ANSWERS one,
+        //     which is the visible consequence of a dodge and the only feedback the fight has that
+        //     the player is winning.
+        // Until S-015 there was one field doing the first job under the second one's name, so a
+        // dodge moved nothing. The hit kick is the larger of the two on purpose: being hurt should
+        // read louder than firing.
+        let kick = flash * Tuning.wardenThrowKick
+        let recoil = hitFlash * Tuning.wardenHitRecoil
         return WardenState(
             phase: phase,
             world: world,
@@ -457,7 +484,7 @@ struct WardenEncounter {
             // is that previews never lie. So the craft sits exactly where its next hazard will
             // materialise, and closes in with it as the fight turns.
             z: -(throwLead + (1 - arrive) * Tuning.wardenArriveDepth
-                           + leave * Tuning.wardenLeaveDepth + recoil),
+                           + leave * Tuning.wardenLeaveDepth + kick + recoil),
             // Leans toward the player's lane while it is still deciding. Zero once it has thrown and
             // while dying or leaving: a craft that has committed — or is finished — stops pointing.
             x: (phase == .shielded || phase == .exposed) && flash <= 0
@@ -473,6 +500,7 @@ struct WardenEncounter {
             charge: charge,
             band: band,
             throwFlash: flash,
+            hitFlash: hitFlash,
             // Zero unless it is actually able to throw: a craft winding up during `.arriving`, or
             // while it is dying, would be promising something that is never coming.
             throwCharge: isFighting

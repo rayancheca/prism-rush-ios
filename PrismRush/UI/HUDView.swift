@@ -179,6 +179,33 @@ struct HUDView: View {
 
     /// The encounter readout: what is left of the shield, and how much of the core is gone.
     ///
+    /// `1…wardenRankCap` as a Roman numeral. Small enough a table beats arithmetic, and it clamps
+    /// rather than trapping if the cap ever moves.
+    private static func rankNumeral(_ rank: Int) -> String {
+        switch rank {
+        case ..<2: return "I"
+        case 2: return "II"
+        default: return "III"
+        }
+    }
+
+    /// One spoken sentence for the whole fight. VoiceOver gets the phase, the damage the player has
+    /// dealt, the clock and — the part D-039 shipped without any readout at all — how many more
+    /// landed hazards this encounter allows.
+    private static func wardenA11y(_ w: WardenState, broken: Bool) -> String {
+        var parts = ["Warden, rank \(rankNumeral(w.rank))"]
+        parts.append(broken
+            ? "core exposed, \(w.coreHits) of \(w.coreHitsNeeded) hits landed"
+            : "shielded, \(Int(w.shieldFraction * 100)) percent")
+        parts.append("\(Int(w.secondsRemaining.rounded())) seconds left")
+        if let survivable = w.strikesSurvived {
+            let left = max(0, survivable - w.strikes)
+            parts.append(left == 0 ? "the next hit ends the run"
+                                   : "\(left) hit\(left == 1 ? "" : "s") to spare")
+        }
+        return parts.joined(separator: ", ")
+    }
+
     /// Centre-top, below the score row, because during a fight this is the only thing that matters
     /// and it must not be hunted for. Absent entirely on open track — nothing here is decorative.
     @ViewBuilder
@@ -207,10 +234,34 @@ struct HUDView: View {
                         .background(Capsule().fill(Self.hazard.opacity(0.28)))
                         .transition(.opacity)
                 }
-                Text(broken ? "CORE EXPOSED" : "WARDEN")
+                // Rank is on the title because nothing else on screen distinguished a rank-1 fight
+                // from a rank-3 one (S-015). They differ in throw interval, reaction window, script
+                // length, hits-to-kill AND how many landed hazards you survive — five axes, none of
+                // them nameable by the player.
+                Text("\(broken ? "CORE EXPOSED" : "WARDEN") · \(Self.rankNumeral(w.rank))")
                     .font(.system(size: 11, weight: .heavy, design: .rounded))
                     .tracking(1.6)
                     .foregroundStyle(broken ? Self.hazard : Self.shieldHue)
+
+                // THE CLOCK. `secondsRemaining` has been computed on every frame since v2.3 and read
+                // by nothing (`Warden.swift`). A boss with a hidden timer is a boss whose failure
+                // state — it leaves with the bounty — arrives without warning; D-037's whole premise
+                // was that the fight must be legible.
+                //
+                // The last quarter turns the WARDEN'S OWN violet, not red. Red was deliberately
+                // spent down to one meaning by D-041 ("the next landed hazard ends your run") and
+                // must not be diluted; "it is about to escape with the bounty" is a Warden-channel
+                // statement, so it takes the Warden's channel (D-034).
+                let clock = min(1, max(0, w.secondsRemaining / Tuning.wardenMaxSeconds))
+                Capsule()
+                    .fill(.white.opacity(0.14))
+                    .frame(width: 132, height: 3)
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(clock < 0.25 ? Self.hazard : .white.opacity(0.55))
+                            .frame(width: 132 * clock, height: 3)
+                    }
+
                 if broken {
                     // Three pips, not a bar: the kill is a fixed count of clean dodges, so the
                     // readout should be countable at a glance rather than estimated off a length.
@@ -234,12 +285,31 @@ struct HUDView: View {
                                 .frame(width: 132 * w.shieldFraction, height: 6)
                         }
                 }
+
+                // THE STAKE. D-039 gave the fight a per-encounter strike budget and drew it
+                // NOWHERE — the player learned it existed by dying to it, and the only warning was
+                // one red popup on the very last survivable hit. These are lives, so they read as
+                // dots rather than as the wide capsules used for damage the player DEALS: the two
+                // rows are opposite in meaning and must not be confusable at a glance.
+                //
+                // Absent at rank 1, where `strikesSurvived` is nil because that Warden can never
+                // kill. The absence IS the teaching signal and must not be faked with empty pips.
+                if let survivable = w.strikesSurvived {
+                    let left = max(0, survivable - w.strikes)
+                    HStack(spacing: 4) {
+                        ForEach(0..<survivable, id: \.self) { i in
+                            Circle()
+                                .fill(i < left
+                                      ? (left <= 1 ? Theme.Role.danger : Self.shieldHue)
+                                      : .white.opacity(0.18))
+                                .frame(width: 7, height: 7)
+                        }
+                    }
+                }
             }
             .padding(.top, 6)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(broken
-                ? "Warden core exposed, \(w.coreHits) of \(w.coreHitsNeeded) hits landed"
-                : "Warden shielded, \(Int(w.shieldFraction * 100)) percent")
+            .accessibilityLabel(Self.wardenA11y(w, broken: broken))
             .transition(.opacity)
         }
     }

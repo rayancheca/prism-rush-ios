@@ -47,6 +47,9 @@ final class WardenRig {
     private static let windUpPitch: Float = 0.25
     /// Hull swell at full wind-up. 4% — visible as a change, invisible as a size.
     private static let windUpSwell: Float = 0.04
+    /// Peak bank of the damage flinch, in radians (≈ 21°). Big enough to read at 900 px, small
+    /// enough that a saucer banking does not look like it is leaving.
+    private static let hitRoll: Float = 0.37
     private static let shieldHue: UInt32 = 0x66E0FF   // cool: intact, not yet dangerous
     /// The hostile violet, matching `RealityRenderer.cWardenHazard` — see there for why the red
     /// (`0xFF3355`) went. Used for the exposed core and anything that means "this is the fight".
@@ -156,6 +159,9 @@ final class WardenRig {
     private var idleT: Double = 0
     private var lastCoreHits = 0
     private var lastPhase: WardenPhase?
+    /// The craft's aim (yaw × wind-up pitch), held across a throw flash so the flinch can be
+    /// composed on top of it without the frozen-during-throw behaviour being lost.
+    private var aim = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
     private let gunBeam: ModelEntity         // the phase-1 auto-fire, drawn for the first time (S-009)
 
     private let matHazard: UnlitMaterial
@@ -367,15 +373,29 @@ final class WardenRig {
         // anticipation beat: the craft rears back and tips its nose at the deck, and the harder it
         // is wound the more it leans. The dead air becomes the tell.
         let wind = Float(max(0, w.throwCharge - Self.windUpFrom) / (1 - Self.windUpFrom))
-        if !reduceMotion && w.throwFlash <= 0 {
-            // Yaw eases to a HALT as the wind-up builds rather than being cut at the telegraph, so
-            // the stop is something the player can see coming instead of a discontinuity.
-            let yaw = simd_quatf(angle: Float(idleT) * 0.21 * (1 - wind), axis: SIMD3<Float>(0, 1, 0))
-            // Nose-down pitch: it is aiming at the deck, and the axis is the one channel on this
-            // rig that nothing else uses, so the tell can never be confused with damage (the spars),
-            // the shield (the halo) or the throw itself (the recoil on z).
-            let pitch = simd_quatf(angle: wind * Self.windUpPitch, axis: SIMD3<Float>(1, 0, 0))
-            craft.orientation = yaw * pitch
+        if !reduceMotion {
+            if w.throwFlash <= 0 {
+                // Yaw eases to a HALT as the wind-up builds rather than being cut at the telegraph,
+                // so the stop is something the player can see coming instead of a discontinuity.
+                let yaw = simd_quatf(angle: Float(idleT) * 0.21 * (1 - wind),
+                                     axis: SIMD3<Float>(0, 1, 0))
+                // Nose-down pitch: it is aiming at the deck, and the axis is the one channel on this
+                // rig that nothing else uses, so the tell can never be confused with damage (the
+                // spars), the shield (the halo) or the throw itself (the recoil on z).
+                let pitch = simd_quatf(angle: wind * Self.windUpPitch, axis: SIMD3<Float>(1, 0, 0))
+                aim = yaw * pitch
+            }
+            // THE FLINCH (S-015). A hard bank on ROLL — the last free axis on this rig — decaying
+            // with `hitFlash`. Damage previously moved nothing at all: the spars shed, which is a
+            // state change rather than a reaction, and armour chips did not even do that. Roll is
+            // chosen for the same reason pitch was chosen for the wind-up: no other channel uses it,
+            // so "it got hurt" can never be misread as "it is about to throw".
+            //
+            // Composed on top of `aim` rather than replacing it, and `aim` is held (not recomputed)
+            // through a throw flash, so a hit landing mid-throw still flinches without unfreezing
+            // the yaw halt the telegraph depends on.
+            let roll = simd_quatf(angle: Float(w.hitFlash) * Self.hitRoll, axis: SIMD3<Float>(0, 0, 1))
+            craft.orientation = aim * roll
         }
         // The hull swells slightly as it loads. Scale is legible at 900 px away where a rotation of
         // a near-radially-symmetric saucer is not, and it is the same "something is charging" idiom

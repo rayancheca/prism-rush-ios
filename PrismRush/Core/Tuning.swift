@@ -935,8 +935,23 @@ enum Tuning {
     /// The craft leans toward the lane the player is in, by this many units of x at full deflection.
     /// Small on purpose: it must read as attention, not as a dodge the player has to track.
     static let wardenLeanX: Double = 1.6
-    /// How far it recoils backward when the core takes a hit — the visible consequence of a dodge.
-    static let wardenHitRecoil: Double = 2.2
+    /// How far the craft rocks backward as it THROWS. Rides `throwFlash`.
+    ///
+    /// This is the behaviour v2.2 shipped; until S-015 it was doing that job under the name
+    /// `wardenHitRecoil`, whose doc comment described the *opposite* event. The two are now separate
+    /// constants on separate fields, so neither can quietly become the other again.
+    static let wardenThrowKick: Double = 2.2
+    /// How far it recoils backward when the player ANSWERS a hazard — the visible consequence of a
+    /// dodge, and the fight's only "you are winning" signal. Rides `hitFlash`.
+    ///
+    /// **This constant existed since v2.2 and did nothing it claimed to** (S-015): it was multiplied
+    /// by the muzzle flash, so the craft kicked back when it attacked and sat perfectly still when it
+    /// was hurt. Larger than `wardenThrowKick` on purpose — taking damage must read louder than
+    /// dealing it, or a dodge still looks like nothing happened.
+    static let wardenHitRecoil: Double = 3.4
+    /// How long the flinch takes to decay. Longer than `wardenThrowFlashTime` (0.35) because a hit
+    /// has to survive being read at the same moment the player is still landing their own input.
+    static let wardenHitFlashTime: Double = 0.45
     /// How far a KILLED craft sinks as it detonates. A kill must not look like a withdrawal: the
     /// one that gave up climbs away (`wardenLeaveRise`), the one you beat comes down.
     static let wardenDeathSink: Double = 3.4
