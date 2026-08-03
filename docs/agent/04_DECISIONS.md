@@ -840,3 +840,59 @@ Separately, `Autopilot.closingRatio` compared a chrono-scaled `effectiveSpeed` a
 than it was, launched early into the catalogue's only two-sided window and air-slammed into the hole.
 Caught by the 200-seed solvability proof, at 1 seed in 200. `GameCore.hazardCloseScale` is now the
 single source both halves read.
+
+## D-037
+**A WARDEN MUST BE ABLE TO KILL YOU AT SOME POINT. D-028 IS REVOKED.** (S-013, owner, verbatim:
+*"yeah he should be able to kill you at some point."*)
+
+This is an owner decree and it overrides D-028, which was also an owner decree — from one session
+earlier. The two are not in conflict about principle, they are a correction of degree: D-028 was
+written when two landed beams 1.20 s apart could end a run *at the very first Warden anybody ever
+meets*, and it over-corrected to "never, at any rank". Once the fight was actually hard (S-013), the
+absence of a lethal outcome became the thing making it weightless.
+
+**What is NOT revoked.** The first Warden a player meets must still be survivable while they learn
+it. The teaching rank stays non-lethal; lethality is the top of the ladder, not the floor. Any
+implementation that can kill a player during their first encounter has misread this decree.
+
+**Recommended shape (S-013's, not the owner's — he specified the outcome, not the mechanism):** a
+per-encounter strike budget. A Warden lands hazards; the first N stagger, the (N+1)th kills, and N
+falls with rank — 3 / 2 / 1, so rank 1 is effectively unkillable (its script only has room for so
+many misses) and a rank-3 Warden kills on the second thing it lands. It is legible, it restores an
+honest `HIT — ONE MORE ENDS IT` (a string S-013 had to delete as a lie), and it makes the HUD's
+existing hit-pip vocabulary work in both directions.
+
+**The gates this moves.** `LaggedAutopilotTests` currently asserts the 0.40 s bot is never TOUCHED;
+that assertion becomes load-bearing in a second way, because a touch can now compound into a death.
+`WardenTests.testAPlayerWhoNeverMovesInsideAnArenaAlwaysSurvivesIt` and
+`…testAWardenCannotKillEvenAPlayerWhoArrivesAlreadyStumbling` are direct assertions of D-028 and must
+be re-pointed at the teaching rank rather than deleted — "cannot kill you at rank 1" is still the
+promise.
+
+## D-038
+**"It still feels very empty" is measurable, and the arena is empty BY CONSTRUCTION.** (S-013, owner,
+after the v2.3 rebuild.)
+
+The complaint survived a session that fixed nine other things, so it is not about any of them. It is
+about the space the fight happens in, and the numbers are unambiguous:
+
+| rank | hazard in flight | dead air between | % of fight with nothing on the deck |
+|---|---|---|---|
+| 1 | 0.84 s | 0.71 s | **46%** |
+| 2 | 0.75 s | 0.55 s | **42%** |
+| 3 | 0.71 s | 0.39 s | **36%** |
+
+And beyond the throws: an arena is **770 m ≈ 26 s** of deck while the fight occupies **18.4 s**, so
+**7.7 s of every arena is blank track with a boss in the sky doing nothing**. On top of that,
+`Warden.suppresses` *deliberately* deletes every obstacle and boost pad from those 770 m (decree 6 —
+keep the deck clear so the telegraph is the only thing to read). The arena is, by design, the
+emptiest stretch of track in the game — and then v2.3 made the hazards clear it FASTER.
+
+So the fix is not "more hazards" alone, and it is certainly not shortening the gaps further (the
+one-throw-at-a-time invariant and `LaggedAutopilotTests` both bind). The gap belongs to filling the
+space: arena geometry the suppression rule never touches (walls, gantries, a ceiling, hazard lighting
+that says *arena*), a music state for the fight (PR-0040: there is currently ONE 1.82 s loop for the
+entire session, so a boss sounds exactly like open track), the Warden's own bespoke voice (it has
+none — its shot reuses the lance cue), camera and post work, and a reason to look at the craft
+between throws. None of that is a `Tuning` constant, which is why five sessions of tuning have not
+touched it.

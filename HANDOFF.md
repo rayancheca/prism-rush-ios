@@ -1,5 +1,7 @@
 # HANDOFF → Session 014
 
+**This session is about ONE THING: the Warden. Do not go and do something else.**
+
 ## Paste this to start the next session
 
 ```
@@ -11,43 +13,35 @@ Read docs/agent/01_RULES.md, then docs/agent/02_STATE.md, then this file.
 You may and should change code. Rayan's standing instruction is "never be limited by arbitrary
 rules, just work however you think is best." Do not ask permission to fix something you can verify.
 
-Direction: App Store submission IS the goal, timing is open, and Rayan wants the app POLISHED first.
-Design and feel outrank compliance right now. He also said, in S-011: "always plan extremely before
-implementing" and "ask me questions if you need". Decisions are recorded in docs/agent/04_DECISIONS.md
-as D-023..D-036 — do not re-ask what is already answered there.
+THIS SESSION IS THE WARDEN, AND ONLY THE WARDEN. His instruction, verbatim, closing session 013:
 
-YOUR JOB, in priority order.
+  "yeah he should be able to kill you at some point. i still need you to revise the warden so many
+   times and test test test like a human because it still feels very empty."
 
-  1. WHATEVER RAYAN SAYS WHEN HE PLAYS THE NEW WARDEN. S-013 rebuilt it against nine verbatim
-     complaints and every one is verified on screen, but nothing in this program can feel a game.
-     The specific things that need his thumbs are listed under "Rayan action items" below. Item 1
-     there — whether a boss that CANNOT KILL YOU is enough of a stake now that it is genuinely
-     hard — is the one open design question that could change the whole feature, and it is his call
-     alone (D-028 is his own decree; only he can revoke it).
+Three separate instructions in one sentence. All three are binding.
 
-  2. OBSTACLE VARIETY IN THE ORDINARY TRACK — carried from S-013, and now the largest gap left.
-     The Warden is fixed; the 15-pattern catalogue underneath it is not.
-       - **SLIDE IS STILL MANDATORY NOWHERE IN THE CATALOGUE.** `EntityKind.hangingBar` exists,
-         works, is unjumpable from every state, and now has a proper see-through portcullis mesh —
-         and NO PATTERN PLACES ONE. Putting it in the catalogue is still the single highest-value
-         change left. It is also cheap now: the mesh, the collision, the graze rule, the Autopilot
-         arm and the blast rule are all shipped and exercised by the Warden every third world.
-       - 3 of 15 patterns consume ZERO randomness and render identically every time (indices 2, 8,
-         13); 10 of the remaining 12 vary by exactly one thing, WHICH OF THREE LANES.
-       - `EntityKind.bolt` and `CoreEntity.closeSpeed` are now available to the catalogue too. A
-         closing hazard on ordinary track would be a genuinely new pattern axis — but note the
-         Autopilot's time-conversion (`Autopilot.closingRatio`) is what makes closing hazards
-         survivable, and the 200-seed proof has only ever exercised it inside arenas.
-     THIS COSTS THE layoutVersion BUMP. It is now **12**, and **v13 is pre-armed at
-     `0x9E49_3424_C18A_59C5`** (2026-6-10). Iron rule 3, exactly: keep the 200-seed bot green (ZERO
-     CONTACTS), bump the version, repin goldens in BOTH `DailyChallengeTests` AND
-     `MissionsTests.testTodaysChallengeSeedMatchesUTCGoldens`. Derive them in Python from the
-     SplitMix64 constants and reproduce every existing pin before trusting a new one.
+  (1) IT MUST BE ABLE TO KILL YOU. This REVOKES D-028 (its own predecessor decree). Read D-037.
+      The teaching rank stays survivable — lethality is the TOP of the ladder, not the floor. An
+      implementation that can kill a player during their first-ever encounter has misread it.
 
-  3. PER-WORLD WARDEN SPECIES — specified in s009c_SPEC.md §3, carried since S-009. Much easier now
-     than it has ever been: a species is a different THROW TABLE (`WardenEncounter.script(rank:)`
-     plus `Tuning.wardenThrowKind`), and v2.3 added a fourth shape to that table without touching
-     the fight's structure, which is the proof the seam works.
+  (2) "REVISE SO MANY TIMES" — he is telling you this is not a one-pass job and he expects
+      iteration. Do not build one version, prove it green, and write a handoff. Build, PLAY IT,
+      change it, play it again. Budget most of the session for the loop, not the first build.
+
+  (3) "TEST TEST TEST LIKE A HUMAN" — this is a correction of METHOD, and it is the most important
+      line in the message. Thirteen sessions have verified this game with `Autopilot`, which has
+      perfect information and zero latency, and with autoplay captures in which the bot plays
+      flawlessly. NOBODY IN THIS PROGRAM HAS EVER PLAYED THE GAME. That is why "it feels empty"
+      keeps surviving sessions that fix nine things at once — feel is not in the test suite.
+      YOU CAN ACTUALLY PLAY IT. See "How to test like a human" below; this is not optional.
+
+  (4) "IT STILL FEELS VERY EMPTY" — the thing to actually fix. Read D-038: it is measurable, and
+      the arena is empty BY CONSTRUCTION. 36-46% of the fight has nothing on the deck, 7.7 s of
+      every arena is blank track with a boss in the sky doing nothing, and `Warden.suppresses`
+      deliberately deletes every obstacle and boost pad from 770 m of deck. Five sessions of TUNING
+      have not touched this because it is not a tuning problem.
+
+Decisions are in docs/agent/04_DECISIONS.md as D-023..D-038 — do not re-ask what is answered there.
 
 FIRST COMMAND, before anything else. docs/agent/scratch/ and docs/agent/audits/scratch/ are
 gitignored and hold ~700 MB from thirteen sessions. Git does NOT move them between worktrees. No-op
@@ -72,21 +66,118 @@ This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/project
 
 ---
 
-# What session 013 did
+# HOW TO TEST LIKE A HUMAN (read this before writing any code)
 
-One commit, `82f838a` (`PR-0461`), built and run on the simulator at all three ranks before it was
-claimed. **261 SPM tests green** (was 254). `DailyChallenge.layoutVersion` **11 → 12** — the pre-armed
-pin is spent; **v13 is pre-armed at `0x9E49_3424_C18A_59C5`**.
+This is the instruction the program has been failing for thirteen sessions, so it gets its own
+section. **You have a tool that can play the game with real touch input**, and no session has used
+it for that:
 
-Rayan played the S-012 Warden and rejected it in one message with nine distinct complaints. All nine
-are answered and verified on screen. Full detail in `docs/agent/sessions/SESSION_013.md`, decisions
-**D-032…D-036**.
+    mcp__Claude_Code_iOS_Simulator__control
 
-The one that mattered: **"its not sending walls down the lane like i asked" was a missing mechanic,
-not a tuning miss.** Every obstacle in this game — including a Warden's — was pinned to a fixed `d`
-and the player ran into it. There was no velocity field anywhere in `Core/`, so "the Warden throws a
-wall" and "the spawner places a wall" produced identical motion, and the only thing marking the
-boss's attack was that it was tinted red. He had been right about this in S-012 too.
+- `attach` opens a live panel (do it FIRST, before building — it is cheap and Rayan can watch).
+- `tap`, `swipe`, `touch_path` inject real gestures. Coordinate space is **402 x 874 points**,
+  origin top-left. The game's inputs are: swipe left/right = lane, swipe up = jump, swipe down =
+  slide, **double tap = THE BLAST**.
+- `screenshot` is headless and needs no panel.
+
+**So: launch the game with NO autoplay, swipe your way to the Warden, and fight it yourself.**
+`PR_WARDEN=1|2|3` drops you at the first / second / third Warden (worlds 3/6/9) with a full charge
+bank, and `PR_SKIP_SPLASH=1` skips the intro. Do NOT pass `PR_AUTOPLAY=1` — that is the bot, and the
+bot is the thing that has been lying to us.
+
+    SIMCTL_CHILD_PR_WARDEN=2 SIMCTL_CHILD_PR_SKIP_SPLASH=1 \
+      xcrun simctl launch <udid> com.rayancheca.prismrush
+
+Then actually play it and write down what you FELT — where you were confused, where you were bored,
+where you did not know what had just happened, whether the 0.7 s of dead air between throws reads as
+tension or as nothing. That report is the deliverable this session has been missing, and it is worth
+more than another green test.
+
+**Known capture traps** (all paid for already):
+- `Tools/build.sh` writes to `.dd/Build/Products/`, **NOT** `~/Library/Developer/Xcode/DerivedData`.
+  S-013's first capture ran a stale bundle from the latter and showed a pre-S-012 HUD.
+- `simctl install` KEEPS the profile. Uninstall first when testing anything gated on a profile
+  counter (the Warden coaching reads `Profile.wardensMet`).
+- Prefer `simctl io recordVideo` + `ffmpeg` over repeated screenshots — screenshots stall the app
+  into slow motion; video does not. Use OUTPUT seeking (`-i file -ss t`), never input seeking.
+- Never drive the simulator while `xcodebuild test` runs on it. (`swift test` is macOS/SPM and safe.)
+
+---
+
+# THE JOB, in priority order
+
+### 1. Make it able to kill you — correctly (D-037)
+
+He said *"at some point"*, not *"always"*. The specified outcome is his; the mechanism is yours.
+S-013's recommendation, which you may replace but should beat:
+
+**A per-encounter strike budget.** The first N landed hazards stagger, the (N+1)th kills, and N falls
+with rank — 3 / 2 / 1. Rank 1 is then effectively unkillable (its script has room for only so many
+misses), and a rank-3 Warden kills on the second thing it lands. It is legible, it uses the HUD's
+existing hit-pip vocabulary, and it restores an honest `HIT — ONE MORE ENDS IT` (a string S-013 had
+to delete because D-028 had made it a lie).
+
+Two tests are direct assertions of the revoked decree and must be **re-pointed at the teaching rank,
+not deleted** — "cannot kill you at rank 1" is still the promise:
+`WardenTests.testAPlayerWhoNeverMovesInsideAnArenaAlwaysSurvivesIt` and
+`…testAWardenCannotKillEvenAPlayerWhoArrivesAlreadyStumbling`.
+
+Note `LaggedAutopilotTests` gets sharper teeth for free: its 0.40 s "never TOUCHED" assertion now
+also guards against deaths, and its 0.75 s gate already proves a careless player gets hit a lot
+(357 hazards landed across 72 encounters). Re-read what those numbers mean once a hit can compound.
+
+### 2. Fill the space (D-038) — this is the one he actually cares about
+
+*"It still feels very empty"* survived a session that fixed nine other complaints, so it is not about
+any of them. The measurements:
+
+| rank | hazard in flight | dead air between | % of fight with a bare deck |
+|---|---|---|---|
+| 1 | 0.84 s | 0.71 s | **46%** |
+| 2 | 0.75 s | 0.55 s | **42%** |
+| 3 | 0.71 s | 0.39 s | **36%** |
+
+Plus: an arena is **770 m ≈ 26 s** of deck and the fight occupies **18.4 s**, so **7.7 s of every
+arena is blank track with a boss hanging in the sky doing nothing**.
+
+**Do not fix this by shrinking the gaps.** Two things bind and both are load-bearing:
+`WardenTests.testTwoThrowsAreNeverInFlightAtOnce` (two opposite verbs must never share the deck) and
+`LaggedAutopilotTests` (a human-speed player must stay untouched). The gap is not the enemy; the
+BARENESS is. Candidates, roughly in order of feel-per-effort:
+
+- **Arena geometry.** `Warden.suppresses` filters `SpawnCmd`s — it cannot see decor. Nothing stops
+  you building an arena that LOOKS like an arena: gantries, side walls, a ceiling, hazard lighting,
+  a floor that changes material at the mouth. Right now the boss arrives and the world does not
+  react at all. This is probably the single biggest win and it touches no gameplay rule.
+- **Music.** PR-0040: there is ONE 1.82 s loop for the entire session, so a boss fight sounds
+  exactly like open track. A fight with no music state is the definition of empty.
+- **The Warden has no voice of its own.** Its aimed shot reuses the lance cue; the blast reuses
+  `.boostStart`. Nothing in this program can hear a sound, so S-010/S-012/S-013 all declined to
+  invent voices unheard — but that decision has now compounded three times and is a real part of
+  "empty". Consider whether this is the session that fixes it, or flag it to Rayan as needing his ears.
+- **Camera / post.** No FOV push, no vignette, no shake ramp across phases, no slow-mo beat on the
+  kill. The fight is drawn at exactly the same camera as jogging down an empty road.
+- **Something to look at between throws.** The craft idles at a constant yaw and stops dead during a
+  telegraph. 0.4-0.7 s is enough for a wind-up, a tell, a charge glow — anything that says the next
+  one is coming and what it will be.
+
+### 3. Then iterate (his word: "so many times")
+
+Build → play it yourself → change it → play it again. Do not stop at the first green suite.
+
+---
+
+# What session 013 did (context you need)
+
+Two commits, `82f838a` (`PR-0461`) and `07e2802` (docs). **261 SPM tests green** (was 254).
+`DailyChallenge.layoutVersion` **11 -> 12**; **v13 is pre-armed at `0x9E49_3424_C18A_59C5`**
+(2026-6-10). Full detail in `docs/agent/sessions/SESSION_013.md`, decisions **D-032..D-038**.
+
+Rayan rejected the S-012 Warden with nine complaints; all nine were fixed and verified on screen:
+a pre-arena countdown, first-time verb coaching, the red deleted, the hanging bar rebuilt as a
+see-through portcullis, hazards that CLOSE at the player, a five-axis rank ladder, aimed shots from
+rank 2, a ~2x denser fight, and a longer clock. **He then played it and said it still feels empty** —
+which is the whole of session 014's job.
 
 ---
 
@@ -94,39 +185,26 @@ boss's attack was that it was tinted red. He had been right about this in S-012 
 
 - **`CoreEntity.closeSpeed` is 0 for everything the spawner places, and that is load-bearing.** It is
   what keeps ordinary track, the 200-seed solvability proof and every daily golden untouched by the
-  field's existence. Only `applyThrown` ever sets it. `WardenTests.testOnlyAWardensHazardsEverClose`
-  is the guard.
+  field's existence. Only `applyThrown` sets it. `WardenTests.testOnlyAWardensHazardsEverClose` guards it.
 - **`Autopilot.closingRatio` and `GameCore.advanceClosingHazards` are two halves of ONE arithmetic**
-  and must both read `GameCore.hazardCloseScale`. When they disagreed (a chrono-scaled
-  `effectiveSpeed` against an unscaled `closeSpeed`) the factors stopped cancelling, the bot read a
-  closing chasm as nearer than it was, launched early into the catalogue's only two-sided window and
-  air-slammed into the hole. 1 seed in 200. With it right, `d(effective)/dt` is exactly
-  `−effectiveSpeed`, so every distance-as-time lead in that file keeps meaning what it meant.
-- **The window is `lead / (run + close)`, and moving one term without the other inverts the
-  difficulty.** Leads 34→52 with closing at only +9 m/s made the boss EASIER than before — a bot
-  reacting 0.75 s late killed 48 of 48. If you touch either number, `LaggedAutopilotTests` is the
-  gate; it is two-sided on purpose and both directions are load-bearing.
-- **18.1 s is a hard ceiling on `wardenMaxSeconds`**, not a preference:
-  `(worldLength − wardenArmWindow) / boostSpeedMax − 1.9`. Past it an arena straddles two worlds and
-  `Warden.arenaWorld` is ambiguous. This is why fight LENGTH is nearly exhausted as a lever and
-  density is the one that is left.
+  and must both read `GameCore.hazardCloseScale`. When they disagreed (chrono-scaled `effectiveSpeed`
+  vs unscaled `closeSpeed`) the factors stopped cancelling, the bot read a closing chasm as nearer
+  than it was, launched early into the catalogue's only two-sided window and air-slammed into the
+  hole. 1 seed in 200.
+- **The reaction window is `lead / (run + close)`. Moving one term without the other INVERTS the
+  difficulty.** Leads 34->52 with closing at only +9 m/s made the boss EASIER — a bot reacting 0.75 s
+  late killed 48 of 48. `LaggedAutopilotTests` is two-sided on purpose; both directions bind.
+- **18.1 s is a hard ceiling on `wardenMaxSeconds`**: `(worldLength - wardenArmWindow) /
+  boostSpeedMax - 1.9`. Past it an arena straddles two worlds. Fight LENGTH is nearly exhausted as a
+  lever — which is exactly why "empty" has to be answered with content, not with more seconds.
 - **A landed hazard never calls `registerWardenAnswer`** — it staggers, deletes the whole throw, and
-  `continue`s. Anything you derive from "damage dealt" is therefore pinned at zero for a player who
-  is missing everything; `throwLead` now lerps on `max(damage, throwCount / wardenLeadClockThrows)`
-  for exactly that reason.
-- **`Tools/build.sh` writes to `.dd/Build/Products/`, NOT to `~/Library/Developer/Xcode/DerivedData`.**
-  The first capture of the session ran a stale bundle from the latter and showed a pre-S-012 HUD.
-  And `simctl install` KEEPS the profile — uninstall first if you are testing anything gated on a
-  profile counter (the Warden coaching reads `Profile.wardensMet`).
+  `continue`s. Anything derived from "damage dealt" is pinned at zero for a player who is missing
+  everything; that is why `throwLead` lerps on `max(damage, throwCount / wardenLeadClockThrows)`.
 - **iCloud conflict copies break the Xcode build too, not just SPM.** `PrismRush/UI/GameView 2.swift`
   appeared mid-session and turned a green 261-test run into `** BUILD FAILED **`. They are
   gitignored, so `git status` is clean. `find PrismRush Tests -name "* [0-9].swift"`.
 - **SourceKit in this checkout resolves against macOS.** `Theme` / `UIKit` / "has no member" errors
   are noise. Believe `./Tools/build.sh`.
-- `PR_WARDEN=1|2|3` now starts at the FIRST, SECOND or THIRD Warden (worlds 3/6/9), which is the only
-  way to inspect a rank-2 or rank-3 fight — aimed shots do not exist at rank 1 by design. Prefer
-  `simctl io recordVideo` + `ffmpeg` over repeated screenshots; screenshots stall the app into slow
-  motion. Use OUTPUT seeking (`-i file -ss t`).
 - `state.md` (58 KB) and `README.md` (35 KB) at the repo root are history, not truth.
 
 ---
@@ -135,44 +213,30 @@ boss's attack was that it was tinted red. He had been right about this in S-012 
 
 Prism Rush is a v2.3 feature-complete iPhone game that has never been submitted: ~100 Swift files,
 zero dependencies, zero binary assets but a generated icon, **261 SPM tests green**, and a
-deterministic core behind a clean `RendererPort` seam. `DailyChallenge.layoutVersion` is **12** and
-**v13 is pre-armed**. The boss now throws real obstacles that visibly rush the player, gets harder
-across three ranks, shoots at you from rank 2, announces itself 240 m out, teaches its own verbs for
-three encounters, and contains no red at all. What is left is CONTENT: the ordinary pattern catalogue
-is still 15 patterns, ~60 arrangements, and one verb — SLIDE — that it never once requires.
+deterministic core behind a clean `RendererPort` seam. `layoutVersion` is **12**, v13 pre-armed. The
+Warden throws real obstacles that visibly rush the player, ladders across three ranks, shoots from
+rank 2, announces itself 240 m out and teaches its own verbs — and **still feels empty**, because the
+arena is 770 m of deliberately-cleared deck with 36-46% dead air and no music, no bespoke audio, no
+geometry and no camera work of its own. It also still cannot kill anybody, which D-037 now revokes.
 
-**Nothing is pushed.** `82f838a` and all four S-012 commits are local only; that is the repo's
-existing rhythm, not an oversight.
+**Nothing is pushed.** `07e2802`, `82f838a` and all four S-012 commits are local only; that is the
+repo's existing rhythm, not an oversight.
 
-# Rayan action items (surface them; do not try to do them)
+# Rayan action items
 
-1. **PLAY THE NEW WARDEN — and answer the one question this session could not.** It is now genuinely
-   hard (a bot reacting 0.75 s late kills only 17 of 72, down from 31 of 48) but it still CANNOT KILL
-   YOU, because D-028 is your own decree. You said "it needs to be a challenge". Is losing the bounty
-   a real enough stake now that the fight has teeth, or should a rank-3 Warden be able to end a run?
-   **That is a one-flag change and only you can make the call.**
-2. **Does the approach warning land?** `⚠ WARDEN AHEAD · 240 m` counting down. Too early, too late,
-   too quiet?
-3. **Does the coaching teach or nag?** It names the verb for your first THREE encounters, then
-   retires forever. Your save has `wardensMet = 0`, so you will get it.
-4. **The violet.** Everything the Warden owns is now `#C77BFF` on a near-black body instead of red.
-   Gems stay gold, shields stay cyan. Right call?
-5. **Do the walls read as thrown?** They close at 25–32 m/s ON TOP of the run, so they approach at
-   ~1.9× the speed of the deck. Too fast to read, or finally "like the trains from subway surfers"?
-6. **The aimed shot** (rank 2+, so `PR_WARDEN=2`). It targets the lane you are standing in. Fair?
-7. Carried and still never confirmed by a human: **the stumble** (four sessions), the slide SFX
-   (S-006), a full audio pass (PR-0456), the hub redesign (PR-0452).
-8. **The `Double Coins` IAP description in App Store Connect** — correct it to
-   `Every run pays 2× coins. Forever.` before submission.
+1. **The Warden's ears.** Its aimed shot reuses the lance cue, the blast reuses `.boostStart`, and
+   there is one 1.82 s music loop for the whole session. Nothing in this program can hear a sound,
+   so three sessions have declined to invent voices unheard — that is now a measurable part of
+   "empty". Either he listens and directs, or a session ships something and he judges it.
+2. Carried and still never confirmed by a human: **the stumble** (four sessions), the slide SFX
+   (S-006), the hub redesign (PR-0452).
+3. **The `Double Coins` IAP description in App Store Connect** — correct it to
+   `Every run pays 2x coins. Forever.` before submission.
 
 # Open questions for Rayan (carried until answered)
 
-- **NEW: should a Warden be able to kill you at high rank?** See action item 1. Everything else in
-  the fight is now tuned; this is the last structural question about it.
-- **NEW: the blast has no sound of its own**, and neither does the aimed shot — it reuses the lance
-  cue. Nothing in this program can hear a sound, so bespoke voices were not invented (same call
-  S-010 made for the stumble). The audio pass (PR-0456) is where these get fixed together.
-- **PR-0040** — the music is a 1.82 s loop for the whole session, pinned to world 0 by decree.
+- **PR-0040** — the music is a 1.82 s loop for the whole session, pinned to world 0 by decree. This
+  is now blocking the boss fight's feel, not just ambience.
 - **PR-0010** — `Store/metadata.md` sells a three-world game; the binary ships twelve families.
 - **PR-0254** — should a run that used a paid revive be leaderboard-eligible? S-003 recommends
   counting it for missions/XP but not the leaderboard. Needs a yes/no.
@@ -181,8 +245,9 @@ existing rhythm, not an oversight.
 
 # Resolved in session 013
 
-Hazards that travel at the player; a five-axis rank ladder; aimed shots from rank 2; the fight ~2×
-denser and 3 s longer; the pre-arena countdown; first-time verb coaching; the red deleted; the
-hanging bar rebuilt as a see-through portcullis; the shield no longer wasted on a non-lethal hazard;
-the fight now escalating for a player who is losing it; the fairness gate extended to cover rank 3
-for the first time. Decisions **D-032…D-036**. `PR-0461`.
+Hazards that travel at the player; a five-axis rank ladder; aimed shots from rank 2; a ~2x denser,
+3 s longer fight; the pre-arena countdown; first-time verb coaching; the red deleted; the hanging bar
+rebuilt as a see-through portcullis; the shield no longer wasted on a non-lethal hazard; the fight
+now escalating for a player who is losing it; the fairness gate extended to cover rank 3 for the
+first time. **D-032..D-036.** Then, from the owner's play session: **D-037** (it must be able to
+kill you — D-028 revoked) and **D-038** (the emptiness, measured). `PR-0461`.
