@@ -42,21 +42,22 @@ screen prettier" — that is the failure mode this pass exists to avoid.**
 
 ## THE REST OF THE INVESTIGATION IS WRITTEN BUT UNRUN — RUN IT, DON'T RE-DERIVE IT
 
-S-016 launched seven agents on missions and the account rate limit killed six of them.
-**One survived — `s017_missions-plan.md`, the plan skeleton — and it is the single most valuable
-document for this pass.** The other six (inventory, "does nothing", economy, craft, code seam,
-references) never wrote. Their brief is committed and runnable:
+**ALL SEVEN LANDED — ~5,000 lines across ten files, three adversarially verified.** They are in
+`docs/agent/audits/scratch/s017_*.md` and they are the bulk of this pass's thinking. **Do not
+re-derive any of it.** The brief that produced them is committed at
+`Tools/workflows/s017_missions.js` if you ever want to re-run or extend it.
 
-    Workflow({ scriptPath: "Tools/workflows/s017_missions.js" })
+    s017_missions-plan.md          the plan skeleton — step order, fences, verification. START HERE.
+    s017_missions-inventory.md     all 28 catalogue entries, the roll/reset/claim lifecycle, 4 NEW defects
+    s017_missions-does-nothing.md  what a mission actually causes. The consequence trace.
+    s017_missions-economy.md       the reward ledger
+    s017_missions-craft.md         the visual + IA audit, with a before/after spec
+    s017_missions-seam.md          the code seam, migration and risk register
+    s017_missions-references.md    what shipped games do
+    s017_verify_*.md               three hostile readers. READ THESE WITH THEIR TARGETS —
+                                   they refuted real things, including the inventory doc's thesis.
 
-**Run this as your first real action.** It re-runs all seven and writes to
-`docs/agent/audits/scratch/s017_<label>.md` (the surviving plan will simply be rewritten — diff it
-against the committed copy if you want to see whether the second run agrees with the first, which is
-free signal). Do NOT resume the old run: `resumeFromRunId` is same-session-only and S-016's run id
-is dead.
-
-Everything below is what S-016 established by hand and by looking, so you are not starting cold even
-if the workflow fails again.
+Everything below is the distilled version. Where it and a scratch file disagree, open the file.
 
 ## WHAT S-016 ALREADY PROVED BY LOOKING (screenshots in docs/agent/scratch/s016/missions/)
 
@@ -73,6 +74,35 @@ if the workflow fails again.
   4. **The header already says "19 OPEN · UP TO 4,380 COINS"** — the number is right there and it
      is not small. Which points hard at the real problem below: the board's payout is not the
      defect.
+
+## WHAT THE AGENTS FOUND THAT YOU WOULD NEVER GUESS
+
+  * **`GameView` calls the mission API ZERO times.** Not once. No in-run FX, nothing on the death
+    panel, two entry points in the entire app. `ClaimRibbon.swift` states the intent outright:
+    missions is "a board you visit". **That is "does nothing", stated by the architecture.**
+  * **The whole recurring board is worth 8 minutes 29 seconds of running per day** (663.5 coins at
+    the measured 78.3 coins/min). And **the daily-login button at streak 7 pays 1,000 coins for ONE
+    TAP — 2.9× the entire daily board.** The thing that requires no skill out-pays the thing that
+    does, by 3×.
+  * **The harder you play, the less missions matter**: 21.3 % / 15.5 % / 10.0 % of income at
+    15 / 30 / 60 min per day. The system is regressive against engagement.
+  * **The one thing missions do that running cannot: unlock three characters.** That is the only
+    non-coin consequence in the entire system, and nothing on the board says so.
+  * **A one-step clock rollback exposes a claimable off-board slot on 98.7 % of days and 97.0 % of
+    weeks** (verifier, re-derived from the SplitMix64 draw). `testWeeklyClockRollbackBlocked` misses
+    it — it asserts the stored date and never the returned board. **This is an exploit, not a nit.**
+  * **Claiming across UTC midnight silently no-ops.** Single-claim uses live `Date()`, CLAIM ALL uses
+    the rendered `now`; the documented fix was applied to one and not the other. Decree 3.
+  * **CLAIM ALL pays exactly one tier per achievement ladder and never says so** — and an XCUITest
+    depends on that behaviour.
+  * **PR-0006 (mutating the profile from inside `body`) is confirmed and worse than filed** — four
+    more sites in `MissionsView.body`, each reaching `save()` + `cloud.synchronize()`, all inside a
+    60 s `TimelineView`.
+  * **9 of 15 pool entries bank progress every run that can never be claimed and is wiped at reset.**
+    Free material for a carry-over board.
+  * **No test ever builds the real 19-card board and asserts what the summary strip says**, and the
+    one "disjointness" assertion that looks like coverage is vacuous — it cannot fail. `Package.swift`
+    compiles no `UI/`, so all 576 lines of `MissionsView.swift` have zero unit coverage.
 
 ## THE ECONOMIC READING — the spine of the pass, and it is NOT what you would guess
 
