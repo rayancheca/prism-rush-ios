@@ -41,8 +41,9 @@
   **13.63% of the frame at L\* 76.1**; the entire Warden craft is **1.82%**. Craft rim vs that ring
   is **1.61:1** contrast — below even the 3:1 non-text floor. The wallpaper outweighs the boss
   7.5× in area and beats it on luminance. `s015_r5b_presentation.md`.
-- **266 SPM tests green** (was 261). Simulator build green. **Every claim below was verified by
-  running the app**, at all three Warden ranks.
+> The bullets from here to the session-012 divider are **session 014's**, kept because they are
+> still accurate about the Warden. Where a count differs, the S-015 block above wins.
+
 - **SOMEBODY FINALLY PLAYED THE GAME.** Thirteen sessions verified it with `Autopilot` (perfect
   information, zero latency) and autoplay captures. S-014 drove real touch input via
   `mcp__Claude_Code_iOS_Simulator__control`. Report: `docs/agent/audits/scratch/s014_play_report.md`.
