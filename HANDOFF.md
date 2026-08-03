@@ -1,62 +1,80 @@
-# HANDOFF → Session 016
+# HANDOFF → Session 017
 
 ## Paste this to start the next session
 
 ```
-You are session 016 of a long-running program to finish and ship Prism Rush, a neon three-lane
-endless runner for iPhone (Swift 6, SwiftUI, RealityKit, zero dependencies, zero binary assets).
+You are session 017 of a long-running program to finish and ship Prism Rush, a neon three-lane
+endless runner for iPhone (Swift 6, SwiftUI, RealityKit, zero dependencies).
 
 Read docs/agent/01_RULES.md, then docs/agent/02_STATE.md, then this file.
 
 You may and should change code. Rayan's standing instruction is "never be limited by arbitrary
 rules, just work however you think is best." Do not ask permission to fix something you can verify.
 
-READ THE OWNER'S MANDATE FIRST: docs/agent/audits/scratch/s015_mandate.md. It is verbatim and it
-governs. He wants MANY passes on the Warden, explicitly authorises copying other games, and closes
-with "we still have a lot of passes for all aspects of the game."
+THE OWNER REWROTE THE PROGRAM'S CONSTRAINTS IN S-016. Read
+docs/agent/audits/scratch/s016_mandate.md FIRST — it is verbatim, decomposed into M1-M12, and it
+governs everything below. Headlines:
 
-YOUR ONE JOB THIS SESSION IS R1 + R2 — THE DEAD AIR AND THE PLACEMENT. They are the same bug and
-they are the owner's loudest complaint. S-015 already cleared the cheap wins so this one has room.
-Do not spread yourself across the backlog instead.
+  * D-046 — **"zero binary assets" IS REVOKED.** "why are you not importing real assests. delete
+    that code only decree." Iron rule 6 is why every mesh is procedural, every material is an
+    UnlitMaterial, there is not one texture, and the audio layer is DSP behind a 1.82 s loop. It is
+    gone. Two things replace it: a MEMORY BUDGET (same message: "the app becomes slow at points.
+    this can never happen") and a LICENSING FLOOR — AI-generated or CC0 only; "ciopy subway surfers"
+    ships as its design language and box choreography with OUR art, never theirs.
+  * D-050 — four rulings he gave on the S-016 review: **new art for ALL 24 characters** (not just
+    the duplicated silhouettes); **all three** flagged monetization mechanics ship (near-miss
+    reveals, real countdown offers, post-death starter bundle); **keep** the deep-world leaderboard
+    forfeit; and the slowdown is **"just browsing the characters and catalog ... mostly just regular
+    scrolling not even in gameplay"**, sometimes during the Warden.
+  * M12 — **the missions screen gets its own dedicated session.** "its ugly. does nothing. its not
+    easy to understand. not rewarding at all. need a million review bots." Do NOT fix it piecemeal
+    inside a session about something else. That is reserved scope.
 
-  The arena is 770 m of an 800 m world, starts at offset 0.0 m, and the fight uses ~297 m of it.
-  `Warden.suppresses` keys on `isArena(d)` — a pure distance function that cannot know whether the
-  encounter is still alive — so after the kill the deck stays empty for 473.3 m = 14.75 s. The
-  owner said "a good 15 seconds". It is exactly that, and it was also measured on the simulator:
-  withdrawal at 2,851 m, first obstacle at ~3,121 m.
+YOUR JOB THIS SESSION, in priority order. Pick one and finish it; do not spread.
 
-  The arithmetic, three candidate seams, the blast radius and the rejected alternatives are in
-  docs/agent/audits/scratch/s015_r1_deadair.md and s015_r2_placement.md. READ BOTH BEFORE TOUCHING
-  ANYTHING; do not re-derive them. Both were adversarially verified (.../s015_verify_*.md).
+  A. **THE ONE QUESTION HE DIDN'T ANSWER, and ruling 1 made it load-bearing.** Every character is
+     built TWICE — a RealityKit rig for the run (`RealityRenderer.swift:1185-1209`) and a hand-drawn
+     SwiftUI Canvas cartoon for every meta surface (`CharacterSwatch.swift:76-147`). They agree only
+     where a human kept them agreeing, there is ZERO test coverage of the crest/aura half of that
+     seam, and 23 of 24 are cropped at the top of the swatch today. He just asked for new art for
+     all 24, which multiplies that seam by 24. Making the preview a RENDER OF THE RIG fixes decree 2
+     structurally instead of by hand. Ask him, or decide and document it — but do not import 24
+     assets into the two-implementation world. Detail: `s016_characters.md`, `s016_design-system.md`.
 
-  THE HARD WALL, and it is real: a worst-case fight is 698 m long and a world is 800 m, so there is
-  nowhere to put the arena except the start unless you either cut `wardenMaxSeconds` (which S-013
-  just RAISED, to answer "its too short and boring") or let the arena cross a world boundary with
-  the palette HELD for the duration. S-015's recommendation is the latter — the Warden becomes the
-  bridge between worlds: you fight it at the end of world N and burst into N+1 as it dies. That is
-  a judgement call, not a settled decision. Make it deliberately and write it up as a D-number.
+  B. **PERFORMANCE — M5, and he has now told us where.** S-016 landed one guard (D-051): the sim ran
+     at full rate behind every opaque meta sheet, because `GameCore.snapshot` is the only observed
+     property on an `@Observable` and `advance()` rewrote it every frame in every mode. Measured A/B
+     with the characters sheet open: 23.9% -> 19.7% CPU. **That does not close M5.** The big one is
+     narrowing snapshot observation itself, and it is NOT simple — `EffectsOverlay` and `HUDView`
+     read the snapshot every frame too, so fixing only `GameView.body` leaves the hub invalidating at
+     frame rate (the hostile verifier caught exactly this). "Sometimes during the warden" is a THIRD
+     symptom nothing has touched: prime suspect is `RealityRenderer.boxEntity` calling
+     `.generateBox` on every call so no two obstacles share geometry, with mesh builds landing
+     synchronously mid-run as act-two density lifts pool high-water marks.
+     **NOTHING IN THIS APP HAS EVER BEEN INSTRUMENTED** — zero signposts, zero perf tests, repo-wide.
+     `s016_perf.md` §4 specifies exactly what to add. Land instrumentation BEFORE the next fix, or
+     the D-046 asset import will get blamed for a stutter that predates it.
+     Read `s016_perf.md` AND `s016_verify_perf.md` — the verifier refuted ~9 of its claims.
 
-  This is a LAYOUT change. `DailyChallenge.layoutVersion` 12 → 13; v13 is pre-armed and unspent at
-  0x9E49_3424_C18A_59C5. Goldens are pinned in TWO places (DailyChallengeTests AND
-  MissionsTests.testTodaysChallengeSeedMatchesUTCGoldens) and must be derived in Python from the
-  SplitMix64 constants, never read off the Swift they pin. SolvabilityBotTests (200 seeds x 6,000 m
-  plus the 12,000 m soak) is a REAL risk surface here, not a formality: 473 m per Warden world that
-  was guaranteed-clear will start carrying act-two-density obstacles. DifficultyCurveTests bands
-  will need re-baselining. And the renderer will start LYING unless you thread an `arenaLive` flag
-  through the snapshot — ArenaShell and the deck tint both derive "am I in an arena" from distance
-  alone, so they would keep painting boss-arena treatment over ordinary track (breaks decree 2).
+  C. **THE ASSET PIPELINE** now that the decree is gone. `s016_assets.md` has it, and its headline
+     is counter-intuitive and important: **memory is not what makes this app slow — entity count is,
+     and 560 of ~1,000 entities are particle spheres.** One alpha sprite sheet turns 560 spheres
+     into 560 two-triangle billboards, so assets can PAY FOR THEMSELVES. Do that first. Also
+     UNVERIFIED and highest-leverage: nobody has ever printed `MeshResource.generateSphere`'s
+     triangle count; the one-line recipe is in that file. Measure it before anything else.
 
-AFTER THAT the roadmap is already written. docs/agent/audits/scratch/s015_r5a_fightdesign.md is a
-697-line inventory of the Warden plus THIRTEEN ranked changes W1-W13, each with its code seam, the
-game it is borrowed from, its risk and its RNG exposure. W1 and W2 shipped in S-015 (D-042, D-043).
-W3 — a victory outro, which converts the first ~120 m of the dead air into aftermath with NO layout
-risk — pairs naturally with R1. Do not re-derive that list.
+DO NOT start R1/R2 (the Warden dead air + placement) unless you have read D-047. S-016 designed the
+fix in full and then TWO INDEPENDENT AGENTS KILLED IT: gating suppression on encounter liveness makes
+the fight's end distance player-dependent, so the deck stops being a pure function of the seed. That
+is iron rule 2's headline sentence AND the Daily Challenge's entire shipped promise.
+`WardenTests.testAFightCanNeverPerturbTheSpawnStream` goes red by construction and is right to.
+D-048 settles the separable half: the arena offset is **200 m**, reachable with `wardenMaxSeconds`
+and `wardenArenaLength` both untouched, via an option neither S-015 doc had — capture `arenaStart`
+as encounter state at arm time instead of re-deriving it from `floor(d/800)`. Both prior budget
+numbers (41.6 m and 11.6 m) were wrong as general ceilings; the real one is 740 m.
 
-Decisions are in docs/agent/04_DECISIONS.md as D-023..D-045. Do not re-ask what is answered there.
-
-FIRST COMMAND, before anything else. docs/agent/scratch/ and docs/agent/audits/scratch/ are
-gitignored and now hold ~1.2 GB from fifteen sessions. Git does NOT move them between worktrees.
-No-op if you already have them:
+FIRST COMMAND. docs/agent/scratch/ and docs/agent/audits/scratch/ are gitignored and hold ~1.3 GB.
+Git does NOT move them between worktrees. No-op if you already have them:
 
   for w in "" .claude/worktrees/prism-rush-spawn-path-c7d88a \
            .claude/worktrees/prism-rush-design-audit-562d27 \
@@ -66,15 +84,12 @@ No-op if you already have them:
     [ -d "$s/audits/scratch" ] && mkdir -p docs/agent/audits/scratch && cp -Rn "$s/audits/scratch/." docs/agent/audits/scratch/ 2>/dev/null
   done; du -sh docs/agent/scratch docs/agent/audits/scratch
 
-  THEN reclaim space: rm -f docs/agent/scratch/s015/*.mp4  (they are ~700 MB and the contact
-  sheets next to them are what actually carry the evidence).
-
-BUILD AND RUN THE APP BEFORE YOU CLAIM ANYTHING WORKS. Fifteen for fifteen. `swift test` compiles
+BUILD AND RUN THE APP BEFORE YOU CLAIM ANYTHING WORKS. Sixteen for sixteen. `swift test` compiles
 Core/, seven Meta/ files and Audio/Synth.swift. It does NOT compile UI/, Render/, IAP/, StoreKit or
-GameKit. S-015 wrote `Theme.Role.warning`, which does not exist, and 266 SPM tests were perfectly
-green over it — the iOS build caught it in one line.
+GameKit. SourceKit in this checkout resolves against macOS, so "Cannot find 'Theme' in scope" and
+"No such module 'UIKit'" are NOISE — believe ./Tools/build.sh, nothing else.
 
-PUSH TO GITHUB. The owner asked for this explicitly in S-015 and it is now standing.
+PUSH TO GITHUB. Standing instruction since S-015.
 
 Report back in three lines.
 This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/projects/prism-rush-ios/HANDOFF.md
@@ -82,95 +97,93 @@ This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/project
 
 ---
 
-# What session 015 did
+# What session 016 did
 
-Two commits, `1ad384c` (`PR-0463`) and `2513c30` (`PR-0464`). **266 SPM tests green**, iOS build
-green, `layoutVersion` untouched at **12** (**v13 still pre-armed and unspent**). Decisions
-**D-042..D-045**. Recovery tag `pre-s015`. Session log: `docs/agent/sessions/SESSION_015.md`.
+Two commits, `fb7a833` and `f441348`. **266 SPM tests green, iOS build green**,
+`DailyChallenge.layoutVersion` untouched at **12** (v13 still pre-armed and unspent). Decisions
+**D-046 … D-051**. Recovery tag `pre-s016`.
 
-The session opened as "play the Warden and report back" and was redirected mid-flight by the owner
-into a broad mandate. It also **pushed 17 local-only commits reaching back to S-010** — the repo had
-never been pushed since then.
+The session opened on the S-015 handoff (R1+R2, the Warden) and was redirected **three times** by
+the owner mid-flight. 27 agents ran across two workflows; 21 investigation files are on disk at
+`docs/agent/audits/scratch/s016_*.md`, nine of them adversarially verified.
 
-## Landed and verified on the simulator
+## Shipped and verified on the simulator
 
 | | What | Decision |
 |---|---|---|
-| **W1** | The Warden **reacts to being hit**. `wardenHitRecoil` was documented as the damage recoil and was wired to the *muzzle flash* — the only recoil in the game fired when the Warden ATTACKED, and answering a hazard moved nothing at all. Split into `wardenThrowKick` (rides `throwFlash`, behaviour unchanged) and `wardenHitRecoil` (rides a new `hitFlash`, set on every answered hazard including armour chips). The rig banks the hull on **roll** — the last unused axis, so "hurt" cannot be misread as the nose-down "about to throw". | D-042 |
-| **W2** | The fight is **legible**. `WARDEN · III` (five things differ by rank and the player could name none), a draining clock (`secondsRemaining` had been computed every frame since v2.3 and read by nothing), and D-039's strike budget as dots — **absent at rank 1**, where the absence IS the teaching signal. | D-043 |
-| **R3** | The **chasm covers the floor**. Every part was 7.6 wide "matching the bar mesh" — the width an OBSTACLE needs, not a HOLE. Deck rungs are 9, so 0.7 u of lit rung survived on each shoulder for the whole 8 m. Both now derive from one `deckHalfWidth`. Gameplay untouched: `Collisions.chasmHit` takes no `x`. | D-044 |
-| **R4** | The **backdrops stand on ground**. Not a depth bug — no sort group or depth flag exists anywhere in the renderer. The only floor was a 16-wide ribbon while the frustum sees to \|x\| ≈ 23, and all twelve skies are authored against an infinite floor at y = 0. Fixed with an invisible 70-wide occluder apron. A/B'd on Solar Sands at 1,600 m. | D-045 |
+| **M11** | **A reward is a moment, not a sentence.** Both reward paths were `showToast(...)` + one chime — fourteen lines total. Now `RewardBurstView`: scrim, ray fan, a chest whose lid hinges back, confetti under gravity, a count that rolls from zero, and the seven-rung daily ladder with today ringed. Three-layer audio on the same clock as the motion. Verified on both paths (+100 daily, +185 chest). | D-049 |
+| **M5 (partial)** | **The sim ran at full rate behind every opaque meta sheet.** `GameCore.snapshot` is the only observed property on an `@Observable`; Observation fires on writes, not changes, so the whole SwiftUI root invalidated 60–120×/s while the player scrolled a list. One guard. **A/B measured: 23.9% → 19.7% CPU** on the characters sheet. | D-051 |
+| **M2** | **The zero-binary-assets decree revoked and tombstoned**, with the memory budget and licensing floor that replace it. | D-046 |
 
-Also corrected: **`CLAUDE.md` iron rule 3 claimed "layoutVersion 11, a v12 pin is pre-armed"** — v12
-had been spent two sessions earlier. It now says 12, with v13 pre-armed.
+## Delivered to the owner
 
-## Root-caused, NOT fixed — session 016's job
+**The review artefact** — <https://claude.ai/code/artifact/1217ced6-2d10-406a-a787-4d730f60b964> —
+the game photographed this session next to the proposed revision, ten ranked findings, the
+decree-5 sort of every monetization mechanic into ship / your-call / needs-a-revocation, the honest
+performance report, and five questions. **He answered four (D-050). Question 2 is still open.**
 
-- **R1 · 14.75 s of dead air.** Exactly the owner's "a good 15 seconds".
-- **R2 · the Warden opens its world instead of ending it.** Offset **0.0 m**, by construction
-  (`Warden.arenaWorld`: *"Arenas sit at the START of every wardenEveryWorlds-th world"*). This is
-  real play, not a debug artefact — `PR_WARDEN` reproduces it faithfully.
+## Root-caused, NOT fixed
 
-## Measured, not yet acted on
-
-- **The boss does not own the frame, now with numbers.** At rank 3 the world-9 horizon ring is
-  **13.63 % of the frame at L\* 76.1**; the entire Warden craft is **1.82 %**. Craft rim vs that ring
-  is **1.61 : 1** contrast — below even the 3:1 non-text floor. The wallpaper beats the boss 7.5× on
-  area and wins on luminance. The single lever is `EventideSky.swift:122`,
-  `horizonC = lift(pal.accent, 0.30)`. Full workings: `s015_r5b_presentation.md`.
-- **The chasm still cannot be seen into.** An unbroken 16-wide ground plane at y −0.02 sits above the
-  well and the chasm's own opaque lid at y +0.045 covers the mouth, so the walls and floor render for
-  nobody. The lid at `0x07060E` is also chromatically identical to the deck at `white 0.02`, so the
-  hole reads as *"the grid is missing"* and never as a dark hole. **S-015 fixed the width only.**
+- **R1 + R2 — the fix as designed breaks determinism (D-047).** The dead air *is* the containment
+  margin. Three properties — containment, no dead air, determinism — and you may have any two.
+  Recommendation, not yet ruled on: keep determinism, offset the arena 200 m (D-048), shrink
+  `wardenArenaLength` toward the realistic worst as an explicit product decision, and fill what
+  remains with the victory outro W3 (`s016_outro.md`, no layout risk, ships alone).
+- **`Tuning.swift:793-798` contains an arithmetic error in the unsafe direction.** It advertises the
+  `wardenMaxSeconds` ceiling as 18.1 s; the real pinned ceiling is **17.822 s**. A future session
+  raising `T` to 18.0 on that comment's advice turns `WardenTests:628` red. Fix it in whatever PR
+  touches those constants.
+- **The magnet is a cyan donut, and fixing the mesh alone would be wasted work** — every pickup spins
+  at ~4.7 rev/s and goes edge-on ~9.5 times a second. Spin and mesh must change together.
+  `s016_magnet-pickups.md`.
+- **The Mystery Box is `Image(systemName: "gift.fill")`** — the highest-margin object in the game.
+- **Gold means six things** and collides with the obstacle colour on warm worlds, so a lethal bar and
+  a collectible gem are close to the same hue there. Seen on screen in Ashfall.
 
 # Things you would otherwise rediscover the hard way
 
-- **I never got a chasm on screen — six attempts, and that gap is honest.** `PR_CHASM` places it at
-  `distance + spawnHorizon` (115 m), and `debugSpawn` → `apply` → `Warden.suppresses` **deletes it
-  inside an arena**, so `PR_WORLD=3/6/9` cannot work. Seed 7 is deterministic, so the bot dies at
-  the same metre every time — I missed by 5–9 m in worlds 1, 2 and 4 repeatedly. Raise the horizon
-  temporarily, or drive it by hand. R3's fix is proven by arithmetic, not by a picture.
-- **`Tools/build.sh` writes to `.dd/Build/Products/`, NOT `~/Library/Developer/Xcode/DerivedData`.**
-  Both exist and the latter is stale. Confirm a build is current by grepping the dylib for a string
-  only your change introduced; file mtimes in this checkout are misleading.
-- **SourceKit here resolves against macOS.** `No such module 'UIKit'` and `Cannot find 'Theme' in
-  scope` are noise. Believe `./Tools/build.sh`.
-- **`simctl install` KEEPS the profile.** This sim's `wardensMet` is 7, which is why lethality is
-  live on it (needs > `wardenCoachEncounters` = 3). Uninstall and you are silently testing the
-  *teaching* Warden. Read a field with:
-  `python3 -c "import plistlib,json;print(json.loads(plistlib.load(open(P,'rb'))['pr.profile.v1'])['wardensMet'])"`
-- **Contact sheets are the instrument that works.**
-  `ffmpeg -ss T -i v.mp4 -vf "fps=N,scale=W:-1,tile=RxC" -frames:v 1 out.png`, OUTPUT seeking only.
-  Then OPEN the sheet — a captured PNG nobody read is not evidence. A `crop=` before `tile=` is how
-  you inspect the craft; my first attempt cropped the wrong band and showed empty sky.
-- **Screenshot bursts beat video when you are NOT recording** — `simctl io screenshot` in a tight
-  python loop. During a recording, screenshots stall the app into slow motion.
-- **This `ffmpeg` has no `drawtext` filter.** Use `pad` to separate A/B panels.
-- **`while core.warden != nil` does not terminate after a Warden kill** (`stepWarden` bails on
-  `.over`). Add `&& core.mode == .play`. Inherited from S-014, still true.
+- **`PR_AUTOPLAY` leaves the app on the SPLASH.** The run advances *behind* it, so a screenshot burst
+  measures a splash overlay, not gameplay. Tap (201, 437) in the 402×874 point space first. I lost a
+  measurement pass to this.
+- **Do not hand-edit the profile plist to re-arm a reward.** A `plistlib` + `json.dumps` round-trip
+  wiped the sim profile back to first-run. Uninstall/reinstall is the honest reset;
+  `simctl install` alone KEEPS the profile.
+- **A zsh glob that matches nothing aborts the whole script** (`rm -f dir/*.png` with no PNGs).
+  Cost me a full capture run. Use `find … -delete`, or run the script under `bash`.
+- **Foreground `sleep` is blocked by the harness.** Use `run_in_background: true`, or Monitor.
+- **The A/B that proves a perf fix is cheap and worth it:** copy the file, strip the change with a
+  python slice, rebuild, measure, restore. Three minutes, and it turns "should be faster" into
+  "23.9% → 19.7%".
+- Inherited and still true: `Tools/build.sh` writes to `.dd/Build/Products/`, NOT
+  `~/Library/Developer/Xcode/DerivedData` (both exist, the latter is stale);
+  `while core.warden != nil` does not terminate after a Warden kill — add `&& core.mode == .play`.
 
 # Rayan action items
 
-1. **Play the new Warden.** Two things to judge: the **flinch** (it banks when you answer a hazard)
-   and the **HUD** (rank, clock, life dots). Both are new and unseen by you.
-2. **THE WARDEN'S EARS — five sessions old and only you can unblock it.** A landed hazard plays
-   `.shieldBreak`, the same buffer as a wall clip, a shield breaking, armour breaking and a blast
-   shattering walls. One buffer, five meanings, three opposite in valence. There is one 1.82 s music
-   loop for the whole session, so a boss sounds exactly like open track. A costed design is in
-   `docs/agent/audits/scratch/s014_audio.md`. **Nobody in this program can hear a sound.** Either
-   listen and direct, or say "ship your best guess and I'll judge it" — both fine; silence is not.
-3. **World 9's sky is the reason the boss looks small** (numbers above). Dim it during a fight,
-   shrink the horizon ring permanently, or both? It is a look you chose, so it is your call.
-4. Carried, still never confirmed by a human: **the stumble** (six sessions), the slide SFX (S-006),
-   the hub redesign (PR-0452).
-5. **The `Double Coins` IAP description in App Store Connect** — correct it to
-   `Every run pays 2x coins. Forever.` before submission.
+1. **Question 2 from the review — the only one you didn't answer, and your "new art for all 24"
+   ruling made it the biggest decision in the project.** Should menu previews become live renders of
+   the actual rig? Answering "later" is fine; answering nothing means 24 new assets land in a world
+   where every character is drawn twice and nothing tests that they match.
+2. **Play the new reward.** Claim the daily bonus and open a free chest. Two things to judge: the
+   **feel** of the burst, and the **sound** — which is composed from existing SFX because nobody here
+   can hear one. `.newBestFanfare` may be the wrong colour for a daily bonus.
+3. **THE AUDIO BLOCKER, now six sessions old and still only you can unblock it.** A landed Warden
+   hazard plays `.shieldBreak` — the same buffer as a wall clip, a shield break, an armour break and
+   a blast. One buffer, five meanings, three opposite in valence. Costed design in
+   `s014_audio.md`. Either listen and direct, or say "ship your best guess and I'll judge it".
+4. **The slowdown needs one trace on your actual phone.** Everything measured this session was on the
+   simulator, which is a Mac and far faster than your 16 Pro Max. If you can catch it once while
+   scrolling characters and tell me roughly how long it hangs, that turns a hunt into a measurement.
+5. Carried, still never confirmed by a human: the stumble (seven sessions), the slide SFX (S-006),
+   the hub redesign (PR-0452), and the `Double Coins` IAP description in App Store Connect
+   (`Every run pays 2x coins. Forever.`) before submission.
 
 # Open questions for Rayan (carried until answered)
 
-- **PR-0040** — boss-fight music is a *different axis* from the per-world-bed decree and would not
+- **Review question 2** — live rig previews. See action item 1. Now the highest-value open question
+  in the program.
+- **PR-0040** — boss-fight music is a different axis from the per-world-bed decree and would not
   violate it. Needs a yes/no.
 - **PR-0010** — `Store/metadata.md` sells a three-world game; the binary ships twelve families.
-- **PR-0254** — should a run that used a paid revive be leaderboard-eligible?
-- **Buying a deep world forfeits Game Center submission, reach credit and achievements**
-  (`ProfileStore.swift:274-292`), so 71 % of the coin catalogue makes runs count for LESS. Intended?
+- **PR-0254** — should a run that used a paid revive be leaderboard-eligible? (D-050 ruled on the
+  *checkpoint* half — the forfeit stays — but the revive half is still open.)

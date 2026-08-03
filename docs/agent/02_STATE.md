@@ -4,7 +4,37 @@
 > wins** and the other file gets fixed. That includes `state.md` and `README.md` at the repo root,
 > which are the project's human-facing history, not the agent's source of truth.
 
-- **Last written by:** session 015 (2026-08-03) — **the owner opened a broad mandate mid-session and
+- **Last written by:** session 016 (2026-08-03). **THE OWNER REWROTE THE PROGRAM'S CONSTRAINTS
+  MID-SESSION, THREE TIMES.** Verbatim and decomposed into M1–M12 in
+  `docs/agent/audits/scratch/s016_mandate.md` — that file governs. Commits `fb7a833`, `f441348`.
+  Recovery tag `pre-s016`. Decisions **D-046 … D-051**. 266 SPM tests green, iOS build green,
+  `layoutVersion` untouched at 12.
+- **D-046 — "ZERO BINARY ASSETS" IS REVOKED.** *"why are you not importing real assests. delete that
+  code only decree."* Iron rule 6 is why every mesh is procedural, every material is an
+  `UnlitMaterial`, there is not one texture and the audio layer is DSP behind a 1.82 s loop. It is
+  tombstoned in place (the other eight rules are cited by number across `docs/agent/`). Replaced by
+  a **memory budget** and a **licensing floor**: AI-generated or CC0 only; *"ciopy subway surfers"*
+  ships as its design language, never its art.
+- **D-050 — four owner rulings** from the S-016 review artefact: **new art for ALL 24 characters**;
+  **all three** flagged monetization mechanics ship; **keep** the deep-world leaderboard forfeit; and
+  the slowdown is *"just browsing the characters and catalog … mostly just regular scrolling not even
+  in gameplay"*. **Review question 2 — should menu previews become live renders of the rig — is
+  STILL OPEN, and ruling 1 made it the highest-value open question in the program.**
+- **SHIPPED: the reward moment (D-049)** and **the sim no longer runs behind an opaque meta sheet
+  (D-051, A/B measured 23.9 % → 19.7 % CPU on the characters sheet).** M5 is NOT closed.
+- **R1/R2 ARE BLOCKED ON A DETERMINISM FINDING (D-047).** S-015's prescribed fix — gate suppression
+  on encounter liveness — makes the fight's end distance player-dependent, so the deck stops being a
+  pure function of the seed. That is iron rule 2's headline AND the Daily Challenge's shipped
+  promise. Two independent agents found it. **D-048** settles the separable half: arena offset 200 m,
+  with `wardenMaxSeconds` and `wardenArenaLength` both untouched.
+- **M12 — the missions screen is RESERVED SCOPE.** *"its ugly. does nothing. its not easy to
+  understand. not rewarding at all. need a million review bots."* It gets its own session.
+- **21 investigation files are on disk** at `docs/agent/audits/scratch/s016_*.md`, nine adversarially
+  verified. Do not re-derive them.
+
+> The bullets from here to the session-014 divider are **session 015's**.
+
+- **Written by:** session 015 (2026-08-03) — **the owner opened a broad mandate mid-session and
   four of his named defects were root-caused; three are fixed and verified on the simulator.** Two
   commits, `1ad384c` (`PR-0463`) and `2513c30` (`PR-0464`). Recovery tag `pre-s015`. Decisions
   **D-042** (the Warden reacts to damage), **D-043** (the fight's stake is drawn), **D-044** (the
