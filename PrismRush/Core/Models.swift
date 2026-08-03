@@ -129,6 +129,14 @@ struct GameSnapshot: Sendable {
     /// contact is fatal, so it is the one piece of state the player must be able to see — the HUD
     /// tints its frame and the renderer keeps the body flashing for exactly this long.
     var stumbleRemaining: Double
+    /// Whether the recovery `stumbleRemaining` is counting down came from a Warden (v2.4).
+    ///
+    /// The two sources mean different things and must not be drawn in the same colour. An ordinary
+    /// stumble means *the next wall kills you*, which is what the red vignette has always said. A
+    /// Warden strike means *the boss landed one* — and only says "the next one ends the run" when
+    /// the strike budget is actually spent, which `WardenState.strikes` answers. Red is the scarcer
+    /// and more valuable signal of the two, so it is reserved for the case that is literally fatal.
+    var stumbleFromWarden: Bool
     var usedCheckpoint: Bool        // run began mid-track — meta layer must skip Game Center submit
     var entities: [EntityState]
     /// The live Warden encounter, or `nil` on open track. Deliberately its own field rather than an
@@ -174,6 +182,7 @@ struct GameSnapshot: Sendable {
         sliding: false,
         grounded: true,
         stumbleRemaining: 0,
+        stumbleFromWarden: false,
         usedCheckpoint: false,
         entities: [],
         warden: nil,
@@ -213,7 +222,11 @@ enum FXEvent: Sendable, Equatable {
     /// sources because they sound and read differently — a wall clips you, a boss lands a shot on you
     /// — and because only one of them is a boss telling you the next one is fatal.
     case stumbled(x: Double, fromWarden: Bool)
-    case died(x: Double)
+    /// The run ended. `fromWarden` separates the two sources for the same reason `stumbled` does —
+    /// and since v2.4 it is no longer always `false`: a Warden past the teaching rank can spend a
+    /// player's whole strike budget and end the run (D-037/D-039). A death a boss caused must not
+    /// look, sound or feel like clipping a wall.
+    case died(x: Double, fromWarden: Bool)
 
     // MARK: THE BLAST (v2.2)
     /// A double tap spent `Tuning.blastCost` and launched a shockwave. `chargeLeft` is the bank

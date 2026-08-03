@@ -88,14 +88,40 @@ struct WardenState: Sendable, Equatable {
     var shieldFraction: Double     // 1 → 0 across the armour phase; 0 once exposed
     var coreHits: Int              // 0 ..< coreHitsNeeded
     var coreHitsNeeded: Int        // rank-dependent, so the HUD must read THIS, never the constant
+    /// Hazards this encounter has landed on the player (v2.4).
+    var strikes: Int
+    /// How many it will let them walk away from — `nil` at the teaching rank, which is never lethal.
+    /// The HUD must read THIS rather than the constant, exactly as with `coreHitsNeeded`.
+    var strikesSurvived: Int?
     var charge: Double             // the player's blast bank, 0…1
     var band: WardenBand           // the shape of the last thing it threw
     /// 1 → 0 over the beat after a throw. The craft's muzzle flash: the ONE moment the player should
     /// look up, because something just left it.
     var throwFlash: Double
+    /// 0 → 1 as the next throw approaches, resetting to 0 the instant one leaves (v2.4).
+    ///
+    /// **This is the answer to the dead air, and it is deliberately NOT a shorter gap.** D-038
+    /// measured 0.39–0.71 s between throws with nothing on the deck — 36–46% of the fight — and the
+    /// obvious fix, tightening the interval, is barred twice over: `testTwoThrowsAreNeverInFlightAtOnce`
+    /// requires two opposite verbs never share the deck, and `LaggedAutopilotTests` requires a
+    /// human-speed player stay untouched. The gap is not the enemy; the BARENESS is. A wind-up
+    /// converts the same 0.7 s from "nothing is happening" into "something is about to", which is
+    /// tension rather than absence, and costs the fight's fairness nothing.
+    ///
+    /// Presentation only — nothing reads it but the rig, it consumes no RNG, and it cannot reach a
+    /// collision or a spawn.
+    var throwCharge: Double
     /// Seconds until it gives up and leaves with the bounty. This is the fight's whole clock now —
     /// there is no separate shield window — so the HUD can show one honest countdown.
     var secondsRemaining: Double
+
+    /// Whether the next landed hazard ends the run (v2.4). The snapshot mirror of
+    /// `WardenEncounter.isOneStrikeFromDeath`, so the HUD and the overlay can both read the stake
+    /// without either of them re-deriving it from the rank table.
+    var isOneStrikeFromDeath: Bool {
+        guard let survivable = strikesSurvived else { return false }
+        return strikes >= survivable
+    }
 }
 
 /// What one encounter tick did, handed back to `GameCore` to apply.
@@ -154,6 +180,9 @@ struct WardenEncounter {
     private(set) var rank: Int
     private(set) var armourHits: Int = 0
     private(set) var coreHits: Int = 0
+    /// Hazards this encounter has LANDED on the player (v2.4, D-039). Per-encounter, so it resets at
+    /// every arena and never accumulates across a run.
+    private(set) var strikes: Int = 0
     /// The shape of the last thing thrown. Meaningless before the first throw.
     private(set) var band: WardenBand = .lance
 
@@ -176,6 +205,45 @@ struct WardenEncounter {
 
     /// Clean answers still needed on the open core. Rank-dependent, so nothing may read the constant.
     var coreHitsNeeded: Int { Tuning.wardenCoreHits(rank: rank) }
+
+    /// Landed hazards this encounter will let the player walk away from, or `nil` at the teaching
+    /// rank, which is never lethal (D-037/D-039). Rank-dependent, so nothing may read the constant.
+    var strikesSurvived: Int? { Tuning.wardenStrikesSurvived(rank: rank) }
+
+    /// Whether the NEXT landed hazard ends the run. Drives the honest `HIT — ONE MORE ENDS IT`
+    /// warning, and is the reason the strike counter is worth putting on the snapshot at all: a
+    /// stake nobody can see is not a stake.
+    var isOneStrikeFromDeath: Bool {
+        guard let survivable = strikesSurvived else { return false }
+        return isFighting && strikes >= survivable
+    }
+
+    /// Whether a hazard landing RIGHT NOW would end the run — asked without spending anything.
+    ///
+    /// Separate from `registerStrike` because the shield has to be able to answer "is this the one
+    /// worth spending on?" before the counter moves. Spending the shield must leave the player
+    /// exactly where they were, at `strikes == survivable`, still one from death — not at
+    /// `survivable + 1`, which would show the HUD more strikes taken than the budget allows.
+    var wouldNextStrikeBeFatal: Bool {
+        guard isFighting, let survivable = strikesSurvived else { return false }
+        return strikes + 1 > survivable
+    }
+
+    /// A hazard landed on the player. Returns whether THIS one is fatal.
+    ///
+    /// **The counter advances even at the teaching rank**, where nothing is ever fatal, so the HUD
+    /// can show a player how many they have taken without the rule having to change per rank — and
+    /// so `WardenTests` can assert "rank 1 took strikes and still survived" rather than having to
+    /// infer it from the absence of a death.
+    ///
+    /// Returns `false` outside a damageable phase for the same reason `registerAnswer` returns
+    /// `nil` there: a hazard that outlives the fight must not resolve against a corpse.
+    mutating func registerStrike() -> Bool {
+        guard isFighting else { return false }
+        strikes += 1
+        guard let survivable = strikesSurvived else { return false }
+        return strikes > survivable
+    }
 
     /// Fraction of the armour still standing, 1 → 0.
     var shieldFraction: Double {
@@ -400,9 +468,16 @@ struct WardenEncounter {
             shieldFraction: shieldFraction,
             coreHits: coreHits,
             coreHitsNeeded: coreHitsNeeded,
+            strikes: strikes,
+            strikesSurvived: strikesSurvived,
             charge: charge,
             band: band,
             throwFlash: flash,
+            // Zero unless it is actually able to throw: a craft winding up during `.arriving`, or
+            // while it is dying, would be promising something that is never coming.
+            throwCharge: isFighting
+                ? min(1, throwT / max(0.001, Tuning.wardenThrowInterval(rank: rank)))
+                : 0,
             secondsRemaining: isFighting ? max(0, Tuning.wardenMaxSeconds - totalT) : 0
         )
     }

@@ -21,7 +21,12 @@ struct EffectsOverlay: View {
                           reduceFlash: ProfileStore.shared.profile.reduceFlash)
                 ExposedVignette(remaining: model.core.snapshot.stumbleRemaining,
                                 size: geo.size,
-                                reduceFlash: ProfileStore.shared.profile.reduceFlash)
+                                reduceFlash: ProfileStore.shared.profile.reduceFlash,
+                                // Violet unless the run is genuinely on the line: a Warden strike
+                                // with budget left, at a rank that has any. `isOneStrikeFromDeath`
+                                // going true is what hands the frame back to red (v2.4).
+                                wardenSurvivable: model.core.snapshot.stumbleFromWarden
+                                    && !(model.core.snapshot.warden?.isOneStrikeFromDeath ?? false))
             }
         }
         .allowsHitTesting(false)
@@ -206,10 +211,23 @@ private struct FlashView: View {
 /// passes; that is backwards. The danger is constant for the whole window and the thing worth
 /// signalling is how much of it is left, so the treatment tightens toward the end and then stops
 /// dead — the stop is the "you're safe" cue, and it is unmissable precisely because it is abrupt.
+/// **v2.4 — the red is now SPENT rather than sprayed.** The owner's *"i hate the red colour"* was
+/// answered in D-034 by taking `0xFF3355` off the Warden's hazards; it was left on this vignette,
+/// which fires on every landed hazard and therefore far more often than any hazard is on screen.
+/// Playing a rank-1 encounter with no inputs, roughly 15 of 42 sampled frames were red-framed
+/// (`docs/agent/audits/scratch/s014_play_report.md`) — inside an arena the screen was red more of
+/// the time than it was not, which is the exact complaint, in the exact place he was looking.
+///
+/// The fix is not to delete red but to make it scarce enough to mean something. Red keeps the one
+/// meaning it always claimed in the comment above — *the next contact ends the run* — and the
+/// Warden's own violet carries a survivable strike. So inside a fight red appears at most once, on
+/// the strike that spends the budget, and it is then telling the truth.
 private struct ExposedVignette: View {
     let remaining: Double
     let size: CGSize
     let reduceFlash: Bool
+    /// A survivable Warden strike: the boss landed one, but the run is not on the line yet.
+    let wardenSurvivable: Bool
 
     var body: some View {
         // `stumbleRecover` is the denominator so this can never drift from the mechanic it draws.
@@ -226,8 +244,13 @@ private struct ExposedVignette: View {
             // and the next obstacle are — is left completely untinted at every urgency.
             let inner = half * (reduceFlash ? 1.00 : 1.10 - 0.22 * urgency)
             let peak = reduceFlash ? 0.20 : (0.16 + 0.16 * urgency)
+            // 0xC77BFF (the Warden's channel) for a survivable strike, 0xFF3355 for "the next one
+            // ends it". Same geometry, same urgency ramp — only the hue carries the stake.
+            let hue = wardenSurvivable
+                ? Color(red: 0.78, green: 0.48, blue: 1.0)
+                : Color(red: 1, green: 0.20, blue: 0.33)
             RadialGradient(
-                colors: [.clear, .clear, Color(red: 1, green: 0.20, blue: 0.33).opacity(peak)],
+                colors: [.clear, .clear, hue.opacity(peak)],
                 center: .center,
                 startRadius: inner,
                 endRadius: corner

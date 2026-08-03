@@ -33,6 +33,20 @@ final class WardenRig {
     /// thrown hazard despite sharing a hue, because they are 7.4 units up in the sky on a craft and
     /// a hazard is on the deck; nothing puts them side by side.
     private static let sparHue: UInt32 = 0xC77BFF
+
+    // MARK: the wind-up (v2.4, D-038)
+    //
+    // `windUpFrom` is the fraction of the gap that stays neutral before the tell begins. 0.62 puts
+    // the anticipation in the last ~0.38 of every interval — 0.59 s at rank 1 down to 0.42 s at
+    // rank 3 — which is long enough to read as a gesture and short enough that the craft still
+    // spends most of the gap simply hovering. Making it much earlier would leave the boss
+    // permanently mid-lunge, which reads as a pose rather than as a warning.
+    private static let windUpFrom: Double = 0.62
+    /// Radians of nose-down pitch at full wind-up (~14°). Deliberately small: the tell has to be
+    /// peripheral, because the player's eyes belong on the deck (decree 6).
+    private static let windUpPitch: Float = 0.25
+    /// Hull swell at full wind-up. 4% — visible as a change, invisible as a size.
+    private static let windUpSwell: Float = 0.04
     private static let shieldHue: UInt32 = 0x66E0FF   // cool: intact, not yet dangerous
     /// The hostile violet, matching `RealityRenderer.cWardenHazard` — see there for why the red
     /// (`0xFF3355`) went. Used for the exposed core and anything that means "this is the fight".
@@ -344,9 +358,33 @@ final class WardenRig {
         // This replaces a 34° INSTANTANEOUS SNAP that fired the moment a hit landed
         // (`angle: coreHits * 0.6 + t * 0.35`). That was a discontinuity, not a beat, and it was
         // the only "animation" the craft had. Reduce Motion holds the craft still, as before.
+        //
+        // **v2.4 adds the wind-up, which is what the stillness was missing.** Stopping dead is a
+        // good cue and it stays, but on its own it made the craft's whole vocabulary "turning" and
+        // "not turning" — across 42 frames sampled from a real encounter the craft was pixel-
+        // identical in every one (`docs/agent/audits/scratch/s014_play_report.md`). D-038's *"a boss
+        // in the sky doing nothing"* was literally true. Now the last third of every gap is an
+        // anticipation beat: the craft rears back and tips its nose at the deck, and the harder it
+        // is wound the more it leans. The dead air becomes the tell.
+        let wind = Float(max(0, w.throwCharge - Self.windUpFrom) / (1 - Self.windUpFrom))
         if !reduceMotion && w.throwFlash <= 0 {
-            craft.orientation = simd_quatf(angle: Float(idleT) * 0.21, axis: SIMD3<Float>(0, 1, 0))
+            // Yaw eases to a HALT as the wind-up builds rather than being cut at the telegraph, so
+            // the stop is something the player can see coming instead of a discontinuity.
+            let yaw = simd_quatf(angle: Float(idleT) * 0.21 * (1 - wind), axis: SIMD3<Float>(0, 1, 0))
+            // Nose-down pitch: it is aiming at the deck, and the axis is the one channel on this
+            // rig that nothing else uses, so the tell can never be confused with damage (the spars),
+            // the shield (the halo) or the throw itself (the recoil on z).
+            let pitch = simd_quatf(angle: wind * Self.windUpPitch, axis: SIMD3<Float>(1, 0, 0))
+            craft.orientation = yaw * pitch
         }
+        // The hull swells slightly as it loads. Scale is legible at 900 px away where a rotation of
+        // a near-radially-symmetric saucer is not, and it is the same "something is charging" idiom
+        // the shield halo already uses on its own axis.
+        //
+        // Written unconditionally (with the wind zeroed under Reduce Motion) rather than skipped, so
+        // toggling the accommodation mid-fight cannot strand the hull at whatever size it had.
+        let swell = 1 + (reduceMotion ? 0 : wind) * Self.windUpSwell
+        if craft.scale.x != swell { craft.scale = SIMD3<Float>(repeating: swell) }
 
         // THE SHED: damage is subtractive geometry (v2.0).
         //

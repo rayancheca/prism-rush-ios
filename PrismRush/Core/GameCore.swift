@@ -92,6 +92,11 @@ final class GameCore {
     /// silently turn an impossible pattern into a green stagger. `SolvabilityBotTests` asserts this
     /// stays zero, so the 200-seed proof keeps proving what it claims to.
     @ObservationIgnored private(set) var stumbles: Int = 0
+    /// Whether the recovery currently counting down was caused by a Warden (v2.4). Set with
+    /// `stumbleT` and read only by the snapshot, so the overlay can colour the two sources apart
+    /// without having to guess from `warden != nil` — a player can walk into an arena still
+    /// recovering from a wall they clipped outside it.
+    @ObservationIgnored private var stumbleWasWarden = false
     @ObservationIgnored private(set) var magnetT: Double = 0
     @ObservationIgnored private(set) var doublerT: Double = 0  // gems pay double currency while > 0
     @ObservationIgnored private(set) var chronoT: Double = 0   // slow-mo: distance integrates at × chronoFactor
@@ -109,6 +114,10 @@ final class GameCore {
     @ObservationIgnored private(set) var revivesUsed = 0   // continues taken this run (escalating cost)
     @ObservationIgnored private var deathDistance: Double = 0   // where the run died (revive scrubs the decel drift)
     @ObservationIgnored private(set) var usedCheckpoint = false // run began mid-track (not leaderboard-eligible)
+    /// Whether the run that just ended was ended by a Warden (v2.4, D-039). The `.died` event
+    /// carries the same fact, but the death panel is built after the event has been consumed and a
+    /// boss kill must not be reported as "you hit a wall".
+    @ObservationIgnored private(set) var diedToWarden = false
 
     /// The live Warden encounter, or `nil` on open track (v1.9).
     @ObservationIgnored private(set) var warden: WardenEncounter?
@@ -130,6 +139,23 @@ final class GameCore {
     @ObservationIgnored private(set) var wardensDefeatedThisRun: Int = 0
     /// Wardens MET this run, won or lost (v2.3). Gates the first-time verb coaching.
     @ObservationIgnored private(set) var wardensMetThisRun: Int = 0
+    /// Wardens this player had met before the run began, handed in at `startRun` (v2.4). See the
+    /// note there: it is what keeps a lethal Warden from being anybody's first.
+    @ObservationIgnored private var wardensMetAtRunStart: Int = Int.max
+
+    /// Whether a Warden may end the run at all yet — i.e. whether this player has been taught.
+    ///
+    /// Deliberately a property of the PLAYER rather than of the run: a rule like "the first Warden
+    /// of each run is a warm-up" reads the same from inside Core but hands every checkpoint start a
+    /// silent free pass, so two identical-looking fights would behave differently for reasons
+    /// nothing on screen explains.
+    /// The first disjunct is not redundant: it short-circuits before the sum, which is what keeps
+    /// the `Int.max` default (see `startRun`) from trapping on overflow. When it is false the left
+    /// operand is at most `wardenCoachEncounters`, so the addition cannot overflow either.
+    var wardenLethalityUnlocked: Bool {
+        wardensMetAtRunStart > Tuning.wardenCoachEncounters
+            || wardensMetAtRunStart + wardensMetThisRun > Tuning.wardenCoachEncounters
+    }
     /// Warden bounty coins earned this run. Kept OUT of `gemCount` so a kill never inflates the
     /// run's gem stat, its gem missions or its per-gem XP — see the payout site in `stepWarden`.
     @ObservationIgnored private(set) var bountyCoins: Int = 0
@@ -165,10 +191,25 @@ final class GameCore {
     /// end-game speed (66 pts/s) far sooner than a fresh run ever could, so they're strictly better
     /// for best-score chasing: `usedCheckpoint` flags them and the meta layer MUST skip Game Center
     /// submission for such runs (local best is fine).
-    func startRun(seed: UInt64? = nil, startDistance: Double = 0) {
+    /// `wardensMetBefore` is how many Wardens this player has ever MET, handed in from the meta
+    /// layer (`Profile.wardensMet`) because `Core/` may not read a profile (v2.4).
+    ///
+    /// **It is what makes lethality safe against the checkpoint door.** D-037 requires that no
+    /// player can be killed during their first encounter, and rank alone does not deliver that:
+    /// buying world 9 — 71% of the coin catalogue leads there — starts a run at a rank-3 arena, so
+    /// the first Warden a paying player ever met would be the lethal one. Gating on the same
+    /// counter that retires the verb coaching (`Tuning.wardenCoachEncounters`) means **the game
+    /// never kills you with a thing it is still teaching you**, which is the decree stated as a
+    /// mechanism rather than as a number.
+    ///
+    /// Defaults to "fully taught" so every existing caller — including the whole test suite and the
+    /// solvability bot — keeps measuring the LETHAL fight, which is the one that needs proving.
+    func startRun(seed: UInt64? = nil, startDistance: Double = 0,
+                  wardensMetBefore: Int = Int.max) {
         let keepBest = best
         reset(seed: seed)
         best = keepBest
+        wardensMetAtRunStart = wardensMetBefore
         mode = .play
         speed = Tuning.speedStart   // launch at the base play speed — no sluggish crawl off the line
         if startDistance > 0 {
@@ -239,7 +280,7 @@ final class GameCore {
         blastWave = nil; blastsFired = 0; obstaclesShattered = 0
         spawner = Spawner()
         mode = .menu; distance = 0; scoreOffset = 0; speed = Tuning.menuSpeed; revivesUsed = 0
-        deathDistance = 0; usedCheckpoint = false
+        deathDistance = 0; usedCheckpoint = false; diedToWarden = false
         px = 0; laneIndex = 1; jumpY = 0; vy = 0; grounded = true; slideT = 0; sy = 1
         bankZ = 0; jumpBuf = 0
         world = 0; maxWorld = 0; worldFrom = 0; worldTo = 0; worldBlend = 1
@@ -723,28 +764,69 @@ final class GameCore {
                     // outside the `invulnT <= 0` gate. Shields are deliberately left in arenas as
                     // ammunition for what comes after the fight; they are not part of it.
                     if e.fromWarden {
-                        // **A WARDEN CAN NEVER KILL YOU (v2.2, D-028).** Not "forgives once", not
-                        // "stumbles then kills" — never. This is the owner's instruction and it is
-                        // the model every shipped runner boss uses: the boss is an OPPORTUNITY
-                        // layer, and failing it costs the reward, not the run.
+                        // **A WARDEN CAN KILL YOU — AT THE TOP OF THE LADDER (v2.4, D-037/D-039).**
+                        // The owner revoked D-028 one session after making it: *"yeah he should be
+                        // able to kill you at some point."*
                         //
-                        // v2.1 was the inverse. Two landed beams 1.20 s apart ended the run, and
-                        // branch 3 below could be skipped outright — it required `stumbleT <= 0`
-                        // while `stumbleT` runs 0.90 s and `stumbleGrace` only 0.15 s, so any wall
-                        // clip in the 60 m before the arena mouth made the FIRST Warden hit lethal.
+                        // The budget is per-encounter and rank-dependent (`strikesSurvived`), and
+                        // rank 1 is `nil` — the first Warden anybody meets still cannot kill them,
+                        // which is the half of D-037 that was NOT revoked. See the note on
+                        // `Tuning.wardenStrikesSurvivedByRank` for why 3/2/1 (S-013's guess) would
+                        // have killed first-time players: a stationary player takes ~10 hazards in
+                        // one rank-1 encounter, measured on the device, not derived from the script.
                         //
-                        // What it costs instead is everything the player can afford to lose: the
-                        // multiplier and the tempo (the stumble), one blast round, and — the term
-                        // that actually decides the fight — the answer this hazard would have been
-                        // worth. Miss enough and the clock runs out with the Warden alive.
-                        stumble(fromWarden: true)
-                        wardenCharge = max(0, wardenCharge - Tuning.wardenHitChargeLoss)
+                        // v2.1's lethality was the *wrong* lethality and is not what returns here:
+                        // it ended the run on the second landed beam at every rank, and its lethal
+                        // branch required `stumbleT <= 0` while `stumbleT` runs 0.90 s against a
+                        // 0.15 s grace — so any wall clip in the 60 m before the arena mouth made
+                        // the FIRST Warden hit lethal. This budget is counted on the encounter, is
+                        // blind to `stumbleT`, and cannot be entered part-used.
+                        // Gated on the player having been TAUGHT, not merely on rank — see
+                        // `wardenLethalityUnlocked`. Rank alone does not satisfy D-037 because rank
+                        // is a property of the world: buying world 9 makes a rank-3 arena somebody's
+                        // very first encounter.
+                        let fatal = wardenLethalityUnlocked
+                            && (warden?.wouldNextStrikeBeFatal ?? false)
                         // The WHOLE throw goes, not just the wall that touched you. A `.lance` is a
                         // pair at one `d`, and leaving the partner standing would let it cross the
                         // player plane un-hit a few ticks later and pay a Warden answer for the
                         // attack that just landed on you — credit for failing.
                         let throwD = e.d
                         activeObstacles.removeAll { $0.fromWarden && $0.d == throwD }
+
+                        if fatal, shield {
+                            // **A shield now means something inside an arena again, and only here.**
+                            // D-036 moved this branch below `fromWarden` because nothing in an arena
+                            // could kill, so firing it spent the player's one rescue on a survivable
+                            // stagger and — worse — deleted the throw without paying a Warden answer,
+                            // making the fight strictly LONGER for holding one. Both of those stay
+                            // fixed: the shield is still never spent on a survivable hazard. It is
+                            // spent on exactly the thing it is for, the hazard that would otherwise
+                            // end the run.
+                            //
+                            // No `invulnT` is opened, deliberately. That was the third leg of D-036:
+                            // invulnerability lets the next hazard cross the player plane un-hit and
+                            // collect a free answer from the `passed` branch, which sits outside the
+                            // `invulnT <= 0` gate. The throw is already gone, so there is nothing
+                            // left to be invulnerable to.
+                            // The strike is deliberately NOT counted. Absorbing must leave the player
+                            // exactly where they stood — at the brink, one from death — rather than
+                            // one past a budget the HUD then has to draw more pips than it owns.
+                            shield = false
+                            streak = 0; mult = 1; flowStreak = 0
+                            emit(.shieldAbsorbed(x: px))
+                            continue
+                        }
+                        _ = warden?.registerStrike()
+                        if fatal {
+                            die(fromWarden: true)
+                            continue
+                        }
+                        // Survivable: it costs everything the player can afford to lose — the
+                        // multiplier and the tempo (the stumble), one blast round, and the term that
+                        // actually decides the fight, the answer this hazard would have been worth.
+                        stumble(fromWarden: true)
+                        wardenCharge = max(0, wardenCharge - Tuning.wardenHitChargeLoss)
                         continue
                     } else if shield {
                         // The grace window outlives the kill band: patterns 3/7/9 pair talls at the
@@ -972,6 +1054,7 @@ final class GameCore {
     /// high-water mark and is what keeps `run.mult5` and every multiplier mission completable.
     private func stumble(fromWarden: Bool) {
         stumbleT = Tuning.stumbleRecover
+        stumbleWasWarden = fromWarden
         invulnT = max(invulnT, Tuning.stumbleGrace)
         streak = 0; mult = 1; flowStreak = 0
         speed *= Tuning.stumbleSpeedFactor
@@ -979,13 +1062,17 @@ final class GameCore {
         emit(.stumbled(x: px, fromWarden: fromWarden))
     }
 
-    private func die() {
+    /// End the run. `fromWarden` is carried out to the FX layer so a boss kill and a wall clip can
+    /// never read alike (v2.4) — it also sets `diedToWarden`, which the run summary needs after the
+    /// event has already been consumed.
+    private func die(fromWarden: Bool = false) {
         score = Int(((distance - scoreOffset) * 2).rounded(.down)) + bonus   // final, frozen score
         deathDistance = distance
         mode = .over
+        diedToWarden = fromWarden
         streak = 0; mult = 1; flowStreak = 0   // death breaks the flow (boostT decays naturally)
         if score > best { best = score }
-        emit(.died(x: px))
+        emit(.died(x: px, fromWarden: fromWarden))
     }
 
     /// Debug-only: force an immediate death (used by the `PR_DEMO` screenshot flow).
@@ -1007,6 +1094,10 @@ final class GameCore {
     /// activation, so it can never reach a seeded run or the solvability bot.
     func debugStumble() { if mode == .play { stumble(fromWarden: false) } }
 
+    /// Test/diagnostic hook: arm the one-hit shield without having to spawn and collect the pickup.
+    /// Play-gated and RNG-free like every other debug activation (v2.4).
+    func debugGrantShield() { if mode == .play { shield = true; rebuildSnapshot() } }
+
     /// Test/diagnostic hook: wipe every live entity and park the spawner so hand-built scenarios
     /// (`debugSpawn`) run with zero procedural interference.
     func debugClearTrack() {
@@ -1026,6 +1117,7 @@ final class GameCore {
         guard mode == .over else { return }
         revivesUsed += 1
         mode = .play
+        diedToWarden = false   // the run is live again; nothing died to anything
         // Distance kept integrating during the death decel; fold that drift into the offset so the
         // score (and coin payout) resumes exactly where it froze — no free post-death points.
         scoreOffset += distance - deathDistance
@@ -1225,6 +1317,7 @@ final class GameCore {
             boostRemaining: boostT, sneakersRemaining: superSneakersT, flowStreak: flowStreak,
             sliding: slideT > 0, grounded: grounded,
             stumbleRemaining: stumbleT,
+            stumbleFromWarden: stumbleWasWarden,
             usedCheckpoint: usedCheckpoint,
             entities: entityScratch,
             warden: warden?.state(charge: wardenCharge, playerX: px),

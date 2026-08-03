@@ -693,6 +693,33 @@ enum Tuning {
     /// tutorial half of every fight and must not get longer as the fight gets harder.
     static let wardenShieldHits: Int = 2
 
+    /// **How many landed hazards a player survives inside ONE encounter before the next one kills
+    /// them** — `nil` meaning "never lethal" (v2.4, D-039). This is D-037: *"yeah he should be able
+    /// to kill you at some point."*
+    ///
+    /// **Rank 1 is `nil`, and that is the decree, not a softening of it.** D-037 is explicit that
+    /// the teaching rank stays survivable and that *"any implementation that can kill a player
+    /// during their first encounter has misread this decree"*. S-013 recommended 3/2/1 on the
+    /// reasoning that rank 1's five-entry script *"only has room for so many misses"* — which is
+    /// wrong, and playing it is what proved it: **a stationary player takes ~10 landed hazards in a
+    /// single rank-1 encounter** (`docs/agent/audits/scratch/s014_play_report.md`, measured off a
+    /// 26 s real-speed capture with zero inputs). The script repeats; it is the 17.5 s clock and the
+    /// 1.55 s interval that set the throw count, not the script's length. A budget of 3 at rank 1
+    /// would therefore kill a first-time player about six seconds into the first Warden they ever
+    /// meet — the exact outcome the decree forbids.
+    ///
+    /// So lethality is the top of the ladder: **rank 1 never, rank 2 on the 4th landed hazard, rank
+    /// 3 on the 3rd.** An idle player still dies at ranks 2 and 3 (they take ~12), which is the
+    /// point; a player answering throws takes none, which is why `LaggedAutopilotTests`' 0.40 s gate
+    /// stays green — and why that gate's `died == 0` assertion, trivially true since v2.2, has teeth
+    /// again.
+    ///
+    /// Counting is per ENCOUNTER, so it resets at every arena and never accumulates across a run.
+    static let wardenStrikesSurvivedByRank: [Int?] = [nil, 3, 2]
+    static func wardenStrikesSurvived(rank: Int) -> Int? {
+        wardenStrikesSurvivedByRank[rank - 1]
+    }
+
     static func wardenThrowInterval(rank: Int) -> Double { wardenThrowIntervalByRank[rank - 1] }
     static func wardenCoreHits(rank: Int) -> Int { wardenCoreHitsByRank[rank - 1] }
     /// Total answers to kill one, armour and core together — what the encounter's time budget must

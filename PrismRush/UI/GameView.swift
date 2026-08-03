@@ -443,7 +443,11 @@ final class GameModel {
     /// competitive Daily run (pre-run consumables would be pay-to-win on the shared board — decree 5).
     private func beginRun(fromWorld: Int, seed: UInt64?, consumeLoadout: Bool = true) {
         applyCurrentSkin()
-        core.startRun(seed: seed, startDistance: Double(fromWorld) * Tuning.worldLength)
+        // `wardensMet` is the same counter that retires the verb coaching, and handing it in is what
+        // keeps a lethal Warden from being anybody's first — including a player who BOUGHT their way
+        // to a rank-3 arena (v2.4, D-039). See `GameCore.wardenLethalityUnlocked`.
+        core.startRun(seed: seed, startDistance: Double(fromWorld) * Tuning.worldLength,
+                      wardensMetBefore: ProfileStore.shared.profile.wardensMet)
         // Pre-run loadout: consume armed + available consumables now that the run is in `.play`.
         // Each is RNG-free and leaderboard-safe; Coin Surge only multiplies COINS, never the score.
         coinSurgeActiveThisRun = false
@@ -698,8 +702,17 @@ final class GameModel {
             // kill anybody; this string still threatened the run). Naming the real cost is also the
             // clearer teach: a landed hazard is one answer the player did not get, and the fight is
             // decided by how many they miss.
-            addPopup(fromWarden ? "HIT — IT SHRUGS IT OFF" : "STUMBLE  ×1",
-                     color: Theme.color(fromWarden ? 0xC77BFF : 0xFF3355), worldX: x)
+            // **v2.4 restores the honest warning.** D-037 revoked D-028, so a Warden past the
+            // teaching rank can end the run — and `HIT — ONE MORE ENDS IT`, a string S-013 had to
+            // delete as a lie, is true again on exactly the strike that spends the budget. Red is
+            // reserved for that one line: everywhere else the boss speaks in its own violet.
+            let onTheBrink = fromWarden && (core.warden?.isOneStrikeFromDeath ?? false)
+            let copy: String
+            if !fromWarden           { copy = "STUMBLE  ×1" }
+            else if onTheBrink       { copy = "HIT — ONE MORE ENDS IT" }
+            else                     { copy = "HIT — IT SHRUGS IT OFF" }
+            addPopup(copy, color: Theme.color(fromWarden && !onTheBrink ? 0xC77BFF : 0xFF3355),
+                     worldX: x)
             // Reuses the shatter, which is what a survivable hard knock already sounds like in this
             // game. A bespoke stagger voice belongs with the Warden audio pass (PR-0456) — nothing
             // in this program can hear a sound, so inventing one unheard is guesswork shipped.
@@ -1400,6 +1413,7 @@ struct GameView: View {
                              onRestart: { model.startRun() },
                              onHome: { model.returnToMenu() },
                              previousBest: model.previousBest,
+                             diedToWarden: model.core.diedToWarden,
                              runDistance: model.core.traveledDistance,
                              timeSurvived: model.lastRunDuration,
                              bestStreak: model.core.bestStreak,

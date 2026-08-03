@@ -87,11 +87,13 @@ final class LaggedAutopilotTests: XCTestCase {
 
     /// A player reacting at genuine human speed must never be TOUCHED by a Warden.
     ///
-    /// **v2.2 re-points this rather than relaxing it.** A Warden can no longer kill anybody, so
-    /// `died == 0` has become trivially true and would be a gate that cannot fail. The fairness
-    /// floor is now the `caught` assertion alone, and it is the stronger of the two claims anyway:
-    /// at human reaction speed the boss must not land a single hazard. If this goes red the fix is a
-    /// LONGER throw lead (`wardenThrowLeadFar` / `wardenThrowLeadNear`) — never a smaller hitbox.
+    /// **v2.4 gives `died == 0` its teeth back.** v2.2 noted that a Warden could no longer kill
+    /// anybody, so that assertion had become trivially true — a gate that cannot fail. D-037 revoked
+    /// that, so a landed hazard can now compound into a death and BOTH assertions here are live
+    /// again: the `caught` line says the boss lands nothing on a human-speed player, and the `died`
+    /// line says the strike budget never gets spent by one. If either goes red the fix is a LONGER
+    /// throw lead (`wardenThrowLeadFar` / `wardenThrowLeadNear`) — never a smaller hitbox, and never
+    /// a bigger budget.
     func testAPlayerReactingAtHumanSpeedIsNeverTouchedByAWarden() async {
         var died = 0, encounters = 0, caught = 0
         for s in 0..<24 {
@@ -103,8 +105,10 @@ final class LaggedAutopilotTests: XCTestCase {
         }
         XCTAssertEqual(encounters, 24 * 3, "every run must meet all three Wardens or this proves nothing")
         XCTAssertEqual(died, 0,
-            "\(died)/24 runs died at a \(Self.humanFloor) s reaction. A Warden cannot kill, so a "
-            + "death here means its hazards outlived the encounter or leaked outside the arena.")
+            "\(died)/24 runs died at a \(Self.humanFloor) s reaction. Since v2.4 a Warden CAN kill, "
+            + "so this is the fairness floor stated in the harshest currency available: a player "
+            + "reacting at genuine human speed must never spend a single strike, let alone all of "
+            + "them.")
         // The real floor. Surviving is not the same claim as being untouched, and since v2.2 the
         // survival claim is free — this is the one that still has teeth.
         XCTAssertEqual(caught, 0,
@@ -122,14 +126,25 @@ final class LaggedAutopilotTests: XCTestCase {
     /// two-sided gate survive — 0.40 s untouched above, 0.75 s punished here — and the margin is
     /// still printed, because a gate that only just passes is a gate about to start lying.
     func testAPlayerWhoIsNotWatchingTheThrowLosesTheFight() async {
-        var caught = 0, kills = 0, encounters = 0
+        var caught = 0, kills = 0, encounters = 0, died = 0
         for s in 0..<24 {
             let seed = UInt64(s) &* 0x9E37_79B9_7F4A_7C15 &+ 0x1234_5678
             let out = survives(seed: seed, reaction: Self.sluggish)
             caught += out.caught
             kills += out.kills
             encounters += out.encounters
+            if !out.survived { died += 1 }
         }
+        // **The v2.4 half of the hardness gate, and the only direct proof D-037 reaches real play.**
+        // Every other lethality assertion lives in `WardenTests` and drives a stationary probe with
+        // `wardensMetBefore` forced; this one drives the actual Autopilot through actual arenas at a
+        // human-but-inattentive latency and asks whether the strike budget ever gets spent. If it
+        // goes red, a Warden is once again unable to end anybody's run in practice — which is the
+        // exact state D-037 was written to end.
+        XCTAssertGreaterThan(died, 0,
+            "no run out of 24 died at a \(Self.sluggish) s reaction. A Warden that cannot finish an "
+            + "inattentive player has no stakes, and D-037 is unimplemented in practice however "
+            + "green WardenTests is.")
         XCTAssertGreaterThan(caught, 0,
             "no hazard landed on ANY player reacting in \(Self.sluggish) s — the encounter is "
             + "passable without reading it, which is exactly the verdict this redesign exists to "
@@ -138,6 +153,44 @@ final class LaggedAutopilotTests: XCTestCase {
             "a \(Self.sluggish) s player killed every Warden they met (\(kills)/\(encounters)) — "
             + "the fight has no failure state left.")
         print("[lagged] sluggish (\(Self.sluggish) s): \(caught) hazards landed, "
-              + "\(kills)/\(encounters) Wardens killed")
+              + "\(kills)/\(encounters) Wardens killed, \(died)/24 runs ended by one")
+    }
+
+    /// **The shape of the cliff between the two gates** (v2.4).
+    ///
+    /// The pair above pin the endpoints — untouched at 0.40 s, dead at 0.75 s — and say nothing
+    /// about what happens in the 0.35 s between them, which is where every real player actually
+    /// lives. A boss whose entire difficulty curve is a step function at some unmeasured latency is
+    /// not tuned, it is merely bounded, and the endpoints alone cannot tell those apart.
+    ///
+    /// Prints the curve and asserts only the two things that must be true of any sane one: the
+    /// fairness floor takes no deaths, and death rate never DECREASES as the player gets slower.
+    /// A non-monotonic curve means a longer reaction is somehow safer, which has happened here
+    /// before — D-032 records leads moving out to 52 m making the fight strictly easier, caught only
+    /// because a gate happened to be two-sided.
+    func testTheDifficultyCurveBetweenTheTwoGatesIsMonotonic() async {
+        var rates: [(Double, Int, Int)] = []
+        for step in 0...7 {
+            let reaction = Self.humanFloor + (Self.sluggish - Self.humanFloor) * Double(step) / 7
+            var died = 0, caught = 0
+            for s in 0..<12 {
+                let seed = UInt64(s) &* 0x9E37_79B9_7F4A_7C15 &+ 0x1234_5678
+                let out = survives(seed: seed, reaction: reaction)
+                caught += out.caught
+                if !out.survived { died += 1 }
+            }
+            rates.append((reaction, died, caught))
+        }
+        print("[lagged] reaction → deaths/12, hazards landed:")
+        for (r, d, c) in rates {
+            print(String(format: "         %.3f s → %2d/12   %3d", r, d, c))
+        }
+        XCTAssertEqual(rates.first?.1, 0, "the fairness floor took a death")
+        for (a, b) in zip(rates, rates.dropFirst()) {
+            XCTAssertLessThanOrEqual(a.1, b.1,
+                String(format: "death rate FELL from %.3f s (%d) to %.3f s (%d) — a slower player "
+                       + "is safer, which means a window somewhere is inverted (cf. D-032)",
+                       a.0, a.1, b.0, b.1))
+        }
     }
 }

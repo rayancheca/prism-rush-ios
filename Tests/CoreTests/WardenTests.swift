@@ -90,35 +90,153 @@ final class WardenTests: XCTestCase {
     /// `stumbleT <= 0`, and `stumbleT` runs 0.90 s against a 0.15 s grace, so any wall clip in the
     /// 60 m before the arena mouth made the FIRST Warden hit lethal — the "forgives once" promise
     /// was skippable.
-    func testAPlayerWhoNeverMovesInsideAnArenaAlwaysSurvivesIt() async {
+    /// **Re-pointed at the TEACHING rank by v2.4, not deleted** (D-037 says to). D-028's "never, at
+    /// any rank" is revoked; "cannot kill you while it is still teaching you" is still the promise,
+    /// and it is now the more important of the two because it is the only thing standing between a
+    /// first-time player and a boss that can end their run.
+    ///
+    /// Two independent guards have to hold for this to pass, and the test exercises both:
+    /// rank 1 has no strike budget at all (`wardenStrikesSurvivedByRank[0] == nil`), and lethality
+    /// is gated on the player having met `wardenCoachEncounters` Wardens. World 12 is included
+    /// deliberately — it is rank 3, the *hardest* Warden in the game, and an untaught player must
+    /// walk out of it alive even there.
+    func testAPlayerWhoNeverMovesIsNeverKilledWhileTheGameIsStillTeachingThem() async {
         for world in [3, 6, 9, 12] {
-            let core = wardenCore(world: world)
+            let core = wardenCore(world: world, wardensMetBefore: 0)
             var ticks = 0
             var stumbles = 0
-            while core.warden != nil && ticks < 400_000 {
+            while core.warden != nil && core.mode == .play && ticks < 400_000 {
                 core.tick(Tuning.tickDt)   // no input at all
                 ticks += 1
                 stumbles = core.stumbles
             }
             XCTAssertEqual(core.mode, .play,
-                           "world \(world): a Warden ended the run — it must never be able to")
+                           "world \(world): a Warden killed a player it has not finished teaching")
             XCTAssertGreaterThan(stumbles, 0,
                                  "world \(world): standing still was not punished at all")
         }
     }
 
-    /// …and it stays true when the player enters already staggered, which is the specific hole the
-    /// old rule had.
+    /// And rank 1 stays survivable for a fully-taught veteran too — lethality is the TOP of the
+    /// ladder, not the floor (D-037). This is the half of the decree that survives independently of
+    /// the coaching gate, so it is worth its own assertion: delete the gate and this must still pass.
+    func testTheTeachingRankIsNeverLethalEvenToAVeteran() async {
+        let core = wardenCore(world: 3, wardensMetBefore: 999)
+        var ticks = 0
+        while core.warden != nil && core.mode == .play && ticks < 400_000 {
+            core.tick(Tuning.tickDt)
+            ticks += 1
+        }
+        XCTAssertEqual(core.mode, .play, "rank 1 must never be able to kill anybody")
+        XCTAssertGreaterThan(core.stumbles, 0, "rank 1 did not land anything at all")
+        XCTAssertNil(Tuning.wardenStrikesSurvived(rank: 1),
+                     "rank 1 gained a strike budget — that is the floor D-037 protects")
+    }
+
+    /// …and the teaching rank stays non-lethal when the player enters already staggered, which is
+    /// the specific hole v2.1's rule had (its lethal branch required `stumbleT <= 0`).
     func testAWardenCannotKillEvenAPlayerWhoArrivesAlreadyStumbling() async {
         let core = wardenCore()
         core.debugStumble()
         XCTAssertGreaterThan(core.stumbleT, 0)
         var ticks = 0
-        while core.warden != nil && ticks < 400_000 {
+        while core.warden != nil && core.mode == .play && ticks < 400_000 {
             core.tick(Tuning.tickDt)
             ticks += 1
         }
-        XCTAssertEqual(core.mode, .play, "arriving mid-stumble must not make a Warden lethal")
+        XCTAssertEqual(core.mode, .play, "arriving mid-stumble must not make a rank-1 Warden lethal")
+    }
+
+    // MARK: - 1b. …but a taught player CAN be killed (v2.4, D-037)
+
+    /// **The decree itself.** *"yeah he should be able to kill you at some point."* Ranks 2 and 3
+    /// must end the run of a player who stands still and has been taught — otherwise the whole of
+    /// D-037 is unimplemented and every other assertion here is measuring a boss with no stakes.
+    func testATaughtPlayerWhoNeverMovesIsKilledByRanksTwoAndThree() async {
+        for world in [6, 9, 12] {
+            let rank = Tuning.wardenRank(world: world)
+            let core = wardenCore(world: world, wardensMetBefore: 999)
+            var ticks = 0
+            while core.mode == .play && core.warden != nil && ticks < 400_000 {
+                core.tick(Tuning.tickDt)   // no input at all
+                ticks += 1
+            }
+            XCTAssertEqual(core.mode, .over,
+                           "world \(world) (rank \(rank)): a stationary, fully-taught player walked "
+                           + "away. D-037 is not implemented at this rank.")
+            XCTAssertTrue(core.diedToWarden,
+                          "world \(world): the run ended but not attributably to the Warden")
+        }
+    }
+
+    /// The budget is spent in the right ORDER and at the right SIZE: exactly `strikesSurvived`
+    /// hazards land and are walked away from, and the next one kills. Pins the rank table itself, so
+    /// changing `wardenStrikesSurvivedByRank` without meaning to turns this red rather than silently
+    /// making the fight twice as forgiving.
+    func testTheStrikeThatKillsIsExactlyTheOnePastTheBudget() async {
+        for world in [6, 9] {
+            let rank = Tuning.wardenRank(world: world)
+            guard let budget = Tuning.wardenStrikesSurvived(rank: rank) else {
+                return XCTFail("world \(world) is rank \(rank), which has no budget to test")
+            }
+            let core = wardenCore(world: world, wardensMetBefore: 999)
+            var strikesAtDeath = -1
+            var ticks = 0
+            while core.mode == .play && core.warden != nil && ticks < 400_000 {
+                core.tick(Tuning.tickDt)
+                ticks += 1
+                if core.mode == .over { strikesAtDeath = core.warden?.strikes ?? -1 }
+            }
+            XCTAssertEqual(strikesAtDeath, budget + 1,
+                           "world \(world) (rank \(rank)): died on strike \(strikesAtDeath), but the "
+                           + "budget is \(budget) so it must be strike \(budget + 1)")
+        }
+    }
+
+    /// A shield is spent on the fatal strike and on nothing else.
+    ///
+    /// This is D-036 finding 1 held in place while its premise changes underneath it. That fix was
+    /// justified by "inside an arena nothing can end the run", which D-037 revokes — so the branch
+    /// ordering has to keep both halves true at once: never spent on a survivable hazard (or the
+    /// fight gets *longer* for holding one), always spent on the one that would end the run.
+    func testAShieldIsSpentOnTheFatalStrikeAndOnlyOnThat() async {
+        let core = wardenCore(world: 9, wardensMetBefore: 999)
+        core.debugGrantShield()
+        XCTAssertTrue(core.snapshot.shieldActive, "the probe failed to arm a shield")
+        let budget = Tuning.wardenStrikesSurvived(rank: 3)!
+        var shieldHeldAfterFirstStrike = true
+        var absorbs = 0
+        var stumblesAtFirstAbsorb = -1
+        core.onFX = {
+            if case .shieldAbsorbed = $0 {
+                absorbs += 1
+                if stumblesAtFirstAbsorb < 0 { stumblesAtFirstAbsorb = core.stumbles }
+            }
+        }
+        var ticks = 0
+        while core.mode == .play && core.warden != nil && ticks < 400_000 {
+            core.tick(Tuning.tickDt)
+            ticks += 1
+            if core.stumbles == 1 { shieldHeldAfterFirstStrike = core.snapshot.shieldActive }
+        }
+        let story = "mode=\(core.mode) strikes=\(core.warden?.strikes ?? -1) "
+            + "stumbles=\(core.stumbles) absorbs=\(absorbs)"
+
+        XCTAssertTrue(shieldHeldAfterFirstStrike,
+                      "a survivable strike spent the shield — the D-036 inversion is back. \(story)")
+        // The absorb has to land on the strike PAST the budget, and the stumble count at that moment
+        // is what proves it: `budget` hazards were walked away from, and then the shield ate the one
+        // that would have ended the run.
+        XCTAssertEqual(stumblesAtFirstAbsorb, budget,
+                       "the shield fired after \(stumblesAtFirstAbsorb) survivable strikes, but the "
+                       + "budget is \(budget) — it is not firing on the fatal one. \(story)")
+        // **Not asserted: that the shield flag is still false at the end.** `Warden.suppresses`
+        // deliberately lets power-ups into an arena (it is a gem field on purpose), and
+        // `debugClearTrack` parks `spawner.cursor` but not `powerUpCursor` — so a stationary probe
+        // can and does collect a fresh shield mid-fight. Spending is what this test is about; the
+        // terminal flag is not evidence either way.
+        XCTAssertEqual(core.mode, .over,
+                       "absorbing one fatal strike must not make the player immortal. \(story)")
     }
 
     /// What a landed hazard costs instead: the multiplier, the tempo, and a blast round.
@@ -572,9 +690,14 @@ final class WardenTests: XCTestCase {
 
     /// A run parked at the mouth of a Warden arena with the encounter armed and the spawner quiet,
     /// so a fight can be driven in isolation.
-    private func wardenCore(world: Int = 3, seed: UInt64 = 0xB055) -> GameCore {
+    /// `wardensMetBefore` defaults to "fully taught", so a probe measures the LETHAL fight unless it
+    /// explicitly asks for the teaching one (v2.4) — the same default `GameCore.startRun` uses, and
+    /// for the same reason: the dangerous configuration is the one worth proving.
+    private func wardenCore(world: Int = 3, seed: UInt64 = 0xB055,
+                            wardensMetBefore: Int = Int.max) -> GameCore {
         let core = GameCore(seed: seed)
-        core.startRun(seed: seed, startDistance: Double(world) * Tuning.worldLength + 5)
+        core.startRun(seed: seed, startDistance: Double(world) * Tuning.worldLength + 5,
+                      wardensMetBefore: wardensMetBefore)
         // A checkpoint start grants charge; clear the track so only the Warden's throws are on it.
         core.debugClearTrack()
         var n = 0

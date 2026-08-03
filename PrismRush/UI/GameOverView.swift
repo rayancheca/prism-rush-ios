@@ -22,6 +22,9 @@ struct GameOverView: View {
     /// Best score BEFORE this run started. By death time the profile best already includes this
     /// run, so `snapshot.score >= snapshot.best` is true for ties — only a strict beat is a record.
     var previousBest: Int? = nil
+    /// Whether a Warden ended this run (v2.4, D-039). Defaulted so every existing call site and
+    /// preview keeps compiling; passed for real from `GameView`, which owns the core.
+    var diedToWarden: Bool = false
     /// `core.traveledDistance` — excludes the checkpoint head start (snapshot.distance includes it).
     var runDistance: Double? = nil
     /// Legacy (v1.2): the TIME tile is gone in the 3-band layout; accepted-but-ignored (R13).
@@ -146,11 +149,19 @@ struct GameOverView: View {
     // MARK: band 1 — score
 
     @ViewBuilder private var scoreBand: some View {
-        Text("SHATTERED")
+        // **Who killed you is part of the score (v2.4).** Until now a run ended by a Warden looked
+        // exactly like one ended by clipping a wall — the panel named the distance and the world and
+        // nothing else. Playing it, the boss fight passed, the run ended a few seconds later, and
+        // there was no way to tell whether the Warden had been beaten, survived or was even involved
+        // (`docs/agent/audits/scratch/s014_play_report.md`). D-037 made the boss able to end a run;
+        // a run it ended has to say so, or the stakes it just spent are invisible in the one place
+        // the player is actually reading.
+        Text(diedToWarden ? "THE WARDEN GOT YOU" : "SHATTERED")
             .font(.system(size: 28, weight: .heavy, design: .rounded))
             .tracking(1)
-            .foregroundStyle(Theme.Role.danger)
-            .shadow(color: Theme.Role.danger.opacity(0.5), radius: 18)
+            .foregroundStyle(diedToWarden ? Theme.color(0xC77BFF) : Theme.Role.danger)
+            .shadow(color: (diedToWarden ? Theme.color(0xC77BFF) : Theme.Role.danger)
+                .opacity(0.5), radius: 18)
 
         // Score counts up from 0 (numeric content transition); instant under Reduce Motion.
         Text("\(countedUp ? snapshot.score : 0)")

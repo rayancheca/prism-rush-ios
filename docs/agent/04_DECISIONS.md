@@ -896,3 +896,114 @@ entire session, so a boss sounds exactly like open track), the Warden's own besp
 none — its shot reuses the lance cue), camera and post work, and a reason to look at the craft
 between throws. None of that is a `Tuning` constant, which is why five sessions of tuning have not
 touched it.
+
+## D-039
+**A WARDEN KILLS ON THE STRIKE PAST ITS BUDGET, AND RANK 1 HAS NO BUDGET.** (S-014, implementing
+D-037.)
+
+The owner specified the outcome — *"yeah he should be able to kill you at some point"* — and left the
+mechanism open. S-013 recommended a per-encounter strike budget of **3 / 2 / 1** by rank, reasoning
+that rank 1 would stay "effectively unkillable" because *"its script only has room for so many
+misses"*.
+
+**That reasoning is wrong, and playing the game is what proved it.** A rank-1 Warden lands **~10–11
+hazards on a player who makes no inputs at all** — measured off a 26 s real-speed capture with zero
+inputs (`docs/agent/audits/scratch/s014_play_report.md`) and derived independently from the constants
+(17.5 s clock ÷ 1.55 s interval; the "can it arrive in time" guard refuses zero throws at every
+rank). The script's LENGTH sets nothing — it repeats. A budget of 3 at rank 1 would kill a
+first-time player about 5.6 s into the first Warden they ever meet, which is precisely what D-037
+forbids in its own text.
+
+So: **`wardenStrikesSurvivedByRank = [nil, 3, 2]`.** Rank 1 never kills. Rank 2 kills on the 4th
+landed hazard, rank 3 on the 3rd. An idle player still dies at ranks 2 and 3 (they take ~12–15),
+which is the point; a player answering throws takes none.
+
+**Rank is not sufficient on its own, and this is the part that is easy to miss.** Rank is a property
+of the WORLD, and a checkpoint start puts a player at any world they have reached or bought — 71% of
+the coin catalogue leads to world 9, a rank-3 arena. Without a second gate, the first Warden a paying
+player ever met would be the lethal one. Lethality is therefore also gated on
+`GameCore.wardenLethalityUnlocked`, which counts `Profile.wardensMet` — **the same counter that
+retires the verb coaching**. The game never kills you with a thing it is still teaching you, which is
+D-037 expressed as a mechanism rather than as a number. `Core/` cannot read a profile, so the count
+is handed in at `startRun(wardensMetBefore:)`, defaulting to "fully taught" so every existing caller
+and the whole test suite measure the dangerous configuration.
+
+**The shield's rule changes with the premise it rested on.** D-036 ordered the `fromWarden` branch
+before `shield` because nothing inside an arena could end a run; D-037 revokes exactly that. Both
+halves now hold at once: a shield is still never spent on a survivable hazard (which would make the
+fight LONGER for holding one), and it is always spent on the strike that would end the run. It fires
+before the counter moves, so absorbing leaves the player at the brink rather than one past a budget
+the HUD would then have to draw more pips than it owns. No `invulnT` is opened — the throw is already
+deleted, so there is nothing left to be invulnerable to, and opening a window was the third leg of
+the D-036 bug.
+
+**Measured two-sided, and the middle was measured too.** `LaggedAutopilotTests` now reads: **0 of 24
+runs touched at a 0.40 s reaction, 24 of 24 killed at 0.75 s.** A new test prints the curve between
+them, and it is a gradient rather than a step — untouched through 0.50 s, first hazards landing at
+0.55–0.60 s, first deaths at 0.65 s (1/12), 3/12 at 0.70 s, 12/12 at 0.75 s. The budget absorbs
+ordinary imperfection and only punishes sustained inattention, which is what a budget is for.
+
+`layoutVersion` is untouched at **12**: zero RNG, no spawn, no change to suppression. v13 stays
+pre-armed and unspent.
+
+## D-040
+**THE ARENA IS A PLACE.** (S-014, answering D-038.)
+
+D-038 measured the emptiness and named arena geometry as the biggest available win. Playing it found
+the mechanism D-038 had missed, and it is worse than "the fight has gaps":
+
+**`WorldDecor.style` disables every side silhouette for folded world ordinal ≥ 3 — and Wardens live
+at worlds 3, 6 and 9.** The three arenas a player actually meets are the only stretches of track in
+the entire game with no side decor at all. Stacked on `Warden.suppresses` clearing every obstacle and
+pad, the player crosses into the boss arena and **the world gets emptier**. Every frame of a rank-1
+encounter from 2,418 m on held nothing but black sky, blue grid, the craft and gems.
+
+`ArenaShell.swift` answers it with geometry the suppression rule cannot see, because `suppresses`
+filters `SpawnCmd`s and decor is not one: paired ribs at x ±5.6 every 22 m (1.5 Hz at speed), a
+continuous kerb at x ±4.5 that rushes past the player's shoulder as the frame's strongest speed cue,
+and a full gate at the mouth and the exit whose header sweeps overhead. Plus a four-line deck tint —
+one bit folded into the palette cache key, lane and grid mixed 20% toward the dim violet — which is
+the highest read-per-line change available and the one thing that is impossible to miss, because the
+deck is what you look at for the whole fight.
+
+Four constraints it holds, verified on the simulator: **nothing crosses a lane** (all of it outboard
+of x ±4.2 or above y 11, so it adds zero frontal area in the corridor the owner said was "blocking
+the view of everything"), max section 0.55 u, **no new motion** (static in world space; the scroll
+supplies it, so there is nothing for Reduce Motion to gate and nothing that competes with the 7 Hz
+stumble strobe), and **no RNG whatsoever** — every position is `k × spacing` from the mouth, so the
+place looks identical every time you meet it and cannot perturb a seeded run even in principle.
+
+A full-span gate is safe where a hanging bar was not: a gate at `into == 0` renders at `z ≥ 0` —
+*behind* the player — for the entire window in which a Warden can arm (the first 60 m), so it is only
+ever seen on the approach, and it leaves the frame over the top rather than across the deck.
+
+The craft also stopped being furniture. `WardenState.throwCharge` (presentation-only, no RNG) drives
+a wind-up in the last 38% of every gap: the idle yaw eases to a halt instead of being cut, the hull
+pitches nose-down ~14° and swells 4%. **This is deliberately not a shorter gap** — `testTwoThrowsAre
+NeverInFlightAtOnce` and `LaggedAutopilotTests` both bar that. The 0.4–0.7 s of dead air becomes the
+tell.
+
+## D-041
+**THE RED IS SPENT, NOT DELETED — AND D-034 WAS WRONG THAT IT WAS GONE.** (S-014.)
+
+D-034 states *"the red is gone"*. It is not. `EffectsOverlay.swift:230` was
+`Color(red: 1, green: 0.20, blue: 0.33)` — exactly `0xFF3355`, the colour that decision claims to
+have deleted — and `RealityRenderer`'s `stumbleAura` put a red torus on the player on top of it.
+D-034 removed the red from the *hazards* and left it on the *hit feedback*, which fires far more
+often than any hazard is on screen.
+
+Counting frames on a rank-1 capture: **roughly 15 of 42 sampled frames carried a full red screen-edge
+vignette and a red ring.** Inside an arena the screen was red more of the time than it was not —
+which is the owner's *"i hate the red colour"*, still true, in the exact place he was looking when he
+said it, one session after it was reported fixed.
+
+The answer is not to delete red but to make it scarce enough to mean something. **Red now means one
+thing and is used nowhere else: the next contact ends the run.** That is what the vignette's own doc
+comment always claimed it meant, and on an ordinary stumble it was already true. A survivable Warden
+strike wears the Warden's violet instead — vignette, player ring and popup together — so the fight
+speaks one colour, and red returns at the exact moment the strike budget is spent, alongside
+`HIT — ONE MORE ENDS IT`, a string S-013 had to delete as a lie and D-039 makes true again.
+
+Verified on screen at rank 2 and rank 3: three violet strikes, then a red frame and the honest
+warning, then either the shield absorbing the fatal one or `THE WARDEN GOT YOU` on the death panel —
+which is also new, because until now a run a boss ended looked exactly like clipping a wall.

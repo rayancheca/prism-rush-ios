@@ -27,8 +27,15 @@ final class RealityRenderer: RendererPort {
     private var pools: EntityPools!
     private let wardenRig = WardenRig()   // v1.9 set piece; off unless an encounter is live
     private var decor: WorldDecor!
+    /// Arena structure — the Warden's ground (v2.4). Draws only inside/approaching an arena.
+    private var arena: ArenaShell!
 
     private let cGold = UIColor(red: 1, green: 210/255.0, blue: 61/255.0, alpha: 1) // #FFD23D
+    /// `#FF3355`. Since v2.4 this means exactly one thing — THE NEXT CONTACT ENDS THE RUN — and is
+    /// used nowhere else, which is what makes it worth reacting to. See the stumble-aura hue rule.
+    private let cDanger = UIColor(red: 1, green: 0.20, blue: 0.33, alpha: 1)
+    /// Live hue of the vulnerability ring, so the material is rebuilt only when it actually changes.
+    private var stumbleAuraHue: UIColor = UIColor(red: 1, green: 0.20, blue: 0.33, alpha: 1)
     private let cWhite = UIColor.white
     // Warden hazard colours (v1.9; **re-hued v2.3**). World-blind by design — the same reason the
     // chasm's walls are: a threat must look identical in all twelve families, and the accents reach
@@ -229,6 +236,7 @@ final class RealityRenderer: RendererPort {
         pools.prewarm(.superSneakers, count: Tuning.capSuperSneakers)
         pools.prewarm(.chasm, count: Tuning.capChasm)   // tier six: first spawn is ~2,560 m in
         decor = WorldDecor(root: root)
+        arena = ArenaShell(root: root)
         particles = ParticleSystem(parent: root)
 
         reduceMotionObserver = NotificationCenter.default.addObserver(
@@ -254,7 +262,15 @@ final class RealityRenderer: RendererPort {
         // (v1.4.3). fromOrdinal = toOrdinal − 1 holds because worlds step exactly one at a time
         // during a crossfade; in steady state worldBlend == 1 so the `from` half contributes 0.
         let toOrd = snap.worldOrdinal, fromOrd = max(0, toOrd - 1)
+        // **The floor itself says whose ground this is (v2.4, D-038).** Folding one bit into the
+        // cache key buys 770 m of "you are somewhere else" for a boolean and a mix, and it is the
+        // only element of the arena treatment that is impossible to miss — you are looking at the
+        // deck the entire fight. It uses the DIM violet, never `cWardenHazard`: a saturated violet
+        // floor would collide with the one channel that must stay unambiguous, which is the exact
+        // mistake this file's own colour-reservation comment block was written about.
+        let inArena = snap.mode == .play && Warden.isArena(snap.distance)
         let key = fromOrd &* 1_000_000 &+ toOrd &* 1_000 &+ Int(snap.worldBlend * 64)
+            &+ (inArena ? 512 : 0)
         if key != paletteKey {
             paletteKey = key
             let pal = Palette(snap)
@@ -263,9 +279,9 @@ final class RealityRenderer: RendererPort {
             matAccent = UnlitMaterial(color: pal.accent)
             matAccent2 = UnlitMaterial(color: pal.accent2)
             backdrop.model?.materials = [UnlitMaterial(color: pal.bg)]
-            let gridMat = UnlitMaterial(color: pal.grid)   // ONE instance shared by every rung
+            let gridMat = UnlitMaterial(color: Self.towardArena(pal.grid, inArena))
             for r in rungs { r.model?.materials = [gridMat] }
-            let laneMat = UnlitMaterial(color: pal.lane)   // pushed toward white mid-crossfade
+            let laneMat = UnlitMaterial(color: Self.towardArena(pal.lane, inArena))
             for l in laneLines { l.model?.materials = [laneMat] }
             // The character is deliberately ABSENT here: its colors are authored per skin
             // (applied in applySkin / the shimmer step in advanceVisuals) and never react to
@@ -420,6 +436,23 @@ final class RealityRenderer: RendererPort {
             // not. Reduce Motion holds it solid instead: this is a safety readout, and a player who
             // cannot have the flicker still needs the ring.
             stumbleAura.isEnabled = reduceMotion || sin(elapsed * 44) > -0.35
+            // **Whose hit was it, and is the run actually on the line (v2.4, D-038/D-039).** The
+            // ring was red for every stagger, and inside an arena it fires on every landed hazard —
+            // so a Warden fight was the reddest place in a game whose owner said *"i hate the red
+            // colour"*. D-034 answered that by taking `0xFF3355` off the hazards and left it here,
+            // where it fires far more often than any hazard is on screen.
+            //
+            // Red is not deleted; it is SPENT. It now means one thing only — the next contact ends
+            // the run — which is exactly what it always claimed to mean and, on an ordinary stumble,
+            // still does. A survivable Warden strike wears the Warden's violet instead, so the fight
+            // speaks one colour and red stays worth reacting to.
+            let survivableStrike = snap.stumbleFromWarden
+                && !(snap.warden?.isOneStrikeFromDeath ?? false)
+            let auraHue = survivableStrike ? cWardenHazard : cDanger
+            if auraHue != stumbleAuraHue {
+                stumbleAuraHue = auraHue
+                stumbleAura.model?.materials = [UnlitMaterial(color: auraHue)]
+            }
         } else if stumbleAura.isEnabled {
             stumbleAura.isEnabled = false
         }
@@ -603,6 +636,11 @@ final class RealityRenderer: RendererPort {
         // ABSOLUTE ordinal, not the 0–2 family — WorldSky's per-world seed + cycle richening
         // (world / 3 element counts) are dead at a family index (v1.4 review fix).
         decor.update(distance: snap.distance, world: snap.worldOrdinal, elapsed: elapsed, reduceMotion: reduceMotion)
+        // THE WARDEN'S GROUND (v2.4, D-038). Costs one `Warden.arenaWorld` call — a division and a
+        // modulo — on the ~2 frames in 3 that are not near an arena, and is the answer to the fact
+        // that worlds 3/6/9 are the ONLY worlds with no side decor at all: the three stretches a
+        // Warden fight happens in were the emptiest in the game.
+        arena.update(distance: snap.distance, world: snap.worldOrdinal, mode: snap.mode)
     }
 
     func fire(_ event: FXEvent) {
@@ -767,11 +805,17 @@ final class RealityRenderer: RendererPort {
             particles.burst(x: Float(x), y: Float(y), z: Float(z), color: cWhite,
                             count: 10, power: 3.2, spread: 0.3, life: 0.34, velZ: 6)
 
-        case let .died(x):
+        case let .died(x, fromWarden):
             // First (colored) burst shatters in the skin's own color; the white flash stays global.
             particles.burst(x: Float(x), y: 1, z: 0, color: skinTrailColor, count: 120, power: 7.5, spread: 0.55, life: 1.2)
             particles.burst(x: Float(x), y: 1, z: 0, color: cWhite, count: 60, power: 9.5, spread: 0.35, life: 0.9)
-            shake = 1.4
+            // A boss kill is the Warden's, and it says so: the second burst goes violet instead of
+            // white and the shake is heavier. Same beat, different author (v2.4).
+            if fromWarden {
+                particles.burst(x: Float(x), y: 1, z: 0, color: cWardenHazard,
+                                count: 70, power: 11, spread: 0.42, life: 1.0)
+            }
+            shake = fromWarden ? 1.9 : 1.4
         case let .worldChanged(_, ordinal):
             // One-shot horizon ring sweep in the incoming world's accent (banner is UI-side).
             // Evolved by absolute ordinal so the sweep matches the cycle's palette (v1.4.3).
@@ -1471,6 +1515,22 @@ final class RealityRenderer: RendererPort {
             let f = skidLife[i] / skidMaxLife
             skids[i].scale = SIMD3<Float>(f, 1, 0.6 + 0.4 * f)   // fade via scale
         }
+    }
+
+    /// Mix a deck colour 20% toward the arena violet, or return it untouched off an arena (v2.4).
+    ///
+    /// 20% is a ceiling, not a taste call: past roughly a quarter the floor starts reading as
+    /// violet rather than as *tinted*, and the deck would then be competing for the hue that means
+    /// "the thing about to hit you". The point is for the player to notice the ground changed, not
+    /// to be able to name its colour.
+    private static func towardArena(_ c: UIColor, _ inArena: Bool) -> UIColor {
+        guard inArena else { return c }
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 1
+        c.getRed(&r, green: &g, blue: &b, alpha: &a)
+        let m: CGFloat = 0.20
+        return UIColor(red: r * (1 - m) + (0x7B / 255.0) * m,
+                       green: g * (1 - m) + (0x3B / 255.0) * m,
+                       blue: b * (1 - m) + (0xC4 / 255.0) * m, alpha: a)
     }
 }
 
