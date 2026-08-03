@@ -1106,3 +1106,37 @@ corner projecting 24 pt below the deck's far edge) and Orbital's planet limb (ce
 r 11.66, cutting the deck across `x ∈ [−8, 2.21]`). Those need their placement moved, not an
 occluder. Per-element verdicts for all twelve worlds:
 `docs/agent/audits/scratch/s015_r4_zorder.md` §4.
+
+## D-046
+**THE ZERO-BINARY-ASSETS DECREE IS REVOKED BY THE OWNER.** (S-016, 2026-08-03.)
+
+Verbatim, mid-session: *"why are you not importing real assests. delete that code only decree"*, and
+later in the same message *"this is where assets come in. use things online idc what."*
+
+This is the largest single change to the program's constraints since it started. `CLAUDE.md` iron
+rule 6 — *"Zero binary assets. Meshes via `MeshDescriptor`, audio via DSP in `Synth.swift`… Don't add
+asset catalogs, textures, or sound files"* — is the reason every mesh in this game is procedural,
+every material is an `UnlitMaterial`, there is not one texture, and the entire audio layer is DSP
+with a single 1.82 s music loop. Roughly the whole *look* of Prism Rush is downstream of that rule.
+It is deleted, not amended. **The rule's NUMBER is preserved as a tombstone rather than renumbering
+the other eight, because they are cited by number throughout `docs/agent/`.**
+
+**What replaces it is a budget and a licence check, not a ban:**
+
+1. **Memory budget.** The same owner message says *"the app becomes slow at points. this can never
+   happen. manage ram and memory somehow."* Importing assets is the single fastest way to make that
+   worse, so the revocation and the SEV0 arrive together and must be worked together. Every asset
+   added is charged against a stated per-category budget (`s016_assets.md` / `s016_perf.md`).
+2. **Licensing floor — not the owner's to waive, and the one narrowing applied to his words.**
+   *"use things online idc what"* is executed as **AI-generated or CC0/public-domain only**, and
+   *"ciopy subway surfers"* as **copy its design language, readability, pickup choreography and box
+   loop — with our own assets in that idiom.** Shipping another game's art, names or trademarks is
+   infringement and a certain App Store rejection, so that reading is the only version of the
+   instruction that ships. Stated here so no later session quietly does the other thing.
+
+Consequences to work through: `Tools/gen_icon.swift` and the `Assets.xcassets` carve-out language,
+the README's and `CLAUDE.md`'s "zero binary assets" claims, `project.yml` resource wiring, asset
+preloading (RealityKit's loaders are async and this game must not hitch), and any test that asserts
+the absence of assets.
+
+Full mandate, verbatim and decomposed into M1–M10: `docs/agent/audits/scratch/s016_mandate.md`.

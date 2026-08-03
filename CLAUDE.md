@@ -101,6 +101,14 @@ with a decree, the doc is wrong — amend the doc, never "ship the doc". Current
   collects a gem — so `DifficultyCurveTests.testEveryGreedGemLeavesATakeableExit` is its fairness
   proof; keep it green if you touch gem placement.
 
+- **"Zero binary assets" — REVOKED (D-046, 2026-08-03).** Iron rule 6, deleted by the owner in one
+  line: *"why are you not importing real assests. delete that code only decree."* Every procedural
+  mesh, every `UnlitMaterial` and the entire DSP audio layer exist because of that rule; the whole
+  look of the game is downstream of it. It is gone. The replacement is a **memory budget** (same
+  instruction: *"the app becomes slow at points. this can never happen"*) and a **licensing floor**
+  (ship only what we own or what is CC0 — "copy subway surfers" is its design language, never its
+  art). Full mandate verbatim: `docs/agent/audits/scratch/s016_mandate.md`.
+
 ## Iron rules
 
 1. **Core/ never imports a renderer or UIKit.** It meets the outside world only through
@@ -131,12 +139,19 @@ with a decree, the doc is wrong — amend the doc, never "ship the doc". Current
 5. **G3 — never `@State` a shared `@Observable`, never snapshot `store.profile` into a `let` at the
    top of `body`.** Reference singletons (`ProfileStore.shared`, `IAPManager.shared`, …) directly in
    `body` so observation tracks them. This exact anti-pattern shipped three v1.0 bugs.
-6. **Zero binary assets.** Meshes via `MeshDescriptor`, audio via DSP in `Synth.swift`, icon via
-   `Tools/gen_icon.swift`. Don't add asset catalogs, textures, or sound files.
-   **Sole carve-out (owner-sanctioned, v1.3.1):** `PrismRush/Assets.xcassets` holds exactly the
-   `AppIcon.appiconset` — an app icon cannot ship without a catalog. Its PNG is a byte-copy of the
-   `gen_icon.swift` output (the tool syncs it automatically); never hand-edit it, and don't add
-   anything else to the catalog.
+6. ~~**Zero binary assets.**~~ — **REVOKED BY THE OWNER, 2026-08-03 (D-046).** Verbatim: *"why are
+   you not importing real assests. delete that code only decree"* and *"use things online idc what."*
+   Real meshes, textures, models and sound files are now permitted and wanted. The rule number is
+   kept rather than renumbering, because the other eight are cited by number across `docs/agent/`.
+   **What replaces it is a budget, not a ban** — see D-046 and `docs/agent/audits/scratch/s016_assets.md`.
+   Two things survive the revocation and are not the owner's to waive:
+   (a) **we must have the right to ship what we ship** — AI-generated or CC0/public-domain only;
+   "copy subway surfers" means its design language and pacing, never its art, names or trademarks;
+   (b) **the memory budget is now load-bearing** — the same owner instruction says *"the app becomes
+   slow at points. this can never happen"*, and importing assets is the fastest way to make that
+   worse. Every asset added is charged against a stated budget.
+   `PrismRush/Assets.xcassets` is no longer a carve-out, it is the catalogue. `AppIcon.appiconset`
+   stays a byte-copy of the `Tools/gen_icon.swift` output (the tool syncs it) — never hand-edit it.
 7. **`Profile` fields are always `decodeIfPresent ?? default`** in `init(from:)` — old saves must
    never wipe or fail to load (pinned by decode tests). Adding a field? Give it a default.
 8. **Swift 6 strict concurrency `complete`.** Non-isolated callbacks delivered on main
