@@ -36,15 +36,21 @@ screen prettier" — that is the failure mode this pass exists to avoid.**
 
   docs/agent/audits/scratch/s016_coins-economy.md   ← the whole economy, measured. Non-negotiable.
   docs/agent/audits/scratch/s016_design-system.md   ← the visual system + 10 ranked craft findings
-  docs/agent/audits/scratch/s017_*.md               ← IF PRESENT. S-016 launched 7 agents on
-                                                       missions; they were rate-limited mid-flight
-                                                       and may not have written. If the files are
-                                                       missing, re-run the workflow — the script is
-                                                       at .claude/.../workflows/scripts/
-                                                       s016-missions-pass-017-wf_3cb42903-535.js
-                                                       (Workflow({scriptPath, resumeFromRunId:
-                                                       'wf_3cb42903-535'})). Do NOT re-derive by
-                                                       hand what that script asks for.
+## THE INVESTIGATION IS ALREADY WRITTEN — RUN IT FIRST, DON'T RE-DERIVE IT
+
+S-016 launched seven agents on missions and **they hit the account rate limit before any of them
+returned.** Zero `s017_*.md` files exist. That work is NOT done, but the brief for it is, and it is
+committed:
+
+    Workflow({ scriptPath: "Tools/workflows/s017_missions.js" })
+
+Seven parallel investigations — inventory, "does nothing", economy, craft, code seam, references,
+plan — four of them adversarially verified. **Run this as your first real action.** It writes to
+`docs/agent/audits/scratch/s017_<label>.md`. Do not resume the old run: `resumeFromRunId` is
+same-session-only and S-016's run id is dead.
+
+Everything below is what S-016 established by hand and by looking, so you are not starting cold even
+if the workflow fails again.
 
 ## WHAT S-016 ALREADY PROVED BY LOOKING (screenshots in docs/agent/scratch/s016/missions/)
 
