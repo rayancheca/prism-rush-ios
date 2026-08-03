@@ -30,24 +30,30 @@ screen prettier" — that is the failure mode this pass exists to avoid.**
   does nothing      → missions don't visibly affect anything the player cares about
   not easy to       → you cannot tell what a mission asks or how close you are
     understand
-  not rewarding     → THE PAYOUT IS AN ECONOMY PROBLEM, NOT A UI ONE
+  not rewarding     → TWO defects: the reward is not FELT (cheap, zero risk) and it is not
+                      WORTH WANTING (owner-priced). See the economic reading below — the
+                      answer is almost certainly NOT "pay more coins".
 
 ## READ THESE BEFORE TOUCHING CODE
 
   docs/agent/audits/scratch/s016_coins-economy.md   ← the whole economy, measured. Non-negotiable.
   docs/agent/audits/scratch/s016_design-system.md   ← the visual system + 10 ranked craft findings
-## THE INVESTIGATION IS ALREADY WRITTEN — RUN IT FIRST, DON'T RE-DERIVE IT
+  docs/agent/audits/scratch/s017_missions-plan.md   ← THE PLAN SKELETON. Read §0 and §1 first.
 
-S-016 launched seven agents on missions and **they hit the account rate limit before any of them
-returned.** Zero `s017_*.md` files exist. That work is NOT done, but the brief for it is, and it is
-committed:
+## THE REST OF THE INVESTIGATION IS WRITTEN BUT UNRUN — RUN IT, DON'T RE-DERIVE IT
+
+S-016 launched seven agents on missions and the account rate limit killed six of them.
+**One survived — `s017_missions-plan.md`, the plan skeleton — and it is the single most valuable
+document for this pass.** The other six (inventory, "does nothing", economy, craft, code seam,
+references) never wrote. Their brief is committed and runnable:
 
     Workflow({ scriptPath: "Tools/workflows/s017_missions.js" })
 
-Seven parallel investigations — inventory, "does nothing", economy, craft, code seam, references,
-plan — four of them adversarially verified. **Run this as your first real action.** It writes to
-`docs/agent/audits/scratch/s017_<label>.md`. Do not resume the old run: `resumeFromRunId` is
-same-session-only and S-016's run id is dead.
+**Run this as your first real action.** It re-runs all seven and writes to
+`docs/agent/audits/scratch/s017_<label>.md` (the surviving plan will simply be rewritten — diff it
+against the committed copy if you want to see whether the second run agrees with the first, which is
+free signal). Do NOT resume the old run: `resumeFromRunId` is same-session-only and S-016's run id
+is dead.
 
 Everything below is what S-016 established by hand and by looking, so you are not starting cold even
 if the workflow fails again.
