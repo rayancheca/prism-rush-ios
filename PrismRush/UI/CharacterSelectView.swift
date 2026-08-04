@@ -361,7 +361,12 @@ struct CharacterSelectView: View {
             let affordable = skin.cost > 0 && ProfileStore.shared.profile.coins >= skin.cost
             Button { stateAction(focus: skin) } label: {
                 HStack(spacing: Theme.Space.m) {
-                    AnimatedCharacterSwatch(skin: skin, size: 36, silhouette: true, animated: false)
+                    // Tight slot: the text column sits ~8 pt away, so this is one of the two
+                    // sites that cannot afford to bleed (`CharacterSwatchSlot.selectNextUnlock`).
+                    AnimatedCharacterSwatch(skin: skin, size: 36, silhouette: true, animated: false,
+                                            heightScale: CGFloat(CharacterSwatchSlot.tight.height),
+                                            widthScale: CGFloat(CharacterSwatchSlot.tight.width),
+                                            verticalAnchor: CGFloat(CharacterSwatchSlot.tight.anchor))
                     VStack(alignment: .leading, spacing: 2) {
                         Text("NEXT UNLOCK")
                             .typeScale(.micro)

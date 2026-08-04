@@ -236,7 +236,10 @@ struct ShopView: View {
             heroShell(title: skin.name, blurb: skin.flavor,
                       preview: AnimatedCharacterSwatch(
                           skin: skin, size: 52,
-                          silhouette: !ProfileStore.shared.profile.ownedSkins.contains(skin.id)),
+                          silhouette: !ProfileStore.shared.profile.ownedSkins.contains(skin.id),
+                          heightScale: CGFloat(CharacterSwatchSlot.tight.height),
+                          widthScale: CGFloat(CharacterSwatchSlot.tight.width),
+                          verticalAnchor: CGFloat(CharacterSwatchSlot.tight.anchor)),
                       pill: goldPricePill(productID: Self.auroraID),
                       tag: "TODAY'S FEATURE",
                       a11y: "Today's feature: \(skin.name), premium character.") {
@@ -250,7 +253,10 @@ struct ShopView: View {
             heroShell(title: skin.name, blurb: skin.flavor,
                       preview: AnimatedCharacterSwatch(
                           skin: skin, size: 52,
-                          silhouette: !ProfileStore.shared.profile.ownedSkins.contains(skin.id)),
+                          silhouette: !ProfileStore.shared.profile.ownedSkins.contains(skin.id),
+                          heightScale: CGFloat(CharacterSwatchSlot.tight.height),
+                          widthScale: CGFloat(CharacterSwatchSlot.tight.width),
+                          verticalAnchor: CGFloat(CharacterSwatchSlot.tight.anchor)),
                       pill: coinPricePill(skin.cost),
                       tag: "TODAY'S FEATURE",
                       a11y: "Today's feature: \(skin.name), \(skin.cost) coins. Opens characters to preview.") {
@@ -267,7 +273,10 @@ struct ShopView: View {
         tag: String, a11y: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: Theme.Space.m) {
-                preview.frame(width: 72)
+                // 96, not 72: the tight slot that stops the featured character bleeding onto
+                // the copy column beside it is `52 * CharacterSwatchSlot.tight.width`. The old 72
+                // was sized for a swatch that was cropping its own aura to fit.
+                preview.frame(width: 52 * CGFloat(CharacterSwatchSlot.tight.width))
                 VStack(alignment: .leading, spacing: Theme.Space.xs) {
                     Text(title)
                         .typeScale(.title)
@@ -608,7 +617,13 @@ struct ShopView: View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             kicker("CHARACTERS")
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Theme.Space.s) {
+                // LAZY, not eager. A plain `HStack` builds all 13 cards the moment the shop
+                // opens, and each one holds an `AnimatedCharacterSwatch` whose
+                // `TimelineView(.animation)` redraws it 30 times a second — including the ~9 that
+                // are off-screen. Roughly three quarters of this rail's per-frame cost was being
+                // spent on cards nobody was looking at, on the screen the owner named as slow
+                // (D-050: "just browsing the characters and catalog").
+                LazyHStack(spacing: Theme.Space.s) {
                     ForEach(railSkins) { skin in
                         miniSkinCard(skin)
                     }

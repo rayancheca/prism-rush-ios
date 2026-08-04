@@ -152,11 +152,11 @@ final class CharacterParityTests: XCTestCase {
     func testTheRosterEnvelopeIsPinned() {
         let e = CharacterGeometry.rosterExtentInSizeUnits
         // All three axes are set by monarch — the roster's largest body (scale 1.10) wearing the
-        // widest feature (the aura, 1.678 bodyR) and a tall antenna (h 1.2, tip 1.5). `down` is
-        // the trail wisp rather than the aura: 1.31 bodyR of streaming puffs outreach it.
+        // widest feature (the aura, 1.677 bodyR), the tallest antenna reach (h 1.2, tip 1.5), and
+        // the trail wisp below (1.225 bodyR, which outreaches even the aura's lower arc at 0.730).
         XCTAssertEqual(e.side, 0.923, accuracy: 0.01, "roster half-width, in units of `size`")
         XCTAssertEqual(e.up, 1.111, accuracy: 0.01, "roster reach above centre")
-        XCTAssertEqual(e.down, 0.771, accuracy: 0.01, "roster reach below centre")
+        XCTAssertEqual(e.down, 0.724, accuracy: 0.01, "roster reach below centre")
         // A canvas sized from this must hold every single skin, with the bob at its worst.
         for skin in SkinCatalog.all {
             let s = CharacterGeometry.extent(for: skin)
@@ -164,6 +164,30 @@ final class CharacterParityTests: XCTestCase {
             XCTAssertLessThanOrEqual(s.side * k, e.side + 0.0001, "\(skin.id) overflows sideways")
             XCTAssertLessThanOrEqual(s.up * k, e.up + 0.0001, "\(skin.id) overflows upward")
             XCTAssertLessThanOrEqual(s.down * k, e.down + 0.0001, "\(skin.id) overflows downward")
+        }
+    }
+
+    /// No shipped call site may spill onto its neighbours. This is the test PR-0312 needed and
+    /// could never have: the slot numbers used to be literals in `UI/`, which `swift test` does
+    /// not compile, so the defect was structurally invisible to CI for sixteen sessions.
+    func testNoCallSiteBleedsOntoItsNeighbours() {
+        for site in CharacterSwatchSlot.allCases {
+            let bleed = site.bleed
+            let allowed = site.bleedAllowance
+            XCTAssertLessThanOrEqual(bleed.horizontal, allowed.horizontal,
+                                     "\(site.rawValue): spills \(bleed.horizontal) pt sideways, "
+                                     + "only \(allowed.horizontal) pt is free")
+            XCTAssertLessThanOrEqual(bleed.vertical, allowed.vertical,
+                                     "\(site.rawValue): spills \(bleed.vertical) pt vertically, "
+                                     + "only \(allowed.vertical) pt is free")
+        }
+    }
+
+    /// The two sites whose neighbours are close enough that they take a zero-bleed slot.
+    func testTheTightSitesAreActuallyTight() {
+        for site in [CharacterSwatchSlot.selectNextUnlock, .shopFeatured] {
+            XCTAssertEqual(site.bleed.horizontal, 0, accuracy: 0.001, site.rawValue)
+            XCTAssertEqual(site.bleed.vertical, 0, accuracy: 0.001, site.rawValue)
         }
     }
 

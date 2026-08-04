@@ -26,15 +26,24 @@ struct AnimatedCharacterSwatch: View {
     /// pass a taller value so the tallest antennas (Blossom) and the full up-bob never crop — the
     /// owner's "characters sit in a square smaller than them" fix.
     var heightScale: CGFloat = 1.5
-    /// Horizontal room, same idea as `heightScale`. Now that the body halo is gone (see `draw`) the
-    /// widest thing drawn is the aura ring at `bodyR * 1.5`, so `1.0` no longer clips anything on a
-    /// grid card. The hero surfaces keep passing `1.6` because their crests, auras and trail wisps
-    /// are drawn at hero scale and the extra room costs nothing.
+    /// Horizontal room for the SLOT, same idea as `heightScale`.
     ///
-    /// The claim this comment used to carry — "on a small dark grid card that is invisible" — was
-    /// simply wrong, and it is why the clipped halo survived four sessions: it was an assumption
-    /// about a screen nobody had looked at. It was plainly visible as a coloured rectangle behind
-    /// every card in the 24-skin grid.
+    /// **v2.4: these two no longer size the canvas, only the layout slot.** The canvas is derived
+    /// from `CharacterGeometry.rosterExtentInSizeUnits`, so it is always big enough for every
+    /// character in the roster and the drawing can never be clipped. `.frame` sets layout size and
+    /// does not clip, so the figure now bleeds out of its slot instead of being cut inside it, and
+    /// every call site occupies exactly the pixels it occupied before.
+    ///
+    /// This comment has now been wrong twice, in the same way both times — an assertion about a
+    /// screen nobody had measured. v1.x claimed the clipped halo was "invisible on a small dark
+    /// grid card"; it was a coloured rectangle behind all 24. Its replacement claimed `1.0` "no
+    /// longer clips anything on a grid card"; at `widthScale 1.0` the canvas half-width was
+    /// `0.5 x size` against an aura reaching `0.90 x size`, so all four legendaries were cut to
+    /// ~55 % of their width, and 23 of 24 characters lost the top of their head.
+    ///
+    /// So this one asserts nothing. `CharacterParityTests.testTheRosterEnvelopeIsPinned` and
+    /// `testTheOldCanvasDefaultsProvablyDoNotFitTheRoster` hold the claim instead, over all 24
+    /// skins, on every push, on Linux.
     var widthScale: CGFloat = 1.0
     /// Where the figure's center sits in the canvas (0 = top, 1 = bottom). 0.5 keeps the grids
     /// centered; the hero/splash bias it down so the added headroom lands above the antenna while
@@ -42,6 +51,43 @@ struct AnimatedCharacterSwatch: View {
     var verticalAnchor: CGFloat = 0.5
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Slot scales that exactly contain the roster envelope, so the figure bleeds by nothing.
+    ///
+    /// Most call sites are happy to bleed — a crown crossing into a grid gap costs nothing and
+    /// looks deliberate. Pass these at the sites whose neighbours sit close enough that a
+    /// translucent aura arc would land on them (the NEXT UNLOCK row's text, the shop hero's copy
+    /// column). Expressed as multiples of `size`, like `widthScale`/`heightScale` themselves.
+    static var tightSlot: (width: CGFloat, height: CGFloat, anchor: CGFloat) {
+        let e = CharacterGeometry.rosterExtentInSizeUnits
+        return (CGFloat(e.side) * 2, CGFloat(e.up + e.down), CGFloat(e.up / (e.up + e.down)))
+    }
+
+    /// The canvas the figure is drawn into: the whole roster's worst-case extent, so no character
+    /// can be clipped and every character keeps its true size relative to the others. (Fitting
+    /// each skin to its OWN extent would also stop the clipping, and would render the four
+    /// legendaries as the four smallest figures on the shelf — a rarity ladder whose top rung is
+    /// the tiniest character is worse than the bug.)
+    private var canvasSize: CGSize {
+        let e = CharacterGeometry.rosterExtentInSizeUnits
+        return CGSize(width: size * CGFloat(e.side) * 2, height: size * CGFloat(e.up + e.down))
+    }
+
+    /// Where the figure's centre sits inside that canvas, 0 = top.
+    private var canvasAnchor: CGFloat {
+        let e = CharacterGeometry.rosterExtentInSizeUnits
+        return CGFloat(e.up / (e.up + e.down))
+    }
+
+    /// Slides the (larger) canvas so the figure's centre lands on the exact pixel it landed on
+    /// before v2.4 — the caller's `verticalAnchor` within the caller's slot. Without this the
+    /// whole roster would shift down as the canvas grew, which would be a layout change wearing a
+    /// clipping fix.
+    private var canvasOffsetY: CGFloat {
+        let slotH = size * heightScale
+        let canvasH = canvasSize.height
+        return slotH * verticalAnchor - ((slotH - canvasH) / 2 + canvasH * canvasAnchor)
+    }
 
     var body: some View {
         Group {
@@ -53,13 +99,17 @@ struct AnimatedCharacterSwatch: View {
                 swatchCanvas(t: 0)   // single static frame (Reduce Motion / grids off-screen)
             }
         }
+        // The canvas is sized by the figure, not by the slot — this is the frame that used to
+        // clip, and it cannot now.
+        .frame(width: canvasSize.width, height: canvasSize.height)
+        .offset(y: canvasOffsetY)
         .opacity(silhouette ? teaseOpacity : 1)    // the tease fade — the lock chip stays solid
+        // The slot: layout only. `.frame` does not clip, so the drawing bleeds past it rather
+        // than being cut inside it, and every caller reserves exactly the space it always did.
+        .frame(width: size * widthScale, height: size * heightScale)
         .overlay(alignment: .bottom) {
             if silhouette { lockChip }
         }
-        // Antenna headroom + bob never clip vertically; `widthScale` gives the body glow room to
-        // fall off instead of being cut square at the canvas edge.
-        .frame(width: size * widthScale, height: size * heightScale)
         .accessibilityHidden(true)                 // containers carry the meaning (name/state labels)
     }
 
@@ -86,7 +136,10 @@ struct AnimatedCharacterSwatch: View {
         let bodyR = size * 0.5 * scale
         // Bob: whole figure rides a per-skin sine; 0 at the static frame.
         let yOff = sin(t * skin.idle.bobSpeed * 2 * .pi) * skin.idle.bobAmp * size
-        let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height * verticalAnchor + yOff)
+        // The figure sits at the canvas's OWN anchor (derived from the roster extent), not at the
+        // caller's `verticalAnchor` — `canvasOffsetY` then slides the whole canvas so the result
+        // lands exactly where the caller's anchor always put it.
+        let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height * canvasAnchor + yOff)
 
         // Prism: the SAME 8 s shimmer the in-run body runs — one shared clock→color function
         // authored `bodyHex`, so this preview and the RealityKit rig show the same
@@ -250,7 +303,11 @@ struct AnimatedCharacterSwatch: View {
                                bodyR: CGFloat) {
         let tint = skin.trailHex.map { Theme.color($0) } ?? Theme.color(skin.bodyHex)
         let head = CGPoint(x: center.x - bodyR * 0.52, y: center.y + bodyR * 0.72)
-        let tail = CGPoint(x: size * 0.07, y: center.y + bodyR * 1.18)
+        // The tail's x used to be `size * 0.07` — an ABSOLUTE canvas coordinate mixed in among
+        // centre-relative ones, so the wisp's length silently depended on how wide the caller's
+        // canvas happened to be, and pointed at a fixed spot near the left edge rather than
+        // trailing the body. Now relative to the figure, like everything else it is drawn with.
+        let tail = CGPoint(x: center.x - bodyR * 1.16, y: center.y + bodyR * 1.18)
         let puffs = 5
         for i in 0..<puffs {
             // Each puff travels head→tail over ~1.5 s, offset a fifth of a loop apart.
@@ -267,9 +324,13 @@ struct AnimatedCharacterSwatch: View {
     private func drawAntenna(_ ctx: inout GraphicsContext, t: TimeInterval, center: CGPoint,
                              bodyR: CGFloat, scale: CGFloat) {
         let antennaColor = Theme.color(skin.antennaHex)   // constant authored hex — never shimmers
-        let baseY = skin.bodyShape == .crystal ? center.y - bodyR * 1.1 : center.y - bodyR * 0.92
+        // v2.4: base and length come from `CharacterGeometry`, the same numbers the rig builds
+        // from. The swatch used to socket the stem at 0.92 bodyR (sphere) / 1.10 (crystal) and
+        // draw it 0.56 bodyR long — 17 % shorter than the rig's 0.677 on all 24 characters.
+        let baseY = center.y - bodyR * CGFloat(CharacterGeometry.antennaBase(skin.bodyShape))
         let base = CGPoint(x: center.x, y: baseY)
-        let stemLen = size * 0.28 * CGFloat(skin.antennaHeightScale) * scale
+        let stemLen = bodyR * CGFloat(CharacterGeometry.antennaStemLength)
+                    * CGFloat(skin.antennaHeightScale)
         // Sway: rotate stem + tip around the stem base (0 at the static frame).
         let a = t > 0 ? sin(t * skin.idle.bobSpeed * 2 * .pi * 0.8) * skin.idle.sway : 0
         let tipCenter = CGPoint(x: base.x + sin(a) * stemLen, y: base.y - cos(a) * stemLen)
@@ -278,9 +339,10 @@ struct AnimatedCharacterSwatch: View {
         stem.move(to: base)
         stem.addLine(to: tipCenter)
         ctx.stroke(stem, with: .color(antennaColor),
-                   style: StrokeStyle(lineWidth: max(1, size * 0.035 * scale), lineCap: .round))
+                   style: StrokeStyle(lineWidth: max(1, bodyR * 2 * CGFloat(CharacterGeometry.antennaStemRadius)),
+                                      lineCap: .round))
 
-        let tipR = size * 0.08 * CGFloat(skin.antennaTipScale) * scale
+        let tipR = bodyR * CGFloat(CharacterGeometry.antennaTipRadius) * CGFloat(skin.antennaTipScale)
         ctx.fill(Path(ellipseIn: CGRect(x: tipCenter.x - tipR, y: tipCenter.y - tipR,
                                         width: tipR * 2, height: tipR * 2)),
                  with: .color(antennaColor))
@@ -291,7 +353,9 @@ struct AnimatedCharacterSwatch: View {
     /// lie). All geometry derives from `bodyR`; `headY` is the crown anchor per body shape.
     private func drawCrest(_ ctx: inout GraphicsContext, center: CGPoint, bodyR: CGFloat) {
         let tint = Theme.color(skin.crestHex)   // antenna hue, or body hue if the antenna is too dark
-        let headY = skin.bodyShape == .crystal ? center.y - bodyR * 1.02 : center.y - bodyR * 0.86
+        let g = CharacterGeometry.self
+        let headY = center.y - bodyR * CGFloat(g.crestAnchor(skin.bodyShape))
+        func u(_ v: Float) -> CGFloat { bodyR * CGFloat(v) }   // bodyR units → points
 
         func triangle(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ color: Color) {
             var p = Path()
@@ -299,90 +363,119 @@ struct AnimatedCharacterSwatch: View {
             ctx.fill(p, with: .color(color))
         }
 
+        /// A leaning spike, exactly as the rig builds one: a pyramid rooted at the crest anchor,
+        /// rotated outward about its base by `lean`.
+        func spike(side: CGFloat, offsetX: Float, halfBase: Float, length: Float, lean: Float,
+                   color: Color) {
+            let bx = center.x + side * u(offsetX)
+            let apex = CGPoint(x: bx + side * u(sin(lean) * length),
+                               y: headY - u(cos(lean) * length))
+            triangle(CGPoint(x: bx - u(halfBase), y: headY),
+                     CGPoint(x: bx + u(halfBase), y: headY), apex, color)
+        }
+
         switch skin.crest {
         case .none:
             break
         case .ears:   // upright cat ears flanking the antenna, with a darker inner ear
             for side in [CGFloat(-1), 1] {
-                let bx = center.x + side * bodyR * 0.5
-                triangle(CGPoint(x: bx - bodyR * 0.22, y: headY + bodyR * 0.12),
-                         CGPoint(x: bx + bodyR * 0.22, y: headY + bodyR * 0.12),
-                         CGPoint(x: bx + side * bodyR * 0.12, y: headY - bodyR * 0.80), tint)
-                triangle(CGPoint(x: bx - bodyR * 0.10, y: headY + bodyR * 0.02),
-                         CGPoint(x: bx + bodyR * 0.10, y: headY + bodyR * 0.02),
-                         CGPoint(x: bx + side * bodyR * 0.08, y: headY - bodyR * 0.50),
-                         .black.opacity(0.28))
+                spike(side: side, offsetX: g.Ears.offsetX, halfBase: g.Ears.halfBase,
+                      length: g.Ears.height, lean: g.Ears.lean, color: tint)
+                // The inner ear is the detail that makes an ear read as an ear rather than a
+                // triangle. It has no counterpart in the rig; PR-0484 adds it there.
+                spike(side: side, offsetX: g.Ears.offsetX,
+                      halfBase: g.Ears.halfBase * g.Ears.innerScale,
+                      length: g.Ears.height * g.Ears.innerScale, lean: g.Ears.lean,
+                      color: .black.opacity(0.28))
             }
         case .floppy: // rounded drooping dog/bunny ears hanging beside the head
+            let cy = headY + u(g.Floppy.dropBelowAnchor)
             for side in [CGFloat(-1), 1] {
-                let cx = center.x + side * bodyR * 0.84
-                let rect = CGRect(x: cx - bodyR * 0.26, y: center.y - bodyR * 0.52,
-                                  width: bodyR * 0.52, height: bodyR * 1.02)
+                let cx = center.x + side * u(g.Floppy.offsetX)
+                let rect = CGRect(x: cx - u(g.Floppy.radiusX), y: cy - u(g.Floppy.radiusY),
+                                  width: u(g.Floppy.radiusX) * 2, height: u(g.Floppy.radiusY) * 2)
                 ctx.fill(Path(ellipseIn: rect), with: .color(tint))
-                ctx.fill(Path(ellipseIn: rect.insetBy(dx: bodyR * 0.14, dy: bodyR * 0.22)),
+                ctx.fill(Path(ellipseIn: rect.insetBy(dx: u(g.Floppy.radiusX) * 0.42,
+                                                      dy: u(g.Floppy.radiusY) * 0.36)),
                          with: .color(.black.opacity(0.22)))
             }
         case .fin:    // a sawtooth dorsal mohawk across the crown, tallest in the middle
-            let heights: [CGFloat] = [0.50, 0.95, 0.62]
-            let n = heights.count
+            let n = g.Fin.heights.count
             for i in 0..<n {
-                let fx = center.x + (CGFloat(i) - CGFloat(n - 1) / 2) * bodyR * 0.32
-                triangle(CGPoint(x: fx - bodyR * 0.17, y: headY + bodyR * 0.10),
-                         CGPoint(x: fx + bodyR * 0.17, y: headY + bodyR * 0.10),
-                         CGPoint(x: fx, y: headY - bodyR * heights[i]), tint)
+                let fx = center.x + (CGFloat(i) - CGFloat(n - 1) / 2) * u(g.Fin.spacing)
+                triangle(CGPoint(x: fx - u(g.Fin.halfBase), y: headY),
+                         CGPoint(x: fx + u(g.Fin.halfBase), y: headY),
+                         CGPoint(x: fx, y: headY - u(g.Fin.heights[i])), tint)
             }
         case .horns:  // two horns sweeping up and out
             for side in [CGFloat(-1), 1] {
-                let bx = center.x + side * bodyR * 0.42
-                triangle(CGPoint(x: bx - side * bodyR * 0.02, y: headY + bodyR * 0.10),
-                         CGPoint(x: bx + side * bodyR * 0.24, y: headY + bodyR * 0.10),
-                         CGPoint(x: bx + side * bodyR * 0.95, y: headY - bodyR * 0.85), tint)
+                spike(side: side, offsetX: g.Horns.offsetX, halfBase: g.Horns.halfBase,
+                      length: g.Horns.length, lean: g.Horns.lean, color: tint)
             }
         case .crown:  // a ring of points with a connecting band — royalty
-            let span = bodyR * 1.2
-            let n = 5
-            ctx.fill(Path(roundedRect: CGRect(x: center.x - span / 2, y: headY - bodyR * 0.02,
-                                              width: span, height: bodyR * 0.16),
-                          cornerRadius: bodyR * 0.05), with: .color(tint))
-            for i in 0..<n {
-                let fx = center.x - span / 2 + span * CGFloat(i) / CGFloat(n - 1)
-                let h = (i == n / 2) ? bodyR * 0.62 : bodyR * 0.42
-                triangle(CGPoint(x: fx - bodyR * 0.10, y: headY),
-                         CGPoint(x: fx + bodyR * 0.10, y: headY),
-                         CGPoint(x: fx, y: headY - h), tint)
+            // The rig's band is a horizontal torus; head-on it reads as a flat bar of the ring's
+            // diameter. Its spikes sit ON that ring at even angles — phased so the head-on view
+            // is mirror-symmetric with a spike dead centre (the rig starts at angle 0, which puts
+            // its five spikes at an asymmetric {0, ±0.588, ±0.951}·R — see D2).
+            let r = u(g.Crown.ringRadius)
+            ctx.fill(Path(roundedRect: CGRect(x: center.x - r, y: headY - u(g.Crown.ringTube),
+                                              width: r * 2, height: u(g.Crown.ringTube) * 2),
+                          cornerRadius: u(g.Crown.ringTube)), with: .color(tint))
+            for i in 0..<g.Crown.spikeCount {
+                let ang = Float.pi / 2 + Float(i) / Float(g.Crown.spikeCount) * 2 * .pi
+                let fx = center.x + r * CGFloat(cos(ang))
+                let baseY = headY - u(g.Crown.spikeLift)
+                triangle(CGPoint(x: fx - u(g.Crown.spikeHalfBase), y: baseY),
+                         CGPoint(x: fx + u(g.Crown.spikeHalfBase), y: baseY),
+                         CGPoint(x: fx, y: baseY - u(g.Crown.spikeHeight)), tint)
             }
         case .halo:   // a glowing ring floating above the head
-            let cy = headY - bodyR * 0.58
-            let rect = CGRect(x: center.x - bodyR * 0.70, y: cy - bodyR * 0.18,
-                              width: bodyR * 1.40, height: bodyR * 0.36)
-            ctx.stroke(Path(ellipseIn: rect.insetBy(dx: -bodyR * 0.06, dy: -bodyR * 0.06)),
+            let cy = headY - u(g.Halo.float)
+            let a = u(g.Halo.radius)
+            let b = a * CGFloat(Self.ringFlatten)
+            let rect = CGRect(x: center.x - a, y: cy - b, width: a * 2, height: b * 2)
+            ctx.stroke(Path(ellipseIn: rect.insetBy(dx: -u(g.Halo.tube), dy: -u(g.Halo.tube))),
                        with: .color(tint.opacity(0.30)),
-                       style: StrokeStyle(lineWidth: max(2, bodyR * 0.18)))
+                       style: StrokeStyle(lineWidth: max(2, u(g.Halo.tube) * 2)))
             ctx.stroke(Path(ellipseIn: rect), with: .color(tint),
-                       style: StrokeStyle(lineWidth: max(1.5, bodyR * 0.10)))
+                       style: StrokeStyle(lineWidth: max(1.5, u(g.Halo.tube) * 1.4)))
         }
     }
+
+    /// How flat a horizontal ring reads under the chase camera — `sin(pitch)`, where the camera is
+    /// pitched 14.589° down (`RealityRenderer` camera setup). The hand-drawn value this replaces
+    /// was 0.18/0.70 = 0.257, i.e. the original author eyeballed it to within 2.1 %.
+    private static let ringFlatten: Float = 0.251882
 
     /// The legendary aura (v1.6): a tilted orbit ring in the trail hue with two nodes circling it,
     /// brighter on the near (lower) pass. Pure of state — at `t == 0` the nodes freeze in place
     /// (Reduce Motion / static grids show the ring, never a missing one). Mirrors the rig's torus.
     private func drawAura(_ ctx: inout GraphicsContext, t: TimeInterval, center: CGPoint, bodyR: CGFloat) {
         let tint = skin.trailHex.map { Theme.color($0) } ?? Theme.color(skin.bodyHex)
-        let a = bodyR * 1.5, b = bodyR * 0.55
-        let cy = center.y + bodyR * 0.22
+        let g = CharacterGeometry.Aura.self
+        let a = bodyR * CGFloat(g.majorRadius)
+        let b = a * CGFloat(sin(g.tilt))
+        let cy = center.y - bodyR * CGFloat(g.centreY)
+        let tube = bodyR * CGFloat(g.tube)
         let ringRect = CGRect(x: center.x - a, y: cy - b, width: a * 2, height: b * 2)
         ctx.stroke(Path(ellipseIn: ringRect), with: .color(tint.opacity(0.18)),
-                   style: StrokeStyle(lineWidth: max(3, bodyR * 0.22)))   // soft underglow
+                   style: StrokeStyle(lineWidth: max(3, tube * 2.7)))   // soft underglow
         ctx.stroke(Path(ellipseIn: ringRect), with: .color(tint.opacity(0.5)),
-                   style: StrokeStyle(lineWidth: max(2, bodyR * 0.10)))
-        for k in 0..<2 {
-            let theta = t * 1.1 + Double(k) * .pi
+                   style: StrokeStyle(lineWidth: max(2, tube * 1.25)))
+        // ONE node, as the rig builds it (`buildAura` adds a single sphere on the ring). The
+        // swatch drew TWO, each wrapped in a glow disc of 2r — 0.26 bodyR of width that was never
+        // in the game, and the reason all four legendaries were clipped on every surface a buyer
+        // sees them on. The node's COLOUR still differs (rig white, swatch trail hue): that is a
+        // taste call rather than a proportion, filed as PR-0485 rather than guessed at here.
+        let r = bodyR * CGFloat(g.nodeRadius)
+        for k in 0..<g.nodeCount {
+            let theta = t * 1.1 + Double(k) * 2 * .pi / Double(g.nodeCount)
             let x = center.x + CGFloat(cos(theta)) * a
             let y = cy + CGFloat(sin(theta)) * b
             let depth = (CGFloat(sin(theta)) + 1) / 2        // 0 far (top) … 1 near (bottom)
-            let r = bodyR * (0.11 + 0.07 * depth)
             // node glow then core — a bright comet circling the body
-            ctx.fill(Path(ellipseIn: CGRect(x: x - r * 2, y: y - r * 2, width: r * 4, height: r * 4)),
+            ctx.fill(Path(ellipseIn: CGRect(x: x - r * 1.6, y: y - r * 1.6,
+                                            width: r * 3.2, height: r * 3.2)),
                      with: .color(tint.opacity(0.18 * (0.4 + depth))))
             ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
                      with: .color(tint.opacity(0.6 + 0.4 * depth)))

@@ -1238,17 +1238,27 @@ final class RealityRenderer: RendererPort {
             eyes.append(eye)
         }
 
-        // Antenna: stem bottom pinned at y 1.21 whatever the height scale; tip rides on top.
+        // Antenna. The stem bottom sockets into the body's own crown, per shape — v2.4 / D1.
+        // It used to be pinned at world y 1.21 for EVERY body with no branch, which made the
+        // socket depth an accident of how tall the body happened to be: correct on a sphere (the
+        // shipped look, reproduced exactly here), 0.360 bodyR buried inside a crystal, and
+        // 0.032 bodyR floating clear of a cube. `CharacterGeometry.antennaBase` derives it.
         // The sway code pivots the tip on an arm around the stem CENTRE, so record both heights.
         let h = skinAntennaHeight
-        antennaCenterY = 1.21 + 0.21 * h
-        antennaTipY = 1.21 + 0.42 * h + 0.045
+        let R = CharacterGeometry.sphereRadius
+        let stemBottom = bodyY + R * CharacterGeometry.antennaBase(skinBodyShape)
+        let stemLen = R * CharacterGeometry.antennaStemLength * h
+        antennaCenterY = stemBottom + stemLen / 2
+        antennaTipY = stemBottom + stemLen + R * 0.0726
         let antennaMat = UnlitMaterial(color: uiHex(skinAntennaHex))   // stem + tip: D2-1 seed
-        antenna = ModelEntity(mesh: .generateCylinder(height: 0.42 * h, radius: 0.025), materials: [antennaMat])
+        antenna = ModelEntity(mesh: .generateCylinder(height: stemLen,
+                                                      radius: R * CharacterGeometry.antennaStemRadius),
+                              materials: [antennaMat])
         antenna.position = SIMD3<Float>(0, antennaCenterY, 0)
         playerRig.addChild(antenna)
 
-        antennaTip = ModelEntity(mesh: .generateSphere(radius: 0.095 * skinAntennaTip), materials: [antennaMat])
+        antennaTip = ModelEntity(mesh: .generateSphere(radius: R * CharacterGeometry.antennaTipRadius * skinAntennaTip),
+                                 materials: [antennaMat])
         antennaTip.position = SIMD3<Float>(0, antennaTipY, 0)
         playerRig.addChild(antennaTip)
 
@@ -1302,9 +1312,13 @@ final class RealityRenderer: RendererPort {
                                         lean: -s * 0.18, flatZ: 0.5))
             }
         case .floppy:                                          // drooping dog/bunny ears at the sides
+            // v2.4 / D4: hangs off `crestY` like every other crest. It used to hard-code world
+            // y 0.92, so a crystal body — whose crown sits 0.12 higher — wore its ears halfway
+            // down its face. The sphere's shipped position is reproduced exactly.
+            let earY = crestY - CharacterGeometry.sphereRadius * CharacterGeometry.Floppy.dropBelowAnchor
             for s in [Float(-1), 1] {
                 let ear = ModelEntity(mesh: .generateSphere(radius: 0.17), materials: [mat])
-                ear.position = SIMD3<Float>(s * 0.52, 0.92, 0)
+                ear.position = SIMD3<Float>(s * 0.52, earY, 0)
                 ear.scale = SIMD3<Float>(0.7, 1.3, 0.5)
                 crestParts.append(ear)
             }
@@ -1318,9 +1332,15 @@ final class RealityRenderer: RendererPort {
                                         lean: -s * 0.5, flatZ: 0.6))
             }
         case .crown:                                           // a ring of points — royalty
+            // v2.4 / D2: the ring is PHASED so the head-on silhouette is mirror-symmetric with a
+            // spike dead centre. Starting at angle 0 put the five spikes at x = {+0.30, +0.093,
+            // -0.243, -0.243, +0.093} — lopsided from the one angle the player ever sees it from,
+            // and lopsided in a way the 2-D preview never reproduced because it drew an evenly
+            // spaced row instead.
+            let n = CharacterGeometry.Crown.spikeCount
             crestParts.append(horizontalTorus(0.30, 0.045, at: SIMD3<Float>(0, crestY, 0)))
-            for i in 0..<5 {
-                let ang = Float(i) / 5 * 2 * .pi
+            for i in 0..<n {
+                let ang = .pi / 2 + Float(i) / Float(n) * 2 * .pi
                 crestParts.append(spike(0.06, 0.18,
                                         at: SIMD3<Float>(cos(ang) * 0.30, crestY + 0.02, sin(ang) * 0.30)))
             }

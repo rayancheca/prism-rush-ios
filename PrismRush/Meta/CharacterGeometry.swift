@@ -272,8 +272,10 @@ enum CharacterGeometry {
                                side: Aura.majorRadius + Aura.nodeRadius))
         }
 
-        // The trail wisp streams down and behind; it never reaches above the body.
-        e = e.union(Extent(up: 0, down: trailWispReach, side: 0))
+        // The trail wisp streams down and behind; it never reaches above the body. Its sideways
+        // swim is a fraction of the swatch's `size`, so in bodyR it grows as the skin shrinks.
+        e = e.union(Extent(up: 0, down: TrailWisp.down,
+                           side: TrailWisp.side + TrailWisp.swim / skin.scale))
 
         // The whole figure rides the idle bob. `bobAmp` is a fraction of the swatch's `size`, and
         // `size = 2 * bodyR / scale`, so in bodyR it is `2 * bobAmp / scale`.
@@ -281,9 +283,20 @@ enum CharacterGeometry {
         return Extent(up: e.up + bob, down: e.down + bob, side: e.side)
     }
 
-    /// How far the trail wisp's last puff reaches below the figure's centre
-    /// (`AnimatedCharacterSwatch.drawTrailWisp` — tail at 1.18 bodyR plus the puff radius).
-    static let trailWispReach: Float = 1.18 + 0.13
+    /// The trail wisp — five puffs streaming from the body's lower flank down and behind
+    /// (`AnimatedCharacterSwatch.drawTrailWisp`). Preview-only: the in-run equivalent is the
+    /// renderer's wake, which is a different system with its own extent.
+    ///
+    /// Both reaches are the maximum of `|position| + radius` over the puff's whole travel, not the
+    /// endpoint — the puff shrinks as it falls, so the two do not peak together.
+    enum TrailWisp {
+        /// head 0.72 → tail 1.18 bodyR below centre, radius 0.13 → 0.045.
+        static let down: Float = 1.225
+        /// head 0.52 → tail 1.16 bodyR behind centre.
+        static let side: Float = 1.205
+        /// The sideways swim, as a fraction of `size` — divide by `skin.scale` for bodyR.
+        static let swim: Float = 0.036
+    }
 
     /// The worst extent across the whole shipped roster, in units of the swatch's `size` rather
     /// than of `bodyR` — because `bodyR = size * 0.5 * scale`, a character with `scale > 1` needs

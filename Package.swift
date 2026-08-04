@@ -17,6 +17,7 @@ let package = Package(
                 "Meta/ProfileStore.swift",
                 "Meta/SkinCatalog.swift",
                 "Meta/CharacterGeometry.swift",
+                "Meta/CharacterSwatchSlot.swift",
                 "Meta/SkinUnlocks.swift",
                 "Meta/MissionCatalog.swift",
                 "Meta/XPCurve.swift",
