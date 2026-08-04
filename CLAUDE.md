@@ -8,8 +8,10 @@ Those rules govern every session. Do not skip them, even for a small request.
 
 ---
 
-Neon three-lane endless runner for iPhone (Swift 6, SwiftUI, RealityKit). Every mesh, sound, and the
-app icon are generated in code — **zero binary assets**, no third-party dependencies.
+Neon three-lane endless runner for iPhone (Swift 6, SwiftUI, RealityKit). No third-party
+dependencies. Every mesh and sound is still generated in code, but that is now a *style*, not a
+rule — the owner revoked "zero binary assets" on 2026-08-03 (D-046). Real assets are wanted;
+`docs/agent/11_ASSETS.md` is the budget and the licence floor that replaced the ban.
 
 Read `state.md` for current status + next actions; `reports/AGENT_*.md` + `reports/QA.md` for deep
 context on the v1.2 overhaul; `docs/SHIP_CHECKLIST.md` for the App Store path.
@@ -24,7 +26,12 @@ Render/  RealityKit renderer behind ONE protocol: RendererPort { sync(GameSnapsh
 Audio/   Synth.swift = pure-Foundation DSP (Linux-testable); SynthEngine/Music = AVAudioEngine
          (cached SFX buffers, auto-ducking, session-interruption recovery).
 Meta/    Profile (Codable save), ProfileStore (@Observable, UserDefaults + iCloud KVS),
-         Skin/MissionCatalog. Linux-testable.
+         Skin/MissionCatalog. Linux-testable. ALSO the character spec: CharacterGeometry is the
+         ONE description of a character's proportions, read by both the RealityKit rig and the
+         SwiftUI Canvas preview (v2.4 — before that only the body was shared and the two had
+         drifted by up to 2x, unseen by CI). CharacterSwatchSlot makes the preview call sites
+         data so a test can check them. Both are in Package.swift on purpose: a rule that lives
+         only in UI/ is a rule CI cannot enforce.
 UI/      SwiftUI — GameView owns GameModel (the app's hub), HUD, menu, shop, missions, settings…
 IAP/     StoreKit 2 (IAPCatalog/IAPManager, local Products.storekit for sim testing).
 Services/ GameCenterService (prismrush.best + recurring prismrush.daily), AccountService, Haptics.
@@ -41,15 +48,15 @@ why the whole sim is testable headless.
 ./Tools/ci.sh             # generate + build + full test suite
 xcodebuild test -project PrismRush.xcodeproj -scheme PrismRush \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' CODE_SIGNING_ALLOWED=NO
-# → 228 tests (216 unit + 12 XCUITest). Sim overrides: PR_SIM_NAME / PR_SIM_OS / PR_SIM_UDID.
+# → 302 tests (290 unit + 12 XCUITest). Sim overrides: PR_SIM_NAME / PR_SIM_OS / PR_SIM_UDID.
 # Autoplay demo: SIMCTL_CHILD_PR_AUTOPLAY=1 xcrun simctl launch booted com.rayancheca.prismrush
 ```
 
 **Linux / CI (deterministic layers only, via `Package.swift`):**
 ```bash
-swift test -c release     # 209 tests, ~30 s — Core + Meta + Synth DSP (incl. the 200-seed bot)
+swift test -c release     # 286 tests, ~38 s — Core + Meta + Synth DSP (incl. the 200-seed bot)
 ```
-Linux compiles ONLY what `Package.swift` lists (Core/, 7 Meta files, Audio/Synth.swift). Everything
+Linux compiles ONLY what `Package.swift` lists (Core/, 9 Meta files, Audio/Synth.swift). Everything
 touching UIKit/RealityKit/SwiftUI/StoreKit/AVFoundation/GameKit is **not even type-checked** there —
 at best `swiftc -parse` (syntax only). Any UI/Render/engine change needs a Mac build to be trusted.
 CI (`.github/workflows/core-tests.yml`) runs the SPM suite on every push/PR.

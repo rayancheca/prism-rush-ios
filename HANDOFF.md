@@ -1,77 +1,97 @@
-# HANDOFF → Session 018 · **PASS 018: THE CHARACTER PREVIEW SEAM + ASSET PIPELINE**
+# HANDOFF → Session 019 · **PASS 019: THE CHARACTER ART**
 
 ## Paste this to start the next session
 
 ```
-You are session 018 of a long-running program to finish and ship Prism Rush, a neon three-lane
-endless runner for iPhone (Swift 6, SwiftUI, RealityKit, zero dependencies).
+You are session 019 of a long-running program to finish and ship Prism Rush, a neon three-lane
+endless runner for iPhone (Swift 6, SwiftUI, RealityKit).
 
 Read docs/agent/01_RULES.md, then docs/agent/02_STATE.md, then this file in full.
 
 You may and should change code. Rayan's standing instruction is "never be limited by arbitrary
 rules, just work however you think is best." Do not ask permission to fix something you can verify.
 
-## YOUR ONE JOB: THE CHARACTER PREVIEW SEAM, THEN THE ASSET PIPELINE.
+## YOUR ONE JOB: THE NEW CHARACTER ART. The seam is built; this is what it was built for.
 
-This is the booked pass. Order is 017 missions (DONE, S-017) → 018 preview seam + assets → 019 the
-new character art. Do not start 019's work here; 018 exists precisely so 019 does not cost 24x.
+D-050 ordered new art for ALL 24 CHARACTERS. Session 018 spent itself making that affordable: a
+character's proportions now live in ONE place instead of two, with tests that fail if the two
+layers ever disagree again. **You author in `PrismRush/Meta/CharacterGeometry.swift` and both the
+in-run rig and all 24 previews follow.** That did not exist before 018.
 
-**Every character is currently built TWICE** — a 3D rig and a hand-drawn 2D copy, matched by hand,
-with nothing testing that they agree. D-050 ordered new art for ALL 24 characters. Landing 24 new
-assets on top of a doubled, untested seam multiplies the problem by 24. Fix the seam first.
+### START HERE — the design problem is NOT "the art is ugly"
 
-**REVIEW QUESTION 2 IS STILL OPEN AND IT SHAPES THIS PASS:** should menu previews become live
-renders of the actual rig? Rayan has not answered across three sessions. It is the highest-value
-open question in the program. **Do not block on it** — Rayan is autonomous-mode by standing
-instruction ("Never ask the user clarifying questions. Make the best decision available and
-document it in state.md. Keep building"). Decide, document it as a decision, build it reversibly,
-and put the numbers in front of him. That is what S-017 did with the mystery-box question (D-052)
-and it worked.
+`docs/agent/audits/scratch/s016_characters.md` §2 measured it: **the roster is 24 names on 15
+silhouettes.** Three body shapes x seven crests is the entire geometric vocabulary. Nine of the
+24 share a silhouette with at least two others. Prism/Ember/Bolt are ONE character in three
+colours — same sphere, no crest, same antenna — and two of them cost money. So are Void/Blossom/
+Fang, and so are Midas/Nebula/Tempo.
+
+**More colours will not fix this. More AXES will.** That file's §5.3 proposes them and §7 says
+what four shipped runners did about the same problem. Read it before drawing anything.
+
+### WHAT 018 CHANGED THAT YOU MUST KNOW
+
+**The previews got LESS flattering, on purpose.** The 2-D swatch had been drawing horns at 2.0x,
+crowns at 2.1x and ears at 1.6x the size the in-run rig actually builds. Those are now the rig's
+real numbers everywhere. So if the crowns look small to you — they were always this small in the
+game, and the shop was overselling them. **If you want a bigger crown, make it bigger in the spec
+and BOTH layers get it.** That is the whole point of the pass you inherited.
+
+**The canvas is derived, not tuned.** `CharacterGeometry.extent(for:)` computes what a skin needs;
+the swatch sizes its Canvas from the roster-wide worst case and wraps it in the historic layout
+slot. Add a taller crest or a new body shape and the canvas grows for it automatically. **If you
+add a new feature to a character, add it to `extent` in the same edit** — otherwise the box stops
+telling the truth and cropping comes back.
+
+Two pinned numbers will move when you change the roster, and that is correct — they exist so the
+move is deliberate and visible in a diff:
+  `CharacterParityTests.testTheRosterEnvelopeIsPinned`     side 0.923 / up 1.111 / down 0.724
+  `CharacterParityTests.testNoCallSiteBleedsOntoItsNeighbours`
+**Update the pin to the new measured value. Never widen an accuracy band to make it pass.**
 
 ## READ THESE BEFORE TOUCHING CODE
 
-  docs/agent/audits/scratch/s016_characters.md      <- the 24-character inventory
-  docs/agent/audits/scratch/s016_assets.md          <- the asset mandate + memory budget (D-046)
-  docs/agent/audits/scratch/s016_design-system.md   <- the visual system + 10 ranked craft findings
-  docs/agent/audits/scratch/s016_renderer.md        <- the render seam
-  docs/agent/sessions/SESSION_017.md                <- the traps list at the bottom is load-bearing
+  docs/agent/audits/scratch/s016_characters.md      <- the 24-character inventory, §2 and §5 and §7
+  docs/agent/11_ASSETS.md                           <- the memory budget + licence floor (committed)
+  docs/agent/audits/scratch/s018_geometry-spec.md   <- the rig/swatch parity derivation
+  docs/agent/audits/scratch/s018_verify_geometry-spec.md  <- and the refutation that reshaped it
+  docs/agent/sessions/SESSION_018.md                <- the traps list at the bottom is load-bearing
 
 ## HARD CONSTRAINTS
 
   - **Decree 1 — a character NEVER changes identity, in space OR in time.** No `followsWorld`, no
     time-varying hue. Prism wears a STATIC rainbow (D-011) and a test pins that no clock is in the
     resolution path. New art must not reintroduce either.
-  - **Decree 2 — previews never lie.** This pass IS decree 2. Menu hero, select swatches, shop
-    cards and tease renders must match the in-game character.
-  - **D-046 revoked "zero binary assets"** — real meshes/textures/models are wanted now. Two things
-    survive and are not the owner's to waive: (a) we must have the right to ship it — AI-generated
-    or CC0/public-domain only; "copy subway surfers" means its design language, never its art,
-    names or trademarks; (b) **the memory budget is load-bearing** — "the app becomes slow at
-    points. this can never happen." Charge every asset against a stated budget.
+  - **Decree 2 — previews never lie.** This is now enforced by tests rather than by care. Keep it
+    that way: if you add a feature to one layer, add it to the spec, not to the other layer.
+  - **D-055 — the rig's rest pose is not the rig.** The player rig is `isEnabled = false` outside a
+    live run and leans forward by `-0.16 * speedNorm` while running. Any parity work on a
+    z-bearing feature (the face, the crown ring, the aura ring) must say WHICH POSE it matches.
+    The eyes were deliberately left alone for exactly this reason — do not "fix" them without
+    picking a canonical pose first.
+  - **D-046 / 11_ASSETS.md** — real assets are wanted now. Two things are not the owner's to waive:
+    we ship only AI-generated or CC0/public-domain work ("copy subway surfers" is its design
+    language, never its art or names), and every asset is charged against the stated memory budget.
   - **Iron rule 7** — any new `Profile` field is `decodeIfPresent ?? default`.
-  - **G3** — never `@State` a shared `@Observable`; never snapshot `store.profile` into a `let` at
-    the top of `body`.
-  - **Determinism** — this pass should not touch the spawn path at all. `layoutVersion` stays at
-    **12**; the v13 pin `0x9E49_3424_C18A_59C5` is still UNSPENT.
+  - **G3** — never `@State` a shared `@Observable`; never snapshot `store.profile` into a `let`.
+  - **Determinism** — this pass should not touch the spawn path. `layoutVersion` stays at **12**;
+    the v13 pin `0x9E49_3424_C18A_59C5` is still UNSPENT.
   - **Never make a gate pass by weakening it.** No deleted assertions, no widened bands.
 
-## VERIFICATION — not advisory, and S-016 got this wrong
-
-`swift test` compiles ONLY Core/, seven Meta/ files and Audio/Synth.swift. It does NOT compile UI/,
-Render/, IAP/, StoreKit or GameKit. **`./Tools/build.sh` is a COMPILE, not a test run.** S-016
-reported "iOS build green" and shipped a red XCUITest that sat undiscovered until S-017 found it.
+## VERIFICATION — `./Tools/build.sh` is a COMPILE, not a test run
 
     ./Tools/build.sh                                          # compiles UI/ and Render/
-    swift test -c release                                     # 274 tests
+    swift test -c release                                     # 286 tests
     xcodebuild test -project PrismRush.xcodeproj -scheme PrismRush \
       -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' CODE_SIGNING_ALLOWED=NO
-                                                              # 293 tests — RUN THIS ONE
+                                                              # 290 unit + 12 XCUITest — RUN THIS
 
 SourceKit in this checkout resolves against macOS: "Cannot find 'Theme' in scope" and "No such
 module 'UIKit'" are NOISE. Run the app and open the screenshots. A captured PNG nobody read is not
-evidence.
+evidence. Capture a BASELINE test run before your first edit — S-018 did, and it is the only way
+to prove you did not inherit a red test (S-016 shipped one and it sat undiscovered for a session).
 
-FIRST COMMAND. docs/agent/scratch/ and docs/agent/audits/scratch/ are gitignored, hold ~1.3 GB, and
+FIRST COMMAND. docs/agent/scratch/ and docs/agent/audits/scratch/ are gitignored, hold ~1.4 GB, and
 git does NOT move them between worktrees. No-op if you already have them:
 
   for w in "" .claude/worktrees/prism-rush-spawn-path-c7d88a \
@@ -82,9 +102,8 @@ git does NOT move them between worktrees. No-op if you already have them:
     [ -d "$s/audits/scratch" ] && mkdir -p docs/agent/audits/scratch && cp -Rn "$s/audits/scratch/." docs/agent/audits/scratch/ 2>/dev/null
   done; du -sh docs/agent/scratch docs/agent/audits/scratch
 
-Tag `git tag pre-s018` before you start — VERIFY IT DOES NOT EXIST FIRST (`git rev-list -n1
-pre-s018`). The S-017 plan hard-coded a stale claim that its own tag was absent; following it would
-have moved the recovery point behind four commits. PUSH TO GITHUB at the end — standing instruction.
+Tag `git tag pre-s019` — VERIFY IT DOES NOT EXIST FIRST (`git rev-list -n1 pre-s019`).
+PUSH TO GITHUB at the end — standing instruction.
 
 Report back in three lines.
 This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/projects/prism-rush-ios/HANDOFF.md
@@ -92,90 +111,81 @@ This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/project
 
 ---
 
-# What session 017 did — PASS 017: MISSIONS
+# What session 018 did — PASS 018: THE CHARACTER PREVIEW SEAM
 
-Four commits, all pushed: `1f1c5ab`, `5924198`, `91379cd`, `27889ea`. **274 SPM + 293 Xcode tests
-green.** Decisions **D-052, D-053**. Recovery tag `pre-s017` = `8af1814`. `layoutVersion` untouched
-at **12**, v13 pin still unspent.
+Three commits: `c81d32a`, `e6ca8dc`, `968dbb0`. **286 SPM + 302 Xcode tests green** (274 + 293 at
+session start). Decisions **D-054, D-055**. Recovery tag `pre-s018` = `d88728a`. `layoutVersion`
+untouched at **12**, v13 pin still unspent.
 
-The owner's complaint was four defects, not one: **ugly · does nothing · not easy to understand ·
-not rewarding at all.** All four are answered, and **the coin ledger was not touched.**
+**The stated problem was "every character is built twice". The measured problem was that only the
+BODY was shared** — the crest, antenna and aura were two hand-tuned number sets with no shared
+constant and no test, and they had drifted by up to **2.0×**:
 
-## The ruling that shaped the pass (D-052)
+| feature | rig | swatch | |
+|---|---|---|---|
+| horns apex reach | 0.680 | **1.370** | the swatch drew horns twice as wide as the game |
+| crown centre spike | 0.290 | **0.620** | 2.14×; outer spikes 1.45× — one crest, two factors |
+| ears / fin | 0.581 / 0.677 | 0.920 / 1.050 | ≈1.55× |
+| antenna stem | 0.677 | **0.560** | the one pointing the other way — 17 % short, all 24 skins |
+| aura node count | 1 | **2** | the second node was never in the game |
 
-The inherited plan's self-described "load-bearing design claim" was that **missions should pay
-Mystery Boxes**. A hostile verifier re-derived it in Python and killed it:
+PR-0312 (23 of 24 cropped) and PR-0453 are **closed by construction**: the Canvas is sized from the
+roster's extent and wrapped in the historic slot — `.frame` does not clip — so the figure bleeds
+past its slot instead of being cut inside it, and **no `.frame` moved**. Verified on the simulator:
+all four legendary auras render complete for the first time.
 
-- **74 % of a Mystery Box is literally coins**, and a *granted* box has no 300-coin cost, so its
-  full EV (300.5) is net faucet.
-- The board goes **663 → 1,349 coin-equiv/day**; the catalogue clock **26.8 → 22.0 days**.
-- The plan's own thesis says raising mission rewards *"makes every one of the four complaints
-  worse"*. The proposal is a **+161 % raise per daily slot** — a raise wearing a costume.
-- Independently: `ProfileStore.swift:619` is `guard state.claimable, state.reward > 0`, so a
-  mission paying only a box is **silently unclaimable**. Nobody had opened that line.
+Three rig defects were corrected rather than copied: the antenna socket had no shape branch (buried
+0.360 bodyR inside a crystal, floating clear of a cube), floppy ears hard-coded a world y instead
+of hanging off `crestY`, and the crown's five spikes started at angle 0 — lopsided from the only
+angle the player ever sees them from.
 
-So the pass answers all four complaints **without touching the ledger**. The faucet is unchanged.
+**Why it survived sixteen sessions:** `Package.swift` compiles neither `UI/` nor `Render/`, so
+`CharacterParityTests` was UIKit-gated and invisible to CI. The spec and the six call-site slots
+are now in `Meta/`, and the pins run on Linux on every push.
 
-## What shipped
+**D-054 answers review question 2** (open three sessions): previews do NOT become live
+`RealityView` renders — they become two projections of one spec now, and pictures of the real rig
+in 019. **D-055** records why the face was deliberately left alone: the investigation's headline
+finding was refuted by its own verifier, because the figure it rested on is a rest pose the rig
+never renders.
 
-| | What | Complaint answered |
-|---|---|---|
-| **PR-0006** | The board wrote to disk **and iCloud** from inside `body` (`MissionsView` → `refreshDailyMissions` → `mutate` → `save()` + `cloud.synchronize()`), and the hub badge did it from a `TimelineView`. The refresh **moved** to `.task`; the read side now applies the rollover rule itself, so a UTC rollover still displays correctly with zero writes. | correctness — the backlog had filed only the *badge* half |
-| **PR-0473** | **A claimed mission is now a moment.** S-016 shipped `RewardBurstView` and wired it to two callers; missions were not one of them. Mission claims now fire it, with a bespoke **medallion** (a chest is a container you open; a mission is a goal you met) stamped with the mission's own glyph. CLAIM ALL = **one** burst carrying the total. | **not rewarding** (4a — not FELT) |
-| **PR-0474** | The `.trim` arc was **invisible below ~10 %**, so a fresh board was 19 rows of decoration. Replaced with a **countable segmented bar**. Each section gained its own standing (`0/3` / `2 READY` / `ALL DONE`) — D-053. Two colliding glyphs fixed. | **ugly + not easy to understand** |
-| **PR-0475** | Game over now says **TODAY'S MISSIONS · 2/3 ›**. `grep -i mission GameOverView.swift` previously returned nothing. | **does nothing** (decree 4) |
-
-## The bug S-016 left behind
-
-**`testDailyAndChestRewards` had been red since S-016** and nobody knew, because S-016 reported
-"iOS build green" — which is a *compile*, not a test run. The `RewardBurstView` scrim lands between
-the rewards rail's two taps, so the second tap dismissed the burst instead of opening the chest.
-Confirmed by stashing and running at `pre-s017`: it fails identically there. Fixed, and both tests
-now **assert the burst fires** — they gained assertions rather than losing them.
-
-## The fleet, and what is on disk
-
-S-016's handoff said one investigation survived the rate limit. **Five were on disk** — agents write
-their files before returning. I launched 14 more agents; **the account hit its WEEKLY limit
-mid-run**, so the two missing digs and six hostile verifiers landed but **all four judges and the
-synthesizer died. There is no `s017_RULING.md`** — S-017 ruled from the verified material instead.
-
-**7 investigations + 6 hostile verifications** are at `docs/agent/audits/scratch/s017_*.md`. Every
-verifier returned PARTIALLY REFUTED. `s017_missions-references.md` was never hostile-verified.
+Also: `docs/agent/11_ASSETS.md` is committed (an iron rule had been citing gitignored scratch), and
+three charter sites plus the root `/prompt` file that would have told a future agent to re-enforce
+the revoked "zero binary assets" decree are struck or bannered.
 
 # Rayan action items
 
-1. **Review question 2 — still unanswered after three sessions, and it shapes pass 018.** Should
-   menu previews become live renders of the actual rig? Your "new art for all 24" ruling made this
-   the biggest decision in the project. "Later" is a fine answer; silence means 24 new assets land
-   in a world where every character is drawn twice and nothing tests that the two agree.
-2. **The mission reward curve is yours and the numbers are now measured.** The board pays 663
-   coins/day = **34 % of the whole meta faucet** and **21 % of everything a 15-min/day player
-   earns**. S-017 deliberately did NOT change it — raising it accelerates a catalogue that is
-   already free in 26.8 days, and it trades against coin-IAP revenue. If you want it moved, say
-   which direction; `s017_missions-economy.md` has the variants costed.
-3. **Play the missions board and the claim.** Claim one mission, then use CLAIM ALL. Judge the
-   **feel** and the **sound** — the audio is composed from existing SFX because nobody here can
-   hear one, and `.newBestFanfare` may be the wrong colour for a mission claim.
-4. **THE AUDIO BLOCKER, seven sessions old, only you can clear it.** A landed Warden hazard plays
+1. **Look at the characters screen and tell me if the honest version is too plain.** This is the
+   one that most needs your eyes. The previews were flattering the characters — horns at 2×,
+   crowns at 2.1× what the game actually renders — and they now show the truth. If the crowns look
+   small, **they were always this small in the run**; the shop was overselling. Session 019 can
+   make them genuinely bigger now, in one place, and both the run and the shop will agree. Say
+   whether you want that — it is the first question 019's art brief has to answer.
+2. **The measurement that would reverse D-054, and only a device answers it.** Whether iOS 18
+   shares one renderer per window across `RealityView` instances. If it does, live 3-D previews
+   become affordable and the honest answer flips to live heroes + baked cards. Nobody in this
+   program has ever measured it, and it decides every future "can we put 3-D here" question.
+3. **One Instruments trace on your actual 16 Pro Max for the slowdown.** Everything measured so far
+   is on the simulator, which is a Mac and far faster than your phone. S-018 shipped one real fix
+   here (the shop rail was building all 13 cards eagerly and animating ~9 off-screen ones at 30 Hz).
+4. **THE AUDIO BLOCKER, eight sessions old, only you can clear it.** A landed Warden hazard plays
    `.shieldBreak` — the same buffer as a wall clip, a shield break, an armour break and a blast.
    One buffer, five meanings, three opposite in valence. Costed in `s014_audio.md`. Either listen
    and direct, or say "ship your best guess and I'll judge it".
 5. **The Mystery Box odds mismatch is still a shipping blocker.** It displays a **3 %** jackpot and
-   rolls **2.5 %** (`ShopValue.swift:157-158` vs `:149-150`); `grep -rn "mysteryOdds" Tests/` finds
-   nothing. Guideline 3.1.1 requires disclosed odds to be real, **and the error favours the house.**
-   S-017 fenced it out once the box proposal died (D-052) — it needs an owner-blessed home.
-   `ShopView.swift:547`/`:560` also both say "1,200-coin jackpot" against a real 1,400, and `:560`
-   is the VoiceOver string.
-6. **One trace on your actual phone for the slowdown.** Everything measured is on the simulator,
-   which is a Mac and far faster than your 16 Pro Max.
-7. Carried, never confirmed by a human: the stumble (eight sessions), the slide SFX (S-006), the hub
-   redesign (PR-0452), and the `Double Coins` App Store Connect description.
+   rolls **2.5 %** (`ShopValue.swift:157-158` vs `:149-150`). Guideline 3.1.1 requires disclosed
+   odds to be real, **and the error favours the house.** `ShopView.swift:547`/`:560` also both say
+   "1,200-coin jackpot" against a real 1,400, and `:560` is the VoiceOver string.
+6. **The mission reward curve is yours and the numbers are measured** (S-017). The board pays 663
+   coins/day = 34 % of the whole meta faucet. If you want it moved, say which direction.
+7. Carried, never confirmed by a human: the stumble, the slide SFX, the hub redesign (PR-0452), and
+   the `Double Coins` App Store Connect description.
 
 # Open questions for Rayan
 
-- **Review question 2** — live rig previews. Shapes pass 018.
-- **The mission reward curve** — measured now; direction is yours.
+- **Is the honest preview too plain?** (new — item 1 above; it gates 019's art brief)
+- **PR-0485** — the legendary aura's node is white in the rig and the trail hue in the preview.
+  A taste call, not a derivation. Filed rather than guessed at.
 - **PR-0040** — boss-fight music is a different axis from the per-world-bed decree. Yes/no.
 - **PR-0010** — `Store/metadata.md` sells a three-world game; the binary ships twelve families.
 - **PR-0254** — should a run that used a paid *revive* be leaderboard-eligible? (D-050 ruled the
@@ -185,7 +195,7 @@ verifier returned PARTIALLY REFUTED. `s017_missions-references.md` was never hos
 
 | Pass | Surface | Why here |
 |---|---|---|
-| ~~017~~ | ~~Missions — full rebuild~~ | **DONE (S-017).** All four complaints answered, ledger untouched. |
-| **018** | **Character preview seam + asset pipeline + perf instrumentation** | Coupled, and both are **prerequisites** for the art Rayan ordered. Every character is built twice today. |
-| **019** | The new character art itself | Blocked on 018. Earlier means building 24 assets twice. |
+| ~~017~~ | ~~Missions~~ | **DONE (S-017).** |
+| ~~018~~ | ~~Preview seam + asset foundation~~ | **DONE (S-018).** One spec, both layers, CI can see it. |
+| **019** | **The character art** | Unblocked. Author once, both layers follow. Start from `s016_characters.md` §2 — the problem is 15 silhouettes for 24 names, not colour. |
 | **020+** | Warden R1/R2 (D-047), in-run mystery boxes, the three approved monetization mechanics, the magnet + pickup meshes, the Mystery Box odds blocker | All have written designs; none is blocking. |

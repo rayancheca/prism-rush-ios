@@ -1418,3 +1418,71 @@ to walk away from rewards they earned. Pinned by four tests.
 
 Kept `MissionBoardSummary` as-is. It is pinned by `MissionsTests` and is correct at what it does —
 it is a *board* summary, and the defect was that nothing else existed, not that it was wrong.
+
+## D-054
+**REVIEW QUESTION 2, ANSWERED: menu previews do NOT become live renders of the rig. They become
+two projections of ONE specification now, and pictures of the real rig in 019.** (S-018.)
+
+Open since session 016. D-050's "new art for all 24 characters" is what forced it: 24 new assets
+landing on a seam where every character is built twice, with nothing testing that the two agree,
+multiplies the problem by 24. The owner is autonomous-mode by standing instruction, so this is
+decided and built reversibly rather than asked.
+
+**Rejected — a live `RealityView` per preview card.** `CharacterSwatch.swift:3-4` has warned since
+v1.3 that "24 RealityKit instances in a grid is a memory/stutter trap". That was an assertion, not
+a measurement, and it is still unmeasured — but the mechanism it names (synchronous
+`MeshResource` construction on the main actor during a scroll) is the top-ranked suspect for the
+one performance complaint the owner has actually made: *"just browsing the characters and catalog
+… mostly just regular scrolling not even in gameplay"* (D-050 ruling 4). Spending an unmeasured
+budget on the exact screen he called slow is the wrong bet. **The measurement that would change
+this is named in the handoff** — whether iOS 18 shares one renderer per window across
+`RealityView`s. If it does, the honest answer flips to live heroes plus baked cards.
+
+**Rejected for now — baked PNGs of the rig.** This is the right destination and 019 should get
+there. It is not the right first step, because a bake needs to know each character's silhouette
+bounds to frame it without cropping, and that bounding box did not exist in either layer.
+
+**Built — one spec, two renderers.** `Meta/CharacterGeometry.swift`, Foundation-only and listed in
+`Package.swift`, carries every proportion in one unit; the rig and the Canvas both read it;
+`CharacterParityTests` pins the agreement on Linux on every push. The preview stays a Canvas,
+which keeps RealityKit off the meta screens entirely.
+
+**The property that made this the safe call: there is no version of this problem where building
+the specification first is wrong.** If the owner prefers live previews, the spec becomes framing
+input for a `RealityView` instead of drawing input for a `Canvas` — the destination changes, the
+first step does not.
+
+**Reversal path.** Nothing here is load-bearing for gameplay. `CharacterGeometry` is a constants
+table plus one pure function; swapping the *renderer* of a preview does not touch it.
+
+**What 019 inherits:** one place to author a character's proportions instead of two, a test that
+fails if the two ever disagree again, and a canvas that grows automatically when a character gets
+bigger. The honest cost is that previews are now less flattering than they were — the swatch had
+been drawing horns at 2x and crowns at 2.1x the real rig — so 019's art brief starts from a true
+baseline rather than a generous one.
+
+## D-055
+**THE FACE IS NOT PART OF THE PARITY FIX, AND THAT IS DELIBERATE.** (S-018.)
+
+The geometry investigation's headline finding was a sign flip: the rig's eyes project 0.135 bodyR
+BELOW the body equator while the swatch draws them 0.10 ABOVE — because the eyes sit at z 0.52 and
+the chase camera is pitched 14.589° down, so anything pushed toward the camera slides down the
+screen. It proposed moving the swatch's eyes to match.
+
+**A hostile verifier refuted it and the refutation is correct.** That −0.135 is the REST pose, and
+`RealityRenderer:389` disables the whole player rig outside a live run — the rest pose is never
+displayed. In play the rig leans forward by `-0.16 * speedNorm` (`:402`), and `speedNorm` is never
+zero because `Tuning` starts the run at speed 17 of a 7…34 range. The in-run eye therefore lives in
+**−0.074 … +0.029 bodyR** and crosses the equator at speed 29.24. Tuning the preview to −0.135
+would over-shoot the real in-run eye at *every* speed — a decree-2 regression wearing a decree-2
+justification. Note the swatch's current +0.10 is closer to the top-speed rig than the proposal was
+to anything.
+
+**So both layers' eyes stay where they are.** Choosing a canonical pose is upstream of this
+question and belongs to the session that authors the new faces. Recorded so 019 does not
+re-discover the −0.135 figure and "fix" it.
+
+The general lesson, which is worth more than the specific number: **the rig's rest pose is not the
+rig.** Any future parity work on a z-bearing feature — the face, the crown ring, the aura ring —
+has to say which pose it is matching. Features at z ≈ 0 (every crest, the antenna, the silhouette)
+are safe to compare at rest, which is why the rest of the fix stands.

@@ -4,6 +4,55 @@
 > wins** and the other file gets fixed. That includes `state.md` and `README.md` at the repo root,
 > which are the project's human-facing history, not the agent's source of truth.
 
+- **Last written by:** session 018 (2026-08-04) — **PASS 018: THE CHARACTER PREVIEW SEAM. Every
+  character was built twice and only the BODY was shared; the crest, antenna and aura had drifted
+  by up to 2.0x with no test on either side. There is now ONE spec, both layers read it, and CI
+  can see it.** Commits `c81d32a`, `e6ca8dc`, `968dbb0`. Recovery tag `pre-s018` = `d88728a`.
+  Decisions **D-054, D-055**. **286 SPM + 302 Xcode tests green** (274 + 293 at session start).
+  `layoutVersion` still **12**; the v13 pin is still UNSPENT.
+- **D-054 — REVIEW QUESTION 2 IS ANSWERED after three sessions open.** Menu previews do NOT become
+  live `RealityView` renders. They become two projections of one specification now, and pictures of
+  the real rig in 019. The rejection of live previews is NOT "RealityKit is expensive" — that is
+  still unmeasured — it is that its mechanism (synchronous mesh construction on the main actor
+  during a scroll) is the top suspect for the one slowdown the owner has actually named, and
+  spending an unmeasured budget there is the wrong bet. **The measurement that would flip this is
+  named in HANDOFF.md.**
+- **D-055 — the face is deliberately NOT part of the parity fix.** The investigation's headline
+  (the rig's eyes project below the equator, the swatch draws them above) was refuted by its
+  verifier: that figure is the REST pose, and `RealityRenderer:389` disables the rig outside a live
+  run. In play the eye lives in -0.074..+0.029 bodyR. Matching the rest pose would have been a
+  decree-2 regression wearing a decree-2 justification. **The rig's rest pose is not the rig** —
+  any future parity work on a z-bearing feature must say which pose it matches.
+- **PR-0312 AND PR-0453 ARE CLOSED BY CONSTRUCTION.** 23 of 24 characters were cropped at the top
+  and all four legendary auras were cut on every surface including the hero. The Canvas is now
+  sized from the roster's extent and wrapped in the historic slot — `.frame` does not clip, so the
+  figure bleeds instead of being cut, and **no `.frame` moved.** Verified on the simulator, opened
+  and read: all four auras render complete for the first time.
+- **THE DIVERGENCES CLOSED, in bodyR:** horns 1.370 -> 0.680 (the swatch drew them TWICE as wide as
+  the rig), crown spike 0.620 -> 0.290, fin/ears x1.55, halo width x1.35, antenna stem 0.560 ->
+  0.677 (the one that was too SHORT), aura node count 2 -> 1. Plus three rig defects fixed in both
+  layers: the antenna socketed at a fixed world height with no shape branch (buried 0.360 bodyR in
+  a crystal), floppy ears hard-coding a world y, and the crown's five spikes starting at angle 0 —
+  asymmetric from the only angle the player ever sees it from.
+- **WHY IT COULD NOT REGRESS BEFORE AND CAN NOW.** The numbers lived in `UI/` and `Render/`, which
+  `Package.swift` does not compile, so `CharacterParityTests` was `#if canImport(UIKit)`-gated and
+  invisible to CI. The spec and the six call-site slots are now in `Meta/` and listed in
+  `Package.swift`. **That gate is the mechanism by which PR-0312 survived sixteen sessions.**
+- **THE HONEST COST: previews are now LESS flattering.** Monarch's crown really is a row of short
+  points. That is what "previews never lie" buys, and D-050 ordered new art for all 24 — which 019
+  can now author in ONE place instead of two.
+- **`docs/agent/11_ASSETS.md` IS COMMITTED.** `CLAUDE.md`'s amended iron rule 6 pointed at
+  gitignored session scratch — an iron rule citing a file that dies with its session. Also struck
+  three charter sites and bannered the root `/prompt` file, all of which would have instructed a
+  future agent to re-enforce the revoked "zero binary assets" decree.
+- **10 investigations + hostile verifications on disk** at `docs/agent/audits/scratch/s018_*.md`,
+  plus `s018_RULING.md`. **Every verifier returned PARTIALLY REFUTED and each refutation changed
+  the build** — the eye ruling was dropped, two wrong `file:line`s were caught inside text already
+  committed as policy, and the "slot presets must live in Meta/" correction is why PR-0312 closes
+  under `swift test` at all.
+
+> The bullets from here to the session-016 divider are **session 017's**.
+
 - **Last written by:** session 017 (2026-08-04) — **PASS 017: MISSIONS. All four of the owner's
   complaints are answered, and the coin ledger was NOT touched.** Commits `1f1c5ab`, `5924198`,
   `91379cd`, `27889ea`, all pushed. Recovery tag `pre-s017` = `8af1814`. Decisions **D-052, D-053**.

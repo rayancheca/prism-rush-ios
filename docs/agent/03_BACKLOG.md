@@ -1120,7 +1120,13 @@ items were not renumbered, merged, or deleted.
 ## PR-0312 · SEV2 · Every character swatch crops the top off the character
 - Area:        UI/CharacterSwatch, UI/CharacterSelectView, UI/ShopView
 - Found by:    AUDIT-001 (session 002), finder `catalog-skins`
-- Status:      OPEN
+- Status:      **DONE(S-018)** — closed by construction, not by re-tuning. The Canvas is now sized
+               from `CharacterGeometry.rosterExtentInSizeUnits` and wrapped in the historic slot;
+               `.frame` does not clip, so the drawing bleeds past the slot instead of being cut
+               inside it, and no `.frame` moved. Verified on the simulator: all four legendary
+               auras render complete for the first time. The reason it survived sixteen sessions
+               is that the numbers lived in `UI/`, which `Package.swift` does not compile — fixed
+               by `Meta/CharacterSwatchSlot.swift` + `testNoCallSiteBleedsOntoItsNeighbours`.
 - Symptom:     18 of 20 crests and every antenna tip are cut off in the grid, shop and next-unlock swatches. The legendary aura ring is structurally wider than its own canvas and is clipped on **every** surface, including the menu hero and the splash.
 - Why:         The preview canvas's drawing bounds do not account for the crest/antenna/aura extents above the body.
 - Impact:      **Decree 2 — previews never lie.** The rarest visual tell in the game (the legendary aura) is the one the player never sees intact.
@@ -1791,7 +1797,8 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
 ## PR-0453 · SEV2 · The character body glow is clipped into a rectangle on grid and shop cards
 - Area:        UI/CharacterSwatch
 - Found by:    S-005, while enlarging the hub hero stage for PR-0452
-- Status:      **PARTIAL — DONE(S-005) for the hub hero stage; OPEN for every other call site.**
+- Status:      **DONE(S-018)** — every call site, by the same mechanism as PR-0312. Was PARTIAL
+               (S-005 fixed only the hub hero stage).
 - Symptom:     A faint vertical band with hard edges either side of the figure, most visible where
                the swatch sits over something non-flat. On the characters screen the grid cards
                show it plainly (Ember's orange and Bolt's blue glows are visibly cut square).
@@ -2080,3 +2087,39 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
                NOT on this, and this would have bitten independently.
 - Fix sketch:  Separate "has a reward" from "the reward is a positive coin count" before any
                non-coin reward kind is introduced.
+
+
+## PR-0484 · SEV3 · The rig has no inner ear; the swatch does
+- Area:        Render/Reality/RealityRenderer (buildCrest)
+- Found by:    S-018, while unifying the crest geometry
+- Status:      OPEN
+- Symptom:     `AnimatedCharacterSwatch.drawCrest` draws a darker inner ear inside each `.ears`
+               triangle; `RealityRenderer.buildCrest` builds a bare pyramid. Five skins (void,
+               blossom, fang) plus the shape it implies elsewhere.
+- Why:         Decree 2, in the direction the S-018 pass deliberately did not take: everywhere
+               else the rig's number won, but here the swatch has a detail the rig lacks, and the
+               fix is to ADD it to the rig rather than delete it from the preview — an inner ear
+               is what makes an ear read as an ear rather than a triangle.
+- Impact:      Small. Two extra entities / two draw calls on three characters.
+- Fix sketch:  A second, scaled `spike` per ear in `buildCrest`, at
+               `CharacterGeometry.Ears.innerScale` (already in the spec, already used by the
+               swatch).
+- Verification: `CharacterParityTests` gains a crest-piece-count pin; autoplay screenshot of Void.
+
+## PR-0485 · SEV3 · The legendary aura's node is white in the rig and the trail hue in the preview
+- Area:        Render/Reality/RealityRenderer (buildAura), UI/CharacterSwatch (drawAura)
+- Found by:    S-018
+- Status:      OPEN — needs a taste call, not a derivation
+- Symptom:     `buildAura` builds the orbiting node in `cWhite`; the swatch draws it in the skin's
+               `trailHex`. S-018 unified the node COUNT (2 -> 1, the rig's) because that is a
+               proportion and it was causing the aura to overflow every canvas. Colour is not a
+               proportion.
+- Why:         Both readings are defensible. White reads as a specular highlight and separates
+               the node from the ring it orbits; the trail hue keeps the character's identity in
+               the one feature that says "legendary" — and Vigil (`BFC9FF`) and Aurora already
+               read near-white, so white erases them.
+- Trap:        The rig's ring is ALREADY the trail colour. Making the node the trail colour too
+               makes it vanish unless it also gets a brightness offset. Do not do the one-line
+               version.
+- Impact:      Four characters, in-run and on every buy surface.
+- Verification: Needs eyes. Screenshot Aurora and Vigil in-run, both ways.
