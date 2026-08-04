@@ -167,7 +167,7 @@ struct AnimatedCharacterSwatch: View {
         }
     }
 
-    /// Body silhouette — every proportion derives from `CharacterProportions`, the SAME
+    /// Body silhouette — every proportion derives from `CharacterGeometry`, the SAME
     /// constants `RealityRenderer.buildCharacter` sizes its meshes from, so the preview and
     /// the in-run rig agree by construction (AUDIT D2-5: the cube used to span 100% of the
     /// footprint here while rendering at ~85% in 3D; relative sizes flipped across the seam).
@@ -177,15 +177,15 @@ struct AnimatedCharacterSwatch: View {
             return Path(ellipseIn: CGRect(x: center.x - bodyR, y: center.y - bodyR,
                                           width: bodyR * 2, height: bodyR * 2))
         case .cube:
-            let half = bodyR * CGFloat(CharacterProportions.cubeEdgeRatio)
+            let half = bodyR * CGFloat(CharacterGeometry.cubeEdgeRatio)
             return Path(roundedRect: CGRect(x: center.x - half, y: center.y - half,
                                             width: half * 2, height: half * 2),
-                        cornerRadius: half * 2 * CGFloat(CharacterProportions.cubeCornerRatio))
+                        cornerRadius: half * 2 * CGFloat(CharacterGeometry.cubeCornerRatio))
         case .crystal:
             // Square rotated 45°, elongated vertically (DESIGN_characters §4.1) — the rig's
             // octahedron now carries the same half-extents in 3D.
-            let hw = bodyR * CGFloat(CharacterProportions.crystalHalfWidthRatio)
-            let hh = bodyR * CGFloat(CharacterProportions.crystalHalfHeightRatio)
+            let hw = bodyR * CGFloat(CharacterGeometry.crystalHalfWidthRatio)
+            let hh = bodyR * CGFloat(CharacterGeometry.crystalHalfHeightRatio)
             var p = Path()
             p.move(to: CGPoint(x: center.x, y: center.y - hh))
             p.addLine(to: CGPoint(x: center.x + hw, y: center.y))

@@ -1179,13 +1179,13 @@ final class RealityRenderer: RendererPort {
     /// Build the character rig from the stored skin params (defaults reproduce the classic Prism
     /// sphere). Eyes keep the same world-space face anchor for every body shape so the existing
     /// blink/squash code needs no per-shape branches. Sizes per DESIGN_characters §1.6, all
-    /// derived from `CharacterProportions` — the SAME constants the preview's silhouette math
+    /// derived from `CharacterGeometry` — the SAME constants the preview's silhouette math
     /// reads, so swatch and rig proportions agree by construction (AUDIT D2-5). Sphere/cube
     /// reproduce the shipped 0.62 / 1.06 exactly; the crystal gains §4.1's real 3D elongation.
     private func buildCharacter() {
         let bodyMesh: MeshResource
         var bodyY: Float = 0.66
-        let bodyR = CharacterProportions.sphereRadius
+        let bodyR = CharacterGeometry.sphereRadius
         switch skinBodyShape {
         case .sphere:
             // A spectral skin gets ONE mesh with a part per band, so the body stays a single
@@ -1195,13 +1195,13 @@ final class RealityRenderer: RendererPort {
                 ProceduralMesh.bandedSphere(radius: bodyR, bands: $0.count)
             } ?? .generateSphere(radius: bodyR)
         case .cube:
-            let edge = bodyR * 2 * CharacterProportions.cubeEdgeRatio
+            let edge = bodyR * 2 * CharacterGeometry.cubeEdgeRatio
             bodyMesh = .generateBox(width: edge, height: edge, depth: edge,
-                                    cornerRadius: edge * CharacterProportions.cubeCornerRatio)
+                                    cornerRadius: edge * CharacterGeometry.cubeCornerRatio)
         case .crystal:
-            bodyMesh = ProceduralMesh.octahedron(rx: bodyR * CharacterProportions.crystalHalfWidthRatio,
-                                                 ry: bodyR * CharacterProportions.crystalHalfHeightRatio,
-                                                 rz: bodyR * CharacterProportions.crystalHalfWidthRatio)
+            bodyMesh = ProceduralMesh.octahedron(rx: bodyR * CharacterGeometry.crystalHalfWidthRatio,
+                                                 ry: bodyR * CharacterGeometry.crystalHalfHeightRatio,
+                                                 rz: bodyR * CharacterGeometry.crystalHalfWidthRatio)
             bodyY = 0.72
         }
         // Seed materials from the stored skin hexes (not fixed cyan/magenta) so even the

@@ -450,25 +450,7 @@ enum ProceduralMesh {
     }
 }
 
-/// ONE source of truth for the character body-silhouette proportions, shared by the 3D rig
-/// meshes (`RealityRenderer.buildCharacter`) and the 2D Canvas previews
-/// (`AnimatedCharacterSwatch.bodyPath`) — so the select/shop silhouette math and the in-run
-/// mesh/scale agree by construction (decree 2, AUDIT D2-5; pinned by CharacterParityTests).
-/// Everything is expressed relative to the sphere body: `sphereRadius` in rig world units;
-/// the preview's `bodyR` (points) plays exactly the same role.
-enum CharacterProportions {
-    /// Rig sphere body radius (world units) — the shipped v1.3 value, unchanged.
-    static let sphereRadius: Float = 0.62
-    /// Cube edge as a fraction of the sphere DIAMETER (rig 1.06 / 1.24 ≈ 0.855 — the preview
-    /// previously drew the cube at 100% of the footprint, ~17% wider than the rig renders).
-    static let cubeEdgeRatio: Float = 1.06 / 1.24
-    /// Cube corner radius as a fraction of the cube edge (rig 0.18 / 1.06).
-    static let cubeCornerRatio: Float = 0.18 / 1.06
-    /// Crystal (octahedron) half-width as a fraction of the sphere radius — the documented
-    /// DESIGN_characters §4.1 silhouette the previews have always sold.
-    static let crystalHalfWidthRatio: Float = 0.95
-    /// Crystal half-height as a fraction of the sphere radius — §4.1's vertical elongation.
-    /// The rig previously shipped a SYMMETRIC octahedron(0.78): ~26% wider than the sphere
-    /// where the preview promised 95%, with the elongation existing only in 2D.
-    static let crystalHalfHeightRatio: Float = 1.15
-}
+// `CharacterProportions` moved to `PrismRush/Meta/CharacterGeometry.swift` in v2.4 and grew to
+// cover the crest, the antenna and the aura as well as the body. It lived here, in Render/, which
+// `Package.swift` never compiles — and that is precisely why `CharacterParityTests` had to be
+// `#if canImport(UIKit)`-gated and why PR-0312 survived sixteen sessions unseen by CI.
