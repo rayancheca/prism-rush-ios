@@ -107,7 +107,9 @@ with a decree, the doc is wrong — amend the doc, never "ship the doc". Current
   look of the game is downstream of it. It is gone. The replacement is a **memory budget** (same
   instruction: *"the app becomes slow at points. this can never happen"*) and a **licensing floor**
   (ship only what we own or what is CC0 — "copy subway surfers" is its design language, never its
-  art). Full mandate verbatim: `docs/agent/audits/scratch/s016_mandate.md`.
+  art). Budget, licence floor and migration order: **`docs/agent/11_ASSETS.md`** (committed). The
+  owner's verbatim mandate lives in `docs/agent/audits/scratch/s016_mandate.md`, which is gitignored
+  — its load-bearing content is reproduced in `11_ASSETS.md` on purpose.
 
 ## Iron rules
 
@@ -143,7 +145,7 @@ with a decree, the doc is wrong — amend the doc, never "ship the doc". Current
    you not importing real assests. delete that code only decree"* and *"use things online idc what."*
    Real meshes, textures, models and sound files are now permitted and wanted. The rule number is
    kept rather than renumbering, because the other eight are cited by number across `docs/agent/`.
-   **What replaces it is a budget, not a ban** — see D-046 and `docs/agent/audits/scratch/s016_assets.md`.
+   **What replaces it is a budget, not a ban** — see D-046 and `docs/agent/11_ASSETS.md`.
    Two things survive the revocation and are not the owner's to waive:
    (a) **we must have the right to ship what we ship** — AI-generated or CC0/public-domain only;
    "copy subway surfers" means its design language and pacing, never its art, names or trademarks;

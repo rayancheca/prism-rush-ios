@@ -15,13 +15,23 @@
 ## What Prism Rush is trying to be
 
 A neon three-lane endless runner for iPhone that is good enough to sit next to commercial
-arcade runners on the App Store without apologising, built entirely in Swift with **zero
-binary assets** — every mesh via `MeshDescriptor`, every sound via DSP in `Synth.swift`, the
-app icon via `Tools/gen_icon.swift`.
+arcade runners on the App Store without apologising, built entirely in Swift.
 
-The zero-assets constraint is not a gimmick to be relaxed when it gets inconvenient. It is the
-thing that makes the project distinctive and the thing that makes the codebase legible. A
-session that solves a visual problem by adding a PNG has solved the wrong problem.
+> **AMENDED BY THE OWNER, 2026-08-03 — D-046.** This section used to read "built entirely in
+> Swift with **zero binary assets**", and the paragraph below used to say the constraint "is not
+> a gimmick to be relaxed when it gets inconvenient". The owner deleted it in one line: *"why
+> are you not importing real assests. delete that code only decree."* Real meshes, textures,
+> models and sound files are now permitted and wanted.
+>
+> Everything still standing in the codebase — every procedural mesh, every `UnlitMaterial`, the
+> whole DSP audio layer — exists because of the old rule, so the *style* it produced is the
+> game's look and is not to be thrown away casually. But it is now a style, not a law.
+>
+> **What replaces it is a budget and a licensing floor, not a ban** — see
+> `docs/agent/11_ASSETS.md`. Neither is the owner's to waive: we ship only what we have the
+> right to ship, and every asset is charged against a stated memory budget, because the same
+> instruction that revoked the rule also said *"the app becomes slow at points. this can never
+> happen."*
 
 Two things must both be true at ship:
 
@@ -67,8 +77,13 @@ name on publicly. Concretely:
 1. **No dark-pattern monetization. No manipulative retention mechanics aimed at minors. Any
    randomized purchase must disclose odds. The game should be hard to put down because it is
    good, not because it is engineered to exploit.**
-2. **Zero binary assets.** Sole carve-out: `PrismRush/Assets.xcassets` holds exactly the
-   `AppIcon.appiconset`, whose PNG is a byte-copy of the `gen_icon.swift` output. Nothing else.
+2. ~~**Zero binary assets.**~~ **REVOKED BY THE OWNER, 2026-08-03 (D-046).** Replaced by a
+   **memory budget** and a **licensing floor**, both in `docs/agent/11_ASSETS.md`: ship only
+   AI-generated or CC0/public-domain work ("copy subway surfers" is its design language, never
+   its art, names or trademarks), and charge every asset against a stated budget.
+   `PrismRush/Assets.xcassets` is no longer a carve-out, it is the catalogue — but
+   `AppIcon.appiconset` stays a byte-copy of the `gen_icon.swift` output and is never
+   hand-edited.
 3. **Zero third-party dependencies.** Apple frameworks only.
 4. **Zero ads, zero analytics, zero tracking.** This is advertised in the store listing and is
    therefore also a compliance commitment, not just a preference.
@@ -96,7 +111,10 @@ necessary, it needs an ADR and Rayan's sign-off first.
 - Any first-party server, account backend, or cloud save beyond iCloud KVS.
 - Multiplayer, real-time or asynchronous, beyond the existing Game Center leaderboards.
 - Any third-party SDK, including analytics, crash reporting, and ad networks.
-- Any binary asset — texture, audio file, model, font.
+- ~~Any binary asset — texture, audio file, model, font.~~ **Struck, D-046** — these are now
+  wanted. See `docs/agent/11_ASSETS.md` for the budget and the licensing floor that replaced the
+  ban. (Left visible rather than deleted: this line sat on a *forbidden* list for sixteen
+  sessions, and a future agent who finds it half-remembered needs to see that it was revoked.)
 - A second renderer. `RendererPort` exists so one is *possible*; building one is not the goal.
 - Rewriting a working subsystem because a session finds it inelegant.
 

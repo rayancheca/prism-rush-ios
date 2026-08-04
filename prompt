@@ -1,3 +1,16 @@
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│ SUPERSEDED — DO NOT FOLLOW. Historical artifact, 2026-06-12 (pre-session-001).              │
+│                                                                                             │
+│ This was a one-off session prompt for the CODE_REVIEW.md plan. That plan is long done. The  │
+│ program is now governed by CLAUDE.md, docs/agent/01_RULES.md, docs/agent/02_STATE.md and    │
+│ HANDOFF.md — read those instead.                                                            │
+│                                                                                             │
+│ It is bannered rather than deleted because line 10 below instructs an agent to enforce      │
+│ "zero binary assets", a decree the OWNER REVOKED on 2026-08-03 (D-046). Following this file │
+│ would undo an owner decision. Every other constraint it states has also been superseded at  │
+│ least once. Kept only as a record of what session 000 was told.                             │
+└─────────────────────────────────────────────────────────────────────────────────────────────┘
+
 You are continuing work on Prism Rush (this repo). I just ran a full code review — it's in CODE_REVIEW.md at the repo root. Your job this session is to READ that review and IMPLEMENT its prioritized plan (§20). Work autonomously: make the best decision, document it in state.md, and keep going — don't stop to ask for confirmation, don't stop because something is hard.
 
 BEFORE TOUCHING ANYTHING, read these three files in full and treat them as binding:
