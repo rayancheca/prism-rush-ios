@@ -585,6 +585,22 @@ final class GameModel {
         present(RewardBurst(kind: .chest, coins: amount))
     }
 
+    /// A claimed mission gets the same ceremony as the daily bonus and the free chest. D-049
+    /// shipped that moment with exactly two callers and missions were not one of them — the
+    /// mission board was the one reward surface in the app that did not use the app's own reward
+    /// moment, and "not rewarding at all" was the owner's complaint about it.
+    func presentMissionReward(title: String, coins: Int, glyph: String) {
+        present(RewardBurst(kind: .mission(title: title), coins: coins, glyph: glyph))
+    }
+
+    /// CLAIM ALL resolves to ONE moment carrying the total, not one per mission. The button
+    /// already promises a single total ("CLAIM ALL +N"), and up to 19 missions can be claimable
+    /// at once — 19 consecutive ceremonies would be a hostage situation, not a reward.
+    func presentMissionSetReward(count: Int, coins: Int) {
+        present(RewardBurst(kind: .missionSet(count: count), coins: coins,
+                            glyph: "checkmark.seal.fill"))
+    }
+
     func dismissReward() {
         rewardCue?.cancel()
         rewardCue = nil

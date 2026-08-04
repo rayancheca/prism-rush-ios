@@ -8,6 +8,13 @@ struct RewardBurst: Equatable, Sendable {
         case daily(streak: Int)
         /// The 30-minute free chest.
         case chest
+        /// One claimed mission. `title` is the mission's own text, so the moment names the thing
+        /// the player actually did rather than announcing a generic payout.
+        case mission(title: String)
+        /// The CLAIM ALL cascade, collapsed into ONE moment carrying the total. Nineteen missions
+        /// can be claimable at once (`MissionCatalog` 6+3+3+7); nineteen consecutive ceremonies
+        /// would be a hostage situation, and the button already promises a single total.
+        case missionSet(count: Int)
     }
 
     var kind: Kind
@@ -15,11 +22,26 @@ struct RewardBurst: Equatable, Sendable {
     /// The login ladder, copied in at construction. Carried on the value rather than read from
     /// `ProfileStore` so this stays `Sendable` and the view needs no actor hop to draw it.
     var ladder: [Int] = []
+    /// SF Symbol for the mission medallion — the SAME glyph the mission's card shows, so the
+    /// moment is visibly about the row you just tapped (decree 2: previews never lie). Carried as
+    /// a plain string rather than a `Mission`, so this value type stays free of mission logic.
+    var glyph: String?
+
+    /// A chest is a container you open; a mission is a goal you met. The chest choreography (lid,
+    /// rays, confetti, rolling count) is right for both, but the object in the middle is not.
+    var showsChest: Bool {
+        switch kind {
+        case .daily, .chest: return true
+        case .mission, .missionSet: return false
+        }
+    }
 
     var title: String {
         switch kind {
         case .daily: return "DAILY BONUS"
         case .chest: return "FREE CHEST"
+        case .mission: return "MISSION COMPLETE"
+        case .missionSet: return "MISSIONS CLAIMED"
         }
     }
 
@@ -32,6 +54,11 @@ struct RewardBurst: Equatable, Sendable {
                 : "DAY \(streak) · COME BACK TOMORROW FOR MORE"
         case .chest:
             return "ANOTHER IN 30 MINUTES"
+        case let .mission(title):
+            // The mission's own words, upcased to sit in the same band as the other subtitles.
+            return title.uppercased()
+        case let .missionSet(count):
+            return "\(count) REWARDS COLLECTED"
         }
     }
 }
@@ -68,7 +95,7 @@ struct RewardBurstView: View {
                 ZStack {
                     rays
                     confetti
-                    chest
+                    if burst.showsChest { chest } else { medallion }
                 }
                 .frame(width: 240, height: 240)
 
@@ -106,8 +133,12 @@ struct RewardBurstView: View {
         .contentShape(Rectangle())
         .onTapGesture { if dismissable { onDismiss() } }
         .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("rewardBurst")
         .accessibilityLabel("\(burst.title). \(burst.coins) coins. \(burst.subtitle)")
         .accessibilityAddTraits(.isButton)
+        // This is a modal moment — the scrim already blocks touch, so VoiceOver must not be able
+        // to swipe past it into the board underneath either.
+        .accessibilityAddTraits(.isModal)
         .accessibilityAction { if dismissable { onDismiss() } }
         .task { await run() }
     }
@@ -153,6 +184,45 @@ struct RewardBurstView: View {
     }
 
     /// A real chest: body, banded lid that hinges open, keyhole, and the light that escapes it.
+    /// The mission centerpiece: a struck medallion that lands and rings. Rides the SAME `phase`
+    /// and `lid` values the chest uses, so `GameModel.present`'s audio timeline — which is written
+    /// against those beats — stays in sync without knowing which object is on screen.
+    ///
+    /// `lid` is the "it opens" beat for a chest; here it is the "it seals" beat — the ring snaps
+    /// closed around the glyph and the glow blooms, on the same 220 ms the fanfare plays.
+    private var medallion: some View {
+        ZStack {
+            // The bloom that leaks out as the seal lands.
+            Circle()
+                .fill(RadialGradient(colors: [Theme.Role.reward.opacity(0.5 * lid), .clear],
+                                     center: .center, startRadius: 2, endRadius: 92))
+                .frame(width: 184, height: 184)
+
+            // Struck disc.
+            Circle()
+                .fill(LinearGradient(colors: [Theme.color(0xFFE27A), Theme.color(0xD98A26)],
+                                     startPoint: .top, endPoint: .bottom))
+                .frame(width: 118, height: 118)
+                .overlay(Circle().strokeBorder(Theme.color(0x7A4A12).opacity(0.45), lineWidth: 3))
+                .shadow(color: .black.opacity(0.5), radius: 14, y: 8)
+
+            // The mission's own glyph, stamped into the disc.
+            Image(systemName: burst.glyph ?? "checkmark.seal.fill")
+                .font(.system(size: 46, weight: .black))
+                .foregroundStyle(Theme.color(0x5A3408))
+
+            // The seal: a ring that sweeps closed around the disc on the `lid` beat.
+            Circle()
+                .trim(from: 0, to: lid)
+                .stroke(Theme.Role.reward,
+                        style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .frame(width: 142, height: 142)
+                .shadow(color: Theme.Role.reward.opacity(0.7), radius: 8)
+        }
+        .scaleEffect(0.72 + 0.28 * phase)
+    }
+
     private var chest: some View {
         ZStack {
             // The glow that leaks out once the lid is up.

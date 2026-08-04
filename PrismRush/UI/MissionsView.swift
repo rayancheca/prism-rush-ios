@@ -128,7 +128,6 @@ struct MissionsView: View {
         if claimables.count >= 2 {
             let total = claimables.reduce(0) { $0 + store.missionState($1, now: now).reward }
             Button {
-                model.synth.play(.purchaseChime)
                 let queue = claimables
                 // Unstructured on purpose: the claims must finish even if the sheet closes
                 // mid-cascade — they land on the shared store, not on this view.
@@ -137,11 +136,22 @@ struct MissionsView: View {
                 // UTC-midnight rollover mid-cascade refresh the boards and nil the remaining
                 // daily claims — the player would receive less than the button promised.
                 Task { @MainActor in
+                    var paid = 0, landed = 0
                     for mission in queue {
-                        if store.claimMission(mission.id, now: now) != nil {
+                        if let coins = store.claimMission(mission.id, now: now) {
+                            paid += coins
+                            landed += 1
                             claimPulse += 1
                         }
                         try? await Task.sleep(for: .milliseconds(80))
+                    }
+                    // ONE moment for the whole set, raised after the rows have finished
+                    // collapsing — and reporting what was ACTUALLY paid, not the total the button
+                    // advertised. They agree today (every claim resolves against the same `now`
+                    // the board was built from), and if they ever stop agreeing the player sees
+                    // the truth rather than the promise (decree 5).
+                    if landed > 0 {
+                        model.presentMissionSetReward(count: landed, coins: paid)
                     }
                 }
             } label: {
@@ -187,15 +197,18 @@ struct MissionsView: View {
                             state: store.missionState(mission, now: now),
                             tint: tint,
                             ringSize: ringSize,
-                            onClaim: { registerClaim() })
+                            onClaim: { reward in registerClaim(mission, reward: reward) })
             }
         }
     }
 
-    /// Per-claim feedback (single claims; CLAIM ALL drives its own cascade).
-    private func registerClaim() {
+    /// Per-claim feedback (single claims; CLAIM ALL drives its own cascade). The burst owns the
+    /// audio now — `GameModel.present` runs a three-layer timeline on the same clock as the
+    /// motion — so there is no `purchaseChime` here to collide with it.
+    private func registerClaim(_ mission: Mission, reward: Int) {
         claimPulse += 1
-        model.synth.play(.purchaseChime)
+        model.presentMissionReward(title: mission.title, coins: reward,
+                                   glyph: missionGlyph(mission.metric))
     }
 
     /// TODAY — gold, with a live timer ring draining toward UTC midnight (per-minute tick).
@@ -335,6 +348,26 @@ private extension ProfileStore.MissionBoardSummary {
     }
 }
 
+/// The SF Symbol for a metric. File-scope because two places need the SAME glyph: the mission
+/// card, and the reward medallion the claim raises (decree 2 — the moment must be visibly about
+/// the row you just tapped).
+func missionGlyph(_ metric: Mission.Metric) -> String {
+    switch metric {
+    case .gems: "diamond.fill"
+    case .distance: "arrow.forward"
+    case .nearMisses: "wind"
+    case .slides: "arrow.down.to.line"
+    case .slickBonuses: "sparkles"
+    case .runsFinished: "flag.checkered"
+    case .streakBest: "flame.fill"
+    case .worldReached: "globe"
+    case .chestsOpened: "gift.fill"
+    case .wardensDefeated: "shield.lefthalf.filled.slash"
+    case .revives: "heart.fill"
+    case .multiplierHit: "multiply"
+    }
+}
+
 /// One mission as a ring card: circular progress (animated fill on appear; Reduce Motion =
 /// static), title, tier ladder for achievements (current tier highlighted), and the reward pill /
 /// gold CLAIM button. A landed claim fires a coin fly-up; a fully exhausted mission collapses to
@@ -345,12 +378,10 @@ private struct MissionCard: View {
     let state: ProfileStore.MissionState
     let tint: Color
     let ringSize: CGFloat
-    let onClaim: () -> Void
+    let onClaim: (Int) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false      // drives the on-appear ring fill (0 → fraction)
-    @State private var flyAmount = 0         // last claim's reward, shown by the fly-up
-    @State private var flyTrigger = 0        // re-fires the fly-up per claim
 
     var body: some View {
         Group {
@@ -360,16 +391,9 @@ private struct MissionCard: View {
                 activeCard
             }
         }
-        // The fly-up lives OUT here, not on `activeCard`: a final claim flips `state.claimed` in
-        // the same transaction, so an overlay on the active card would die with it mid-rise —
-        // daily/weekly/per-run claims would never show the "+N". Here it survives the
-        // active → receipt swap (review fix).
-        .overlay(alignment: .topTrailing) {
-            if flyAmount > 0 {
-                CoinFlyUp(amount: flyAmount, trigger: flyTrigger)
-                    .padding(.trailing, 18)
-            }
-        }
+        // The claim's celebration is now the app-wide `RewardBurstView` raised by GameModel, not a
+        // 13 pt "+N" that rose 38 pt and faded inside this card. That local fly-up was the entire
+        // answer this screen gave to "you completed a mission".
         .accessibilityIdentifier("missionCard_\(mission.id)")
     }
 
@@ -420,7 +444,7 @@ private struct MissionCard: View {
                 .stroke(state.claimable ? AnyShapeStyle(Theme.goldGradient) : AnyShapeStyle(tint),
                         style: StrokeStyle(lineWidth: 4, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-            Image(systemName: metricGlyph)
+            Image(systemName: missionGlyph(mission.metric))
                 .font(.system(size: ringSize * 0.3, weight: .semibold))
                 .foregroundStyle(state.claimable ? Theme.Role.reward : .white.opacity(0.7))
         }
@@ -485,11 +509,7 @@ private struct MissionCard: View {
     private func claim() {
         let reward = state.reward
         guard ProfileStore.shared.claimMission(mission.id, now: Date()) != nil else { return }
-        onClaim()
-        if !reduceMotion {
-            flyAmount = reward
-            flyTrigger += 1
-        }
+        onClaim(reward)
     }
 
     // MARK: receipt
@@ -520,23 +540,6 @@ private struct MissionCard: View {
 
     // MARK: helpers
 
-    private var metricGlyph: String {
-        switch mission.metric {
-        case .gems: "diamond.fill"
-        case .distance: "arrow.forward"
-        case .nearMisses: "wind"
-        case .slides: "arrow.down.to.line"
-        case .slickBonuses: "sparkles"
-        case .runsFinished: "flag.checkered"
-        case .streakBest: "flame.fill"
-        case .worldReached: "globe"
-        case .chestsOpened: "gift.fill"
-        case .wardensDefeated: "shield.lefthalf.filled.slash"
-        case .revives: "heart.fill"
-        case .multiplierHit: "multiply"
-        }
-    }
-
     private var rowA11y: String {
         let tierPart = mission.isTiered ? " Tier \(state.tier + 1) of \(state.tierCount)." : ""
         let status = state.claimable
@@ -549,37 +552,5 @@ private struct MissionCard: View {
         if v >= 10_000 { return String(format: "%.0fk", v / 1_000) }
         if v >= 1_000 { return String(format: "%.1fk", v / 1_000) }
         return "\(Int(v))"
-    }
-}
-
-/// "+N ⬤" rising off a just-claimed card — re-fired per claim via `.id(trigger)`, invisible once
-/// the rise completes. Purely decorative (hidden from a11y, no hit testing).
-private struct CoinFlyUp: View {
-    let amount: Int
-    let trigger: Int
-
-    var body: some View {
-        FlyUpBody(amount: amount)
-            .id(trigger)   // a fresh claim restarts the rise from scratch
-    }
-
-    private struct FlyUpBody: View {
-        let amount: Int
-        @State private var risen = false
-
-        var body: some View {
-            HStack(spacing: 3) {
-                Text("+\(amount)")
-                    .font(.system(size: 13, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
-                CoinGlyph(size: 12)
-            }
-            .foregroundStyle(Theme.Role.reward)
-            .offset(y: risen ? -38 : -4)
-            .opacity(risen ? 0 : 1)
-            .onAppear { withAnimation(.easeOut(duration: 0.8)) { risen = true } }
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-        }
     }
 }

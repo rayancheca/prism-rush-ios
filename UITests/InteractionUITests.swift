@@ -105,9 +105,23 @@ final class InteractionUITests: XCTestCase {
                       "demo profile should start with the daily login claimable")
         rail.tap()   // lit cell → claims the daily login inline
 
+        // S-016 (D-049) routed both of these rewards through `RewardBurstView` — a modal scrim —
+        // and this test was never re-run against it. The burst lands between the two rail taps, so
+        // the SECOND tap was hitting the scrim (dismissing it) instead of opening the chest, and
+        // the cooldown assertion below failed. Verified pre-existing: it fails identically at
+        // `pre-s017`. Dismissing it explicitly also makes this test prove both bursts fire.
+        let burst = element(app, id: "rewardBurst")
+        XCTAssertTrue(burst.waitForExistence(timeout: 8), "claiming the daily should raise a burst")
+        burst.tap()
+        XCTAssertTrue(burst.waitForNonExistence(timeout: 8), "the daily burst should dismiss")
+
         XCTAssertTrue(waitForLabel(app, id: "railRewards", contains: "chest ready"),
                       "after the daily claim the free chest should be next in the ladder")
         rail.tap()   // lit cell → opens the free chest inline
+
+        XCTAssertTrue(burst.waitForExistence(timeout: 8), "opening the chest should raise a burst")
+        burst.tap()
+        XCTAssertTrue(burst.waitForNonExistence(timeout: 8), "the chest burst should dismiss")
 
         XCTAssertTrue(waitForLabel(app, id: "railRewards", contains: "Next free chest"),
                       "chest should go on cooldown after opening")
@@ -270,6 +284,17 @@ final class InteractionUITests: XCTestCase {
         XCTAssertTrue(claimAll.waitForExistence(timeout: 6), "≥2 seeded claimables should surface CLAIM ALL")
 
         claimAll.tap()   // cascade: one claim per 80 ms beat until the board is swept
+
+        // S-017: the cascade now resolves into ONE `RewardBurstView` carrying the total, instead
+        // of a 13 pt "+N" fading inside each card. It is a modal scrim, so it has to be dismissed
+        // before the board is reachable again — and asserting on it first means this test now
+        // proves the reward moment actually fires, which nothing did before.
+        let burst = element(app, id: "rewardBurst")
+        XCTAssertTrue(burst.waitForExistence(timeout: 8),
+                      "CLAIM ALL should raise one reward burst for the whole set")
+        burst.tap()
+        XCTAssertTrue(burst.waitForNonExistence(timeout: 8), "tapping the burst should dismiss it")
+
         XCTAssertTrue(app.buttons["claim_ach.gems"].waitForNonExistence(timeout: 8),
                       "the cascade should retire Gem Hoarder's claim")
         XCTAssertTrue(app.buttons["claim_ach.slick"].waitForNonExistence(timeout: 8),
@@ -284,6 +309,13 @@ final class InteractionUITests: XCTestCase {
         for _ in 0..<10 where !single.isHittable { app.swipeUp() }
         XCTAssertTrue(single.isHittable, "the ladder should scroll the claim into reach")
         single.tap()
+
+        // A single claim gets its own burst, naming that one mission.
+        XCTAssertTrue(burst.waitForExistence(timeout: 8),
+                      "a single claim should raise its own reward burst")
+        burst.tap()
+        XCTAssertTrue(burst.waitForNonExistence(timeout: 8), "tapping the burst should dismiss it")
+
         XCTAssertTrue(single.waitForNonExistence(timeout: 6),
                       "the final tier's claim should retire the button (receipt row)")
     }
