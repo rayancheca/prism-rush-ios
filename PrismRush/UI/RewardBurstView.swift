@@ -223,52 +223,10 @@ struct RewardBurstView: View {
         .scaleEffect(0.72 + 0.28 * phase)
     }
 
+    /// v2.5: the drawing moved to `TreasureChest` so the Mystery Box can open the SAME object on the
+    /// same hinge. This view keeps its own entrance curve; only the shape is shared.
     private var chest: some View {
-        ZStack {
-            // The glow that leaks out once the lid is up.
-            Circle()
-                .fill(RadialGradient(colors: [Theme.Role.reward.opacity(0.55 * lid), .clear],
-                                     center: .center, startRadius: 2, endRadius: 92))
-                .frame(width: 184, height: 184)
-                .offset(y: -6)
-
-            VStack(spacing: 0) {
-                // Lid
-                UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 2,
-                                       bottomTrailingRadius: 2, topTrailingRadius: 12)
-                    .fill(LinearGradient(colors: [Theme.color(0xFFE27A), Theme.color(0xE0912A)],
-                                         startPoint: .top, endPoint: .bottom))
-                    .overlay(alignment: .center) {
-                        Rectangle().fill(Theme.color(0x7A4A12).opacity(0.55))
-                            .frame(width: 18)
-                    }
-                    .frame(width: 128, height: 40)
-                    // Hinged at the joint with the body, so it swings back off the chest instead
-                    // of floating detached above it.
-                    .rotation3DEffect(.degrees(-118 * lid), axis: (x: 1, y: 0, z: 0),
-                                      anchor: .bottom, perspective: 0.55)
-
-                // Body
-                UnevenRoundedRectangle(topLeadingRadius: 2, bottomLeadingRadius: 10,
-                                       bottomTrailingRadius: 10, topTrailingRadius: 2)
-                    .fill(LinearGradient(colors: [Theme.color(0xD98A26), Theme.color(0x8A4F13)],
-                                         startPoint: .top, endPoint: .bottom))
-                    .overlay(alignment: .center) {
-                        Rectangle().fill(Theme.color(0x7A4A12).opacity(0.55))
-                            .frame(width: 18)
-                    }
-                    .overlay(alignment: .top) {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Theme.color(0xFFF0B8))
-                            .frame(width: 22, height: 16)
-                            .offset(y: -4)
-                            .opacity(1 - lid)          // the clasp, hidden once open
-                    }
-                    .frame(width: 128, height: 56)
-            }
-            .shadow(color: .black.opacity(0.5), radius: 14, y: 8)
-            .scaleEffect(0.72 + 0.28 * phase)
-        }
+        TreasureChest(lid: lid, scale: 0.72 + 0.28 * phase)
     }
 
     private var coinLine: some View {

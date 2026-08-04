@@ -12,6 +12,7 @@ struct MysteryBoxView: View {
     @State private var phase: Phase = .idle
     @State private var wobble: Double = 0        // box shake/swivel angle (degrees)
     @State private var boxScale: CGFloat = 1
+    @State private var lid: Double = 0           // 0 shut → 1 hinged fully back
     @State private var glow: Double = 0.4
     @State private var burstT: CGFloat = 0       // 0→1 reveal burst progress
     @State private var rewardIn = false
@@ -43,13 +44,17 @@ struct MysteryBoxView: View {
 
     // MARK: the box
 
+    /// v2.5: the SAME `TreasureChest` the free chest and the daily bonus open, on the same hinge.
+    ///
+    /// This was `Image(systemName: "gift.fill")` — a stock SF Symbol that wobbled and scaled but
+    /// never actually opened. The reward overlay next door has always drawn a real chest whose lid
+    /// swings back, so the app had two different objects and two different opening motions for the
+    /// identical player gesture, which is what the owner reported. The chest wins: it is drawn
+    /// rather than borrowed, and a container that opens is the whole point of a gacha reveal.
     private var boxView: some View {
-        Image(systemName: "gift.fill")
-            .font(.system(size: 112, weight: .bold))
-            .foregroundStyle(Theme.Role.reward)
+        TreasureChest(lid: lid, scale: boxScale)
             .shadow(color: Theme.Role.reward.opacity(glow), radius: 34)
             .rotationEffect(.degrees(wobble))
-            .scaleEffect(boxScale)
     }
 
     // MARK: idle — odds + OPEN
@@ -142,6 +147,19 @@ struct MysteryBoxView: View {
 
     private func revealContent(_ reward: ConsumableGrant) -> some View {
         VStack(spacing: Theme.Space.m) {
+            // The OPEN chest stays on screen under the prize, exactly as `RewardBurstView` keeps
+            // its chest above the coin line. Two reasons, and the second is the important one:
+            //
+            // 1. It is what makes the two surfaces actually match. The free chest ends its
+            //    ceremony as an open chest with the reward beside it; ending this one on a bare
+            //    number would still have been a different moment even with the same object.
+            // 2. It makes the opening impossible to MISS. The hinge itself runs in the 320 ms
+            //    before this view appears, which is a window the player can blink through — and,
+            //    as this session found the hard way, a window that is very easy to convince
+            //    yourself is working when it is not. A chest that is still open while the player
+            //    reads the prize does not depend on catching a frame.
+            TreasureChest(lid: 1, scale: 0.62)
+                .frame(height: 96)
             Text("YOU WON").font(.system(size: 14, weight: .heavy, design: .rounded)).tracking(3)
                 .foregroundStyle(Theme.Role.textSecondary)
             Text(grantText(reward))
@@ -195,8 +213,10 @@ struct MysteryBoxView: View {
               let reward = ProfileStore.shared.openMysteryBox() else { return }
         model.synth.play(.boostStart)   // tension whoosh on open (sound kept in both paths)
         if reduceMotion {
-            // No shake / scale / confetti burst — a calm beat then the reward, statically.
-            phase = .opening
+            // No shake / scale / confetti burst — a calm beat then the reward, statically. The lid
+            // is shown ALREADY open rather than never opening: Reduce Motion removes the motion,
+            // not the fact that the chest opened (`RewardBurstView.run` does exactly this).
+            phase = .opening; lid = 1
             revealTask = Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(600))
                 guard !Task.isCancelled else { return }
@@ -205,10 +225,38 @@ struct MysteryBoxView: View {
             }
             return
         }
-        withAnimation(.easeIn(duration: 1.0)) { phase = .opening; glow = 1; boxScale = 1.18 }
+        // Swap to the chest on a SHORT transition, and animate the grow/glow separately.
+        //
+        // These used to share one `.easeIn(duration: 1.0)`. Because `phase` selects which branch of
+        // the `Group`'s `switch` is on screen, animating it stretched the `idleContent -> boxView`
+        // cross-fade across the entire 1.05 s sequence — so at 730 ms, when the lid hinges, what
+        // was mostly on screen was the OUTGOING snapshot of the odds panel's chest, which does not
+        // re-render. The hinge was running and could not be seen. Keep the view swap brief and let
+        // the slow easeIn do what it was actually for: the anticipation grow.
+        withAnimation(.easeOut(duration: 0.2)) { phase = .opening }
+        withAnimation(.easeIn(duration: 1.0)) { glow = 1; boxScale = 1.18 }
         withAnimation(.easeInOut(duration: 0.07).repeatCount(14, autoreverses: true)) { wobble = 14 }
         revealTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(1050))
+            // The lid has to swing BEFORE the reward replaces the chest on screen, or the opening
+            // never gets seen: `.revealed` swaps `boxView` out for `revealContent`.
+            //
+            // The gap is 320 ms against a 0.42 s spring response, so the lid is most of the way
+            // back when the prize arrives — at 170 ms it was still under halfway and the chest
+            // vanished mid-swing, which reads as a cut rather than as an opening. The BEAT ITSELF
+            // is unchanged: the reveal still lands at 1050 ms exactly as it shipped, because the
+            // lid moved earlier rather than the prize moving later.
+            try? await Task.sleep(for: .milliseconds(730))
+            guard !Task.isCancelled else { return }
+            // Settle the shake FIRST, in its own transaction. `wobble` is still carrying the
+            // `.repeatCount(14)` animation started above (and a `.repeatForever` before that from
+            // the idle beat); folding it into the same `withAnimation` as `lid` lets the repeating
+            // curve win the transaction and the hinge never renders at all.
+            withAnimation(.easeOut(duration: 0.12)) { wobble = 0 }
+            // The SAME spring `RewardBurstView` opens the free chest with, so the two surfaces the
+            // owner compared now share the object, the hinge AND the curve.
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.52)) { lid = 1 }
+
+            try? await Task.sleep(for: .milliseconds(320))
             guard !Task.isCancelled else { return }
             model.synth.play(.newBestFanfare)   // reveal fanfare
             withAnimation(.spring(response: 0.4, dampingFraction: 0.55)) { phase = .revealed(reward); rewardIn = true }
