@@ -543,6 +543,9 @@ struct ShopView: View {
 
     private var mysteryBoxCard: some View {
         let cost = ShopConsumables.mysteryBoxCost
+        // Read the prize rather than retyping it: both strings below said 1,200 against a real
+        // 1,400 until S-019, and one of them is the VoiceOver label (PR-0486).
+        let jackpot = ShopConsumables.mysteryJackpotCoins
         // Always tappable — it opens the reveal screen, which shows the odds + handles the spend
         // (so the player can see what's inside even when they can't afford it yet).
         return Button { showMysteryBox = true } label: {
@@ -553,7 +556,7 @@ struct ShopView: View {
                     .frame(width: 48)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Mystery Box").typeScale(.heading).foregroundStyle(Theme.Role.textPrimary)
-                    Text("Coins, slow-mo, or a loadout boost — 1,200-coin jackpot!")
+                    Text("Coins, slow-mo, or a loadout boost — \(jackpot.formatted())-coin jackpot!")
                         .typeScale(.body).foregroundStyle(Theme.Role.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -566,7 +569,7 @@ struct ShopView: View {
         .buttonStyle(.neon)
         .accessibilityIdentifier("mysteryBoxButton")
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Mystery Box. Win coins, slow-mo, or a loadout boost — up to a 1,200 coin jackpot. \(cost) coins.")
+        .accessibilityLabel("Mystery Box. Win coins, slow-mo, or a loadout boost — up to a \(jackpot.formatted()) coin jackpot. \(cost) coins.")
         .accessibilityHint("Opens the Mystery Box reveal.")
         .accessibilityAddTraits(.isButton)
     }

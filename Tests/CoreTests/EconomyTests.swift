@@ -489,6 +489,70 @@ final class EconomyTests: XCTestCase {
         XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.9999), .coins(1400))
     }
 
+    /// **The disclosed odds must BE the rolled odds** (S-019, App Store guideline 3.1.1).
+    ///
+    /// The reveal screen displayed a 3% jackpot while `mysteryReward` rolled 2.5%, and the error
+    /// favoured the house. It survived because nothing tied the two together: `mysteryOdds` had
+    /// **zero** test coverage — the whole of `grep -rn mysteryOdds Tests/` was empty — so the
+    /// disclosure was a hand-maintained comment on the weights rather than a checked property of
+    /// them. Fixed by raising the ROLL to the disclosure (never the reverse: nothing a player has
+    /// already seen may become a lie), with the 600-coin band absorbing the 0.5%.
+    ///
+    /// This measures the SHIPPED function by integration rather than restating its weights, so it
+    /// cannot drift out of step with the bands the way a hand-written sum would — the same technique
+    /// `testTheMysteryBoxIsWorthWhatItCostsAndCanNeverMintCoins` uses on the expected value.
+    func testTheDisclosedOddsAreTheRolledOdds() async {
+        // The disclosed table, mapped to the grant each row promises. If a row is ever added or
+        // relabelled without a grant to back it, this list stops compiling into a total of 100.
+        let disclosed: [(grant: ConsumableGrant, label: String)] = [
+            (.coins(ShopConsumables.mysteryJackpotCoins), "1,400 coins — JACKPOT"),
+            (.coins(600),      "600 coins"),
+            (.headStart(2),    "Head Start ×2"),
+            (.slowMo(3),       "Slow-Mo ×3"),
+            (.coins(350),      "350 coins"),
+            (.coins(200),      "200 coins"),
+        ]
+        XCTAssertEqual(ShopConsumables.mysteryOdds.count, disclosed.count,
+                       "a disclosed row exists with no grant behind it, or vice versa")
+
+        // Measure each band's true width by sampling the shipped function.
+        let steps = 200_000
+        var measured: [String: Double] = [:]
+        for i in 0..<steps {
+            let g = ShopConsumables.mysteryReward(roll: (Double(i) + 0.5) / Double(steps))
+            measured["\(g)", default: 0] += 100.0 / Double(steps)
+        }
+
+        for (row, promise) in zip(ShopConsumables.mysteryOdds, disclosed) {
+            XCTAssertEqual(row.label, promise.label,
+                           "the odds table's row order changed — the grant mapping above is now wrong")
+            let actual = measured["\(promise.grant)"] ?? 0
+            XCTAssertEqual(actual, Double(row.pct), accuracy: 0.01, String(format:
+                "the reveal screen displays %d%% for \"%@\" but mysteryReward rolls it %.2f%% of the "
+                + "time — disclosed odds must be real (guideline 3.1.1), and this gap favouring the "
+                + "house is exactly the S-019 defect", row.pct, row.label, actual))
+        }
+
+        // And the disclosure must be a complete account of the outcomes, not a selective one.
+        XCTAssertEqual(ShopConsumables.mysteryOdds.reduce(0) { $0 + $1.pct }, 100,
+                       "the displayed odds do not sum to 100% — some outcome is undisclosed")
+        XCTAssertEqual(measured.count, disclosed.count,
+                       "mysteryReward can return a grant the reveal screen never discloses")
+    }
+
+    /// The advertised jackpot must be the granted one. Two `ShopView` strings said 1,200 against a
+    /// real 1,400 — one of them the VoiceOver label, so a screen-reader user was told the wrong
+    /// number too. Both now interpolate `mysteryJackpotCoins`; this pins the constant to the table.
+    func testTheAdvertisedJackpotIsTheGrantedJackpot() async {
+        XCTAssertEqual(ShopConsumables.mysteryReward(roll: 0.999),
+                       .coins(ShopConsumables.mysteryJackpotCoins))
+        // Compare on digits, not on a formatted string: `Int.formatted()` is locale- and
+        // platform-sensitive and this suite must compile and pass on Linux CI.
+        let ungrouped = ShopConsumables.mysteryOdds[0].label.replacingOccurrences(of: ",", with: "")
+        XCTAssertTrue(ungrouped.contains("\(ShopConsumables.mysteryJackpotCoins)"),
+                      "the jackpot row names a different number than the box actually pays")
+    }
+
     /// **The box must not be a trap, and it must not be a printer** (S-012, E6).
     ///
     /// The old table's expected value was 242.7 against a 300 price — −19%, which decree 5 ("no dark

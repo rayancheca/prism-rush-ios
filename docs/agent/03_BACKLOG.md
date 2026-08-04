@@ -2123,3 +2123,41 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
                version.
 - Impact:      Four characters, in-run and on every buy surface.
 - Verification: Needs eyes. Screenshot Aurora and Vigil in-run, both ways.
+
+## PR-0486 · SEV1 · The Mystery Box displayed 3% and rolled 2.5%, and the card advertised the wrong jackpot
+- Area:        Meta/ShopValue (mysteryReward, mysteryOdds), UI/ShopView (mysteryBoxCard)
+- Found by:    S-019, working the owner's "fix the jackpot thing"
+- Status:      DONE(S-019)
+- Symptom:     Two independent defects on one card.
+               (a) **Odds mismatch.** `mysteryOdds` disclosed a 3% jackpot; `mysteryReward` rolled
+               2.5% (`case ..<0.975`). The 600-coin band was the mirror image: 7% disclosed, 7.5%
+               rolled. **The error favoured the house.**
+               (b) **Copy.** `ShopView.swift:556` and `:569` both said "1,200-coin jackpot" against
+               a real 1,400. `:569` is the **VoiceOver label**, so a screen-reader user was given
+               the wrong number too.
+- Why:         Nothing tied the disclosure to the roll. `grep -rn mysteryOdds Tests/` returned
+               NOTHING — the displayed table had zero test coverage, so it was a hand-maintained
+               comment on the weights rather than a checked property of them. The jackpot amount
+               was likewise retyped into prose in two places instead of read from one constant.
+               PR-0293 quoted the "1,200-coin jackpot" card text verbatim in its own symptom line
+               and nobody compared it to the 1,400 the code paid.
+- Impact:      App Store guideline 3.1.1 requires disclosed odds to be real. Decree 5 (zero dark
+               patterns, advertised bonuses always delivered) is stricter still and the charter's
+               non-negotiable is stricter again: "any randomized purchase must disclose odds."
+- Fix:         Raised the ROLL to the disclosed 3% (`..<0.975` -> `..<0.97`), never the reverse —
+               nothing a player has already seen becomes a lie, and no expectation is reduced.
+               The **600-coin band absorbs the 0.5%** (7.5% -> 7.0%), which is the only bucket that
+               needed to move, because the disclosed table already said 7% there. The two tables
+               now agree row-for-row rather than merely summing to 100. EV 300.5 -> 304.5 (+1.3%
+               of price); coin-only bands 240.5 -> 245, still under the 300 cost, so the box stays
+               a break-even lottery and not a coin printer (D-026 structural rule intact).
+               Jackpot amount is now `ShopConsumables.mysteryJackpotCoins`, read by `mysteryReward`
+               and by both `ShopView` strings, so the advertised prize cannot drift from the
+               granted one again.
+- Verification: `EconomyTests.testTheDisclosedOddsAreTheRolledOdds` — the gate that did not exist.
+               It INTEGRATES the shipped `mysteryReward` over [0,1) at 200k samples and compares
+               each measured band to its disclosed row, so it cannot drift out of step with the
+               weights the way a hand-written sum would; it also asserts the table sums to 100 and
+               that no undisclosed outcome exists. Plus
+               `testTheAdvertisedJackpotIsTheGrantedJackpot`. Both in `Tests/CoreTests/`, so CI
+               sees them. 288 SPM + 304 Xcode green.

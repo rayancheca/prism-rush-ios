@@ -84,6 +84,13 @@ enum ShopConsumables {
     static let mysteryBoxID = "mysteryBox"
     static let mysteryBoxCost = 300
 
+    /// The headline prize. **Named rather than retyped, because retyping it is how it went wrong:**
+    /// two `ShopView` strings — the card's body copy and its VoiceOver label, so a screen-reader user
+    /// got the same wrong number — advertised a "1,200-coin jackpot" against a real 1,400 (S-019).
+    /// `mysteryReward` and every piece of shop copy now read this one constant, so the advertised
+    /// prize cannot drift from the granted one again.
+    static let mysteryJackpotCoins = 1_400
+
     /// Coin-spend power-up packs (the slow-mo refill the backlog asked for + loadout top-ups).
     static let packs: [CoinSpendItem] = [
         CoinSpendItem(id: "slowMoPack", title: "Slow-Mo Pack", blurb: "+3 slow-mo charges",
@@ -133,10 +140,20 @@ enum ShopConsumables {
     /// weighted so the expected value is the price.
     ///
     ///   0.42 × 200 + 0.22 × 350 + 0.15 × (3 × 83.33) + 0.11 × (2 × 100)
-    ///        + 0.075 × 600 + 0.025 × 1,400
-    ///     =  84 + 77 + 37.5 + 22 + 45 + 35  =  **300.5** against a 300 cost.
+    ///        + 0.07 × 600 + 0.03 × 1,400
+    ///     =  84 + 77 + 37.5 + 22 + 42 + 42  =  **304.5** against a 300 cost.
     ///
-    /// Note what that composition says, honestly: the COIN bands alone are 240.5, i.e. you will
+    /// **S-019 raised the jackpot 2.5% → 3.0% to match what the reveal screen has always claimed.**
+    /// `mysteryOdds` below disclosed 3% while this function rolled 2.5%, and the error favoured the
+    /// house — App Store guideline 3.1.1 requires disclosed odds to be real. The roll moved up to the
+    /// disclosure rather than the disclosure down to the roll: nothing a player already saw becomes a
+    /// lie, and nobody's expectation is reduced. **The 600-coin band absorbs the 0.5%** (7.5% → 7.0%),
+    /// which is the only bucket that needed to move, because the disclosed table already said 7%
+    /// there — so the two tables now agree row-for-row rather than merely summing to the same total.
+    /// EV rises 300.5 → 304.5 (+1.3% of price) and the coin-only bands 240.5 → 245, still under the
+    /// 300 cost, so the box remains a break-even lottery and not a coin printer.
+    ///
+    /// Note what that composition says, honestly: the COIN bands alone are 245, i.e. you will
     /// usually get back less money than you spent. The power-up bands are what make the box whole,
     /// and they are 26% of rolls. It is a lottery you break even on, not a coin printer — which,
     /// with unlimited rolls and no cooldown, is the only shape that can be both fair and safe.
@@ -146,13 +163,15 @@ enum ShopConsumables {
         case ..<0.64:  return .coins(350)     // 22.0% — a small coin profit
         case ..<0.79:  return .slowMo(3)      // 15.0%
         case ..<0.90:  return .headStart(2)   // 11.0%
-        case ..<0.975: return .coins(600)     //  7.5%
-        default:       return .coins(1400)    //  2.5% — jackpot
+        case ..<0.97:  return .coins(600)     //  7.0%
+        default:       return .coins(mysteryJackpotCoins)   //  3.0% — jackpot
         }
     }
 
     /// The honest odds table for the reveal screen (decree 5: show real odds). Best-first; the
-    /// percentages match `mysteryReward`'s bands exactly. (label, percent, tint hex.)
+    /// percentages match `mysteryReward`'s bands exactly — pinned by
+    /// `EconomyTests.testTheDisclosedOddsAreTheRolledOdds`, which is the gate that did not exist
+    /// while the two disagreed. (label, percent, tint hex.)
     static let mysteryOdds: [(label: String, pct: Int, hex: UInt32)] = [
         ("1,400 coins — JACKPOT", 3, 0xFFD23D),
         ("600 coins",             7, 0xFFD23D),
