@@ -1485,7 +1485,8 @@ struct GameView: View {
                              challengePayout: model.lastChallengePayout,
                              isChallengeRun: model.isChallengeRun,
                              onCharacters: { model.open(.characters) },
-                             onFullStats: { model.open(.stats) })
+                             onFullStats: { model.open(.stats) },
+                             onMissions: { model.open(.missions) })
             case .play:
                 EmptyView()
             }

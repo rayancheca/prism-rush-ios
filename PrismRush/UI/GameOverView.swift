@@ -56,6 +56,14 @@ struct GameOverView: View {
     /// FULL STATS › → ProfileView (hidden until wave 5 wires it — sheets over `.over` are gated).
     var onFullStats: (() -> Void)? = nil
 
+    // — S-017 —
+    /// TODAY'S MISSIONS → the missions board. The run that just ended is exactly when a player
+    /// has moved their daily missions, and this screen said nothing about them: `grep -i mission
+    /// GameOverView.swift` returned nothing at all. That made the board a destination you had to
+    /// remember to visit, which is most of what "missions does nothing" means (decree 4 —
+    /// everything on screen leads somewhere). nil hides the row.
+    var onMissions: (() -> Void)? = nil
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var countedUp = false
     @State private var breakdownExpanded = false
@@ -84,6 +92,8 @@ struct GameOverView: View {
             earnBand           // 2 — the number you earned (+ XP)
             statsBand          // 3 — two chips + FULL STATS
                 .padding(.top, 14)
+            missionsLine       // 4 — what this run moved on today's board
+                .padding(.top, 10)
 
             if revivesRemain {
                 continueSection
@@ -405,6 +415,47 @@ struct GameOverView: View {
                 .accessibilityIdentifier("fullStatsLink")
                 .accessibilityHint("Opens your profile and stats.")
             }
+        }
+    }
+
+    /// Today's board, stated on the screen the player is already looking at.
+    ///
+    /// `applyRunSummary` has already banked this run by the time this renders, so the standing
+    /// below INCLUDES the run just finished. Reads `ProfileStore.shared` directly in `body` (G3)
+    /// and only through the pure accessors, so drawing this never writes the profile (PR-0006).
+    ///
+    /// A challenge run is deliberately excluded: Daily Rush does not advance the daily board, and
+    /// showing an unchanged 0/3 under a challenge death would read as a bug.
+    @ViewBuilder private var missionsLine: some View {
+        if let onMissions, !isChallengeRun {
+            let store = ProfileStore.shared
+            let standing = ProfileStore.MissionSectionProgress
+                .of(store.dailyMissionSlots().map { store.missionState($0) })
+            let ready = standing.claimable > 0
+            Button(action: onMissions) {
+                HStack(spacing: 7) {
+                    Image(systemName: ready ? "sparkles" : "target")
+                        .font(.system(size: 11, weight: .bold))
+                    Text(ready
+                         ? "\(standing.claimable) MISSION\(standing.claimable == 1 ? "" : "S") READY TO CLAIM"
+                         : standing.isComplete
+                           ? "TODAY'S MISSIONS · ALL DONE"
+                           : "TODAY'S MISSIONS · \(standing.done)/\(standing.total)")
+                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                        .tracking(1.2)
+                        .monospacedDigit()
+                    Text("›").font(.system(size: 12, weight: .heavy, design: .rounded))
+                }
+                .foregroundStyle(ready ? Theme.Role.reward : .white.opacity(0.6))
+                .padding(.horizontal, 14).padding(.vertical, 9)
+                .background(ready ? Theme.Role.reward.opacity(0.10) : Color.white.opacity(0.05),
+                            in: Capsule())
+                .overlay(Capsule().strokeBorder(ready ? Theme.Role.reward.opacity(0.45)
+                                                : .white.opacity(0.12)))
+            }
+            .buttonStyle(.neon)
+            .accessibilityIdentifier("gameOverMissionsLink")
+            .accessibilityHint("Opens the missions board.")
         }
     }
 
