@@ -4,6 +4,64 @@
 > wins** and the other file gets fixed. That includes `state.md` and `README.md` at the repo root,
 > which are the project's human-facing history, not the agent's source of truth.
 
+- **Last written by:** session 019 (2026-08-04) — **PASS 019: THE CHARACTER ART, PART ONE. The rig
+  now actually reads the spec, the crests are genuinely bigger, and both Mystery Box defects are
+  closed.** Commits `af2d75f`, `f04be57`, `40bffce`. Recovery tag `pre-s019` = `12abbba` (it already
+  existed — do not re-create it). Decisions **D-056, D-057, D-058**. **291 SPM + 307 Xcode green**
+  (286 + 302 at session start). `layoutVersion` still **12**; the v13 pin is still UNSPENT. The
+  spawn path was not touched.
+- **D-056 — THE HANDOFF'S CENTRAL PREMISE WAS FALSE, and finding that out was the pass.** It said
+  authoring a crest size in `CharacterGeometry` would make *"both the in-run rig and all 24 previews
+  follow — that seam is exactly what S-018 was spent building."* **S-018 derived the spec FROM the
+  rig's literals and never wired the rig back.** The rig read eleven symbols, none of them a crest
+  dimension. Following the handoff would have grown the PREVIEW and left the RUN alone — the S-018
+  defect running backwards. The rig now reads the spec; `R * <spec>` reproduces every shipped
+  literal to **6e-17 world units**, so that half is a provable no-op.
+- **D-057 — CRESTS GREW 1.3x–1.94x AND IT COST NOTHING.** A crown's point was **6.10 pt** at the
+  42 pt shop rail against a 9 pt smallest type token — the epic rarity tell was smaller than the
+  price text under it. Rule: *reach grows, seating does not*. The roster envelope is **bit-identical**
+  (monarch's aura/antenna and the trail wisp set all three axes), so **no call site moved and no
+  allowance was widened**. The new values land just UNDER what the old swatch drew — **the swatch's
+  sizes were never arbitrary inflation, they were roughly what reads**, and S-018 resolved the
+  disagreement toward the half nobody had checked for readability.
+- **D-058 — HEADLESS REALITYKIT WORKS.** The handoff called this D-3's crux and left it open.
+  `RealityFoundation.RealityRenderer` renders offscreen with no app bundle, no `NSApplication`, no
+  window — proven twice, 24 PNGs in 0.32 s / 169 KB. **So the PREVIEW half of D-3 is cheap and the
+  MODEL half is art-weeks** (the roster's bodies are spheres, cubes and octahedra; no CC0 pack ships
+  that family). **Trap: the app declares its own `RealityRenderer`, so a tool must write
+  `RealityFoundation.RealityRenderer` in full.**
+- **D-3 CONFLICTS WITH COMMITTED POLICY AND NEEDS RAYAN.** `11_ASSETS.md:149` says of
+  character-select art: *"That is already correct and already satisfies decree 2. Do not replace it
+  with 24 textures."* D-3 requires exactly that, because a 2-D Canvas cannot redraw a textured 3-D
+  model. D-3 invalidates the policy's *premise* rather than contradicting it — but it means D-3 is
+  **"replace the preview system S-018 just built"**, and `11_ASSETS.md:249` sequences the player
+  model at step 7 of 10, after the particle work that "buys the frame budget the rest of the plan
+  spends." Flagged mid-session; **not acted on unilaterally.**
+- **PR-0486 / PR-0487 — both Mystery Box defects are closed.** The box **displayed 3% and rolled
+  2.5%**, error favouring the house; the roll was raised to the disclosure (the 600 band absorbs the
+  0.5%, so the tables now agree row-for-row). The card advertised a **1,200** jackpot against a real
+  **1,400** in two strings, one of them the **VoiceOver label**. Separately, the owner reported
+  mid-session that the shop box and the hub's free chest had different opening animations — they
+  were **two different objects** (a real hinged chest vs. an `Image(systemName: "gift.fill")`). One
+  `TreasureChest` now serves both.
+- **THE HANDOFF SAID AN "ODDS SUM TO 100%" TEST WOULD STAY GREEN. NO SUCH TEST EXISTED.**
+  `grep -rn mysteryOdds Tests/` was empty — the displayed odds table had **zero** coverage, which is
+  precisely how a 3-vs-2.5 gap survived. `testTheDisclosedOddsAreTheRolledOdds` is the missing gate
+  and it **integrates the shipped function** rather than restating its weights.
+- **A TRAP THAT WILL COST THE NEXT SESSION AN HOUR.** Running `swift test` and `xcodebuild test`
+  concurrently SIGTERMs the slowest unit test (`WardenTests.testNoFixedStanceCanWinAFight`, 9 loops
+  × 400k ticks) and reports it as `** TEST FAILED **` with **no assertion message**. It is
+  indistinguishable from an inherited red until you read the xcresult, where it says
+  *"Test crashed with signal term."* `CLAUDE.md` warns about `simctl` + `xcodebuild`; it does not
+  warn about this. **Run them one at a time.**
+- **6 investigations + 6 hostile verifications on disk** at `docs/agent/audits/scratch/s019_*.md`.
+  **Every verifier returned PARTIALLY REFUTED**, and several found *blocking* geometry errors that a
+  builder would have typed in verbatim — which is why D-2 and D-4 were **not** built this session.
+  ⚠️ **One hazard learned: do not edit files an investigation is reading.** The assets agent's
+  flagship visual evidence was invalidated mid-flight when the crest constants changed underneath it.
+
+> The bullets from here to the session-017 divider are **session 018's**.
+
 - **Last written by:** session 018 (2026-08-04) — **PASS 018: THE CHARACTER PREVIEW SEAM. Every
   character was built twice and only the BODY was shared; the crest, antenna and aura had drifted
   by up to 2.0x with no test on either side. There is now ONE spec, both layers read it, and CI

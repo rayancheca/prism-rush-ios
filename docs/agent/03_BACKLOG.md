@@ -2161,3 +2161,25 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
                that no undisclosed outcome exists. Plus
                `testTheAdvertisedJackpotIsTheGrantedJackpot`. Both in `Tests/CoreTests/`, so CI
                sees them. 288 SPM + 304 Xcode green.
+
+## PR-0488 · SEV2 · The shield bubble and stumble aura hard-code the sphere's body centre, so crystals wear them low
+- Area:        Render/Reality/RealityRenderer (sync)
+- Found by:    S-019, by a hostile verifier attacking the body-shape design (`s019_bodyshapes.md`)
+- Status:      OPEN
+- Symptom:     `RealityRenderer.swift:438` and `:451` both position at `Float(snap.playerY) + 0.66`
+               with no shape branch. `0.66` is the SPHERE/CUBE body centre; a crystal body sits at
+               **0.72** (`CharacterGeometry.bodyCentreY`). So on facet, shard and vigil the shield
+               bubble and the stumble aura hang **0.06 world units (0.097 bodyR) below** the body
+               they are supposed to be centred on.
+- Why:         Same class as the D1/D4 defects S-018 fixed: a world height typed once against the
+               sphere and reused for every shape. It was invisible until v2.5 gave the number a
+               name — before `bodyCentreY` existed there was nothing to compare `0.66` against.
+- Impact:      Three of 24 skins, on two of the most visible in-run FX. Cosmetic, never the hitbox.
+- Fix sketch:  `CharacterGeometry.bodyCentreY(skinBodyShape)` at both sites. Two lines. It returns
+               0.66 for sphere and cube, so 21 of 24 skins are byte-identical and only the three
+               crystals move.
+- Trap:        The shield bubble's RADIUS (0.98) is also sphere-sized and is NOT part of this fix —
+               a crystal is 1.15 bodyR tall (0.713 world), so the bubble already clips its points.
+               Decide that separately; do not fold it in.
+- Verification: Needs eyes, not a test — `Meta/` cannot see `Render/`. Equip Vigil (crystal, and it
+               has an aura ring to compare against), take a shield and a stumble, screenshot both.

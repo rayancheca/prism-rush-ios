@@ -1486,3 +1486,110 @@ The general lesson, which is worth more than the specific number: **the rig's re
 rig.** Any future parity work on a z-bearing feature — the face, the crown ring, the aura ring —
 has to say which pose it is matching. Features at z ≈ 0 (every crest, the antenna, the silhouette)
 are safe to compare at rest, which is why the rest of the fix stands.
+
+---
+
+## D-056
+**THE RIG WAS NEVER WIRED TO THE SPEC, SO D-1 NEEDED A PREREQUISITE COMMIT.** (S-019.)
+
+`HANDOFF.md` §2 stated that authoring a new crest size in `CharacterGeometry` would make "both the
+in-run rig and all 24 previews follow — that seam is exactly what S-018 was spent building."
+**That was false, and it was the single most load-bearing sentence in the brief.**
+
+S-018 *derived* the spec FROM `buildCrest`/`buildAura`'s literals; it never wired the rig back. The
+rig read exactly eleven symbols from `CharacterGeometry`, none of them a crest dimension — every
+ear, fin, horn, crown, halo and the entire aura were numeric literals in `RealityRenderer`. Two
+independent agents found this separately (`s019_consumers.md` §3.3, `s019_crests.md` §0.3) and it
+was confirmed by reading `buildCrest` directly.
+
+Had the pass followed the handoff, authoring bigger crests would have grown the PREVIEW and left
+the RUN untouched — the S-018 defect running backwards, with the shop over-promising again — and
+`testCrestGeometryMatchesTheRig` would have failed in a way that invites "fixing" the spec back
+down rather than raising the rig.
+
+So the rig now reads the spec. `R * <spec constant>` reproduces every shipped literal to within
+**6e-17 world units**, which is what made that half provably a no-op and is pinned by
+`testTheRigsShippedLiteralsAreReproducedFromTheSpec`. Three things that had no spec home gained one:
+the crest depths (`flatZ`), the floppy ear's mesh radius + per-axis scales, and **`bodyCentreY`** —
+the body-centre world height that was the hidden third number behind every conversion in the file.
+
+`crestAnchor` was a `shape == .crystal ? … : …` **ternary** and is now an exhaustive `switch`. This
+matters for the next session more than for this one: it COMPILED for a new body shape and silently
+handed it the sphere's anchor, which on a taller body roots the crest *inside the head* — with both
+layers agreeing about the wrong number and no test failing. `s019_consumers.md` §1.3 catalogues four
+more such silent sites; two remain (`RealityRenderer:1481`, `CharacterSwatch:193`) and are
+deliberate (the spectrum guards).
+
+**The general lesson: "there is a shared spec" and "both layers read it" are different claims, and
+only the second one is worth anything.** Verify the second before trusting a seam.
+
+---
+
+## D-057
+**CRESTS GREW 1.3x–1.94x, AND IT COST NOTHING — BECAUSE NO CREST SETS THE ENVELOPE.** (S-019, D-1.)
+
+The owner asked for genuinely bigger crests. Measured at the 42 pt shop rail — the smallest surface
+where a player must tell twelve characters apart with money in hand — a crown's point was **6.10 pt**
+tall against the app's smallest type token of 9 pt (`Theme.TypeScale.micro`). The epic rarity tell
+was smaller than the price text under it.
+
+**The rule applied is "reach grows, seating does not."** Heights, lengths, radii and tube thicknesses
+scale; `offsetX`, `lean`, `spacing`, `dropBelowAnchor`, `Crown.ringRadius` and `spikeCount` do not.
+This is not conservatism: the head is only **0.545 bodyR** wide at the crest anchor
+(`√(1 − crestAnchor²)`), so scaling the crown ring would float it either side of the skull, and
+scaling `Fin.spacing` slides the outer teeth off the crown.
+
+**The uplift is free, and that is measured, not hoped.** The roster envelope comes out
+`side 0.922581 / up 1.111411 / down 0.723750` — bit-identical to the pinned 0.923/1.111/0.724 —
+because all three axes are set by monarch's aura (side), monarch's antenna (up) and the trail wisp
+(down), none of which move. Independently reproduced twice: by `s019_crests.md` and by a separate
+transcription of `extent(for:)` written for this session. So `testTheRosterEnvelopeIsPinned` needed
+**no repin** and `testNoCallSiteBleedsOntoItsNeighbours` stays green with **every call site
+untouched** — the outcome the handoff expected to have to pay for.
+
+`testNoCrestDrivesTheRosterEnvelope` is new and pins that property directly, so a future crest that
+starts driving an axis fails there first, with a message saying re-derive the slots rather than
+widen the allowance.
+
+**What the new numbers say about S-018, and this is the part worth carrying forward.** They land
+just UNDER what the old swatch was drawing — ears 0.903 vs 0.92, fin 1.048 vs 1.05, crown 0.565 vs
+0.62. **The swatch's sizes were never arbitrary inflation; they were roughly what reads.** S-018 was
+right that the two layers had to agree, but it resolved the disagreement toward the half that had
+never been checked for readability, and D-050's "the previews are now LESS flattering" was the cost
+of that choice rather than an inherent price of honesty. `testTheClosedDivergencesStayClosed`
+therefore keeps its teeth by re-anchoring each bound to the OLD SWATCH value it exists to prevent,
+not to the rig's small one.
+
+---
+
+## D-058
+**HEADLESS REALITYKIT WORKS. THE PREVIEW HALF OF D-3 IS CHEAP; THE MODEL HALF IS ART WEEKS.** (S-019.)
+
+The handoff called offscreen RealityKit rendering "the crux" of D-3 and left it open. **It is
+answered: yes.** `RealityFoundation.RealityRenderer` is an offscreen renderer into an `MTLTexture`
+(macOS 15+/iOS 18+), and a bare `swift` script drove it with no app bundle, no `NSApplication` and
+no window — proven twice, by the investigating agent and independently re-run by its hostile
+verifier, producing all 24 characters as PNGs in **0.32 s for 169 KB total**.
+
+> **Trap for whoever builds it:** the app declares its OWN `final class RealityRenderer`
+> (`RealityRenderer.swift:11`), which shadows Apple's inside the app module. Any tool must write
+> **`RealityFoundation.RealityRenderer`** in full.
+
+The consequence splits D-3 cleanly in two, and the split is the useful part:
+
+- **All 24 baked previews: genuinely cheap.** The handoff's "prove the pipeline on ONE pilot" is
+  good advice about *models* and unnecessary about *previews* — the tool that renders one renders
+  24 in a third of a second.
+- **All 24 imported character models: not this session, and not one session.** The roster's bodies
+  are spheres, cubes and octahedra — a shape family no CC0 character pack ships. That is authored
+  art, not an import.
+
+**This also surfaces a conflict the handoff did not know about.** `docs/agent/11_ASSETS.md:149`
+(committed policy, S-016) says of character-select art: *"That is already correct and already
+satisfies decree 2. Do not replace it with 24 textures."* D-3 requires exactly that replacement,
+because a 2-D `Canvas` cannot redraw a textured 3-D model. The policy is not wrong and D-3 is not
+wrong — **D-3 invalidates the policy's premise.** But it means D-3 is not "add art to the game", it
+is "replace the preview system S-018 just built", plus a build gate, and `11_ASSETS.md:249`
+sequences the player model at step 7 of 10, *after* the particle-billboard work that explicitly
+"buys the frame budget the rest of the plan spends." **Flagged to the owner mid-session; not acted
+on unilaterally.**
