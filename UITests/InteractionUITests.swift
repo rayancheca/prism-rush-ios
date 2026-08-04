@@ -25,6 +25,25 @@ final class InteractionUITests: XCTestCase {
         app.descendants(matching: .any).matching(identifier: id).firstMatch
     }
 
+    /// Dismiss a `RewardBurstView` and prove it went.
+    ///
+    /// The burst deliberately ignores taps until its entrance animation has played out — that is
+    /// what the "TAP TO CONTINUE" fade-in signals — so a single tap fired the instant it appears
+    /// can land while `dismissable` is still false and do nothing. Retrying is faithful to what a
+    /// player does, and the bound keeps the assertion real: a burst that never becomes
+    /// dismissable still fails here rather than hanging.
+    @discardableResult
+    private func dismissBurst(_ app: XCUIApplication, timeout: TimeInterval = 12) -> Bool {
+        let burst = element(app, id: "rewardBurst")
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if !burst.exists { return true }
+            burst.tap()
+            if burst.waitForNonExistence(timeout: 1.5) { return true }
+        }
+        return !burst.exists
+    }
+
     /// Wait until an element's accessibility label contains `fragment` (rail cells re-label as
     /// their claim state advances — labels are the deterministic wait condition, not timers).
     private func waitForLabel(_ app: XCUIApplication, id: String, contains fragment: String,
@@ -112,16 +131,14 @@ final class InteractionUITests: XCTestCase {
         // `pre-s017`. Dismissing it explicitly also makes this test prove both bursts fire.
         let burst = element(app, id: "rewardBurst")
         XCTAssertTrue(burst.waitForExistence(timeout: 8), "claiming the daily should raise a burst")
-        burst.tap()
-        XCTAssertTrue(burst.waitForNonExistence(timeout: 8), "the daily burst should dismiss")
+        XCTAssertTrue(dismissBurst(app), "the daily burst should dismiss")
 
         XCTAssertTrue(waitForLabel(app, id: "railRewards", contains: "chest ready"),
                       "after the daily claim the free chest should be next in the ladder")
         rail.tap()   // lit cell → opens the free chest inline
 
         XCTAssertTrue(burst.waitForExistence(timeout: 8), "opening the chest should raise a burst")
-        burst.tap()
-        XCTAssertTrue(burst.waitForNonExistence(timeout: 8), "the chest burst should dismiss")
+        XCTAssertTrue(dismissBurst(app), "the chest burst should dismiss")
 
         XCTAssertTrue(waitForLabel(app, id: "railRewards", contains: "Next free chest"),
                       "chest should go on cooldown after opening")
@@ -292,8 +309,7 @@ final class InteractionUITests: XCTestCase {
         let burst = element(app, id: "rewardBurst")
         XCTAssertTrue(burst.waitForExistence(timeout: 8),
                       "CLAIM ALL should raise one reward burst for the whole set")
-        burst.tap()
-        XCTAssertTrue(burst.waitForNonExistence(timeout: 8), "tapping the burst should dismiss it")
+        XCTAssertTrue(dismissBurst(app), "tapping the burst should dismiss it")
 
         XCTAssertTrue(app.buttons["claim_ach.gems"].waitForNonExistence(timeout: 8),
                       "the cascade should retire Gem Hoarder's claim")
@@ -313,8 +329,7 @@ final class InteractionUITests: XCTestCase {
         // A single claim gets its own burst, naming that one mission.
         XCTAssertTrue(burst.waitForExistence(timeout: 8),
                       "a single claim should raise its own reward burst")
-        burst.tap()
-        XCTAssertTrue(burst.waitForNonExistence(timeout: 8), "tapping the burst should dismiss it")
+        XCTAssertTrue(dismissBurst(app), "tapping the burst should dismiss it")
 
         XCTAssertTrue(single.waitForNonExistence(timeout: 6),
                       "the final tier's claim should retire the button (receipt row)")

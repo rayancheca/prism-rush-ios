@@ -568,6 +568,30 @@ final class ProfileStore {
         }
     }
 
+    /// One SECTION's standing — TODAY, THIS WEEK, CHALLENGES or ACHIEVEMENTS.
+    ///
+    /// `MissionBoardSummary` reduces the whole 19-row board to a single line, which means a player
+    /// who finishes all three of today's dailies sees the strip go from "19 OPEN" to "16 OPEN".
+    /// **Finishing today's set is not a state the board could represent.** That is the mechanical
+    /// core of "missions does nothing": the one goal a daily board actually sets is the one thing
+    /// it never tells you that you met. A section knows its own denominator, so it can.
+    struct MissionSectionProgress: Equatable {
+        var total: Int
+        var done: Int          // exhausted (claimed, or all tiers paid)
+        var claimable: Int     // finished and waiting to be collected
+
+        /// Every row in the section is finished AND collected. The only state allowed to
+        /// congratulate — a section with rewards still sitting on it is not "complete", it is
+        /// "waiting", and saying otherwise would let a player walk away from their own coins.
+        var isComplete: Bool { total > 0 && done == total }
+
+        static func of(_ states: [MissionState]) -> MissionSectionProgress {
+            MissionSectionProgress(total: states.count,
+                                   done: states.filter(\.claimed).count,
+                                   claimable: states.filter(\.claimable).count)
+        }
+    }
+
     func missionState(_ m: Mission, now: Date = Date()) -> MissionState {
         // A daily/weekly board whose stored date has rolled over is ALREADY reset as far as the
         // player is concerned — `refreshDailyMissions` just hasn't written it yet. Reporting the

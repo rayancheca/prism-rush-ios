@@ -190,8 +190,11 @@ struct MissionsView: View {
     /// the haptic/chime stay centralized (same `.sensoryFeedback` pattern as v1.3).
     private func sectionBlock(missions: [Mission], tint: Color, store: ProfileStore, now: Date,
                               @ViewBuilder header: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let progress = ProfileStore.MissionSectionProgress
+            .of(missions.map { store.missionState($0, now: now) })
+        return VStack(alignment: .leading, spacing: 10) {
             header()
+            sectionStanding(progress, tint: tint)
             ForEach(missions) { mission in
                 MissionCard(mission: mission,
                             state: store.missionState(mission, now: now),
@@ -200,6 +203,40 @@ struct MissionsView: View {
                             onClaim: { reward in registerClaim(mission, reward: reward) })
             }
         }
+    }
+
+    /// The section's own scoreboard: N pips, one per mission, plus the count in words.
+    ///
+    /// Two jobs. It gives the section a denominator you can COUNT — a `.trim` arc is a shape you
+    /// cannot read a fraction off, and near zero it is indistinguishable from the decorative circle
+    /// it is drawn on. And it gives a finished section somewhere to say so, which the board-wide
+    /// summary strip structurally cannot (see `MissionSectionProgress`).
+    private func sectionStanding(_ p: ProfileStore.MissionSectionProgress, tint: Color) -> some View {
+        HStack(spacing: 7) {
+            HStack(spacing: 4) {
+                ForEach(0..<p.total, id: \.self) { i in
+                    Capsule()
+                        .fill(i < p.done ? Theme.Role.reward
+                              : i < p.done + p.claimable ? Theme.Role.reward.opacity(0.45)
+                              : Color.white.opacity(0.13))
+                        .frame(width: i < p.done + p.claimable ? 18 : 10, height: 4)
+                }
+            }
+            Text(p.isComplete ? "ALL DONE"
+                 : p.claimable > 0 ? "\(p.claimable) READY"
+                 : "\(p.done)/\(p.total)")
+                .typeScale(.micro)
+                .fontWeight(.heavy)
+                .monospacedDigit()
+                .foregroundStyle(p.isComplete || p.claimable > 0
+                                 ? Theme.Role.reward : Theme.Role.textTertiary)
+            Spacer(minLength: 0)
+        }
+        .padding(.bottom, 2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(p.isComplete ? "Section complete. All \(p.total) done."
+                            : p.claimable > 0 ? "\(p.claimable) of \(p.total) ready to claim."
+                            : "\(p.done) of \(p.total) done.")
     }
 
     /// Per-claim feedback (single claims; CLAIM ALL drives its own cascade). The burst owns the
@@ -357,14 +394,19 @@ func missionGlyph(_ metric: Mission.Metric) -> String {
     case .distance: "arrow.forward"
     case .nearMisses: "wind"
     case .slides: "arrow.down.to.line"
-    case .slickBonuses: "sparkles"
+    // Was `sparkles`, which the ACHIEVEMENTS ladder "Limbo Legend" also drew — the same glyph on
+    // "Score 6 SLICK bonuses today", "Score 35 SLICK bonuses this week" and a lifetime ladder,
+    // three rows apart on one screen. SLICK is a slide under a bar, so the glyph is the bar.
+    case .slickBonuses: "arrow.down.right.and.arrow.up.left"
     case .runsFinished: "flag.checkered"
     case .streakBest: "flame.fill"
     case .worldReached: "globe"
     case .chestsOpened: "gift.fill"
     case .wardensDefeated: "shield.lefthalf.filled.slash"
     case .revives: "heart.fill"
-    case .multiplierHit: "multiply"
+    // Was `multiply` — a bare ✕, which on a card with a button next to it reads as CANCEL or
+    // CLOSE, i.e. the opposite of a reward. This is a score multiplier.
+    case .multiplierHit: "arrow.up.forward.circle.fill"
     }
 }
 
@@ -401,21 +443,26 @@ private struct MissionCard: View {
 
     private var activeCard: some View {
         HStack(spacing: 12) {
-            progressRing
-            VStack(alignment: .leading, spacing: 5) {
-                Text(mission.title)
-                    .typeScale(.body)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.white)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 6) {
-                    if mission.isTiered { tierLadder }
+            metricBadge
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Space.s) {
+                    Text(mission.title)
+                        .typeScale(.body)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    // The fraction sits WITH the bar it describes, right-aligned so every row's
+                    // numbers land on one column and the board can be scanned vertically.
                     Text("\(compactCount(state.progress))/\(compactCount(state.target))")
                         .typeScale(.caption)
-                        .fontWeight(.bold)
+                        .fontWeight(.heavy)
                         .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(state.claimable ? Theme.Role.reward : .white.opacity(0.65))
+                        .layoutPriority(1)
                 }
+                progressBar
+                if mission.isTiered { tierLadder }
             }
             Spacer(minLength: Theme.Space.s)
             claimControl
@@ -432,26 +479,49 @@ private struct MissionCard: View {
         .accessibilityLabel(rowA11y)
     }
 
-    /// Circular progress ring: section-tinted while in progress, gold once claimable (a claim
-    /// bursts it to full before the row collapses). Center carries the metric's glyph.
-    private var progressRing: some View {
-        let fraction = state.target > 0 ? min(1, state.progress / state.target) : 0
-        let shown = appeared ? fraction : 0
-        return ZStack {
-            Circle().stroke(.white.opacity(0.1), lineWidth: 4)
-            Circle()
-                .trim(from: 0, to: shown)
-                .stroke(state.claimable ? AnyShapeStyle(Theme.goldGradient) : AnyShapeStyle(tint),
-                        style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                .rotationEffect(.degrees(-90))
+    /// The metric badge — identity ONLY, no progress.
+    ///
+    /// It used to carry a `.trim` arc. Two problems, both fatal to "you cannot tell how close you
+    /// are": an arc is a shape you cannot read a fraction off at a glance, and below roughly 10 %
+    /// it is visually identical to the plain circle it is drawn on — so a fresh board, where every
+    /// row is 0/N, showed nineteen rows of pure decoration. Progress moved to `progressBar`, which
+    /// can be counted; this is now just "which mission is this".
+    private var metricBadge: some View {
+        ZStack {
+            Circle().fill(state.claimable ? Theme.Role.reward.opacity(0.16) : Color.white.opacity(0.05))
+            Circle().strokeBorder(state.claimable ? Theme.Role.reward.opacity(0.7)
+                                  : tint.opacity(0.35), lineWidth: 1.5)
             Image(systemName: missionGlyph(mission.metric))
-                .font(.system(size: ringSize * 0.3, weight: .semibold))
-                .foregroundStyle(state.claimable ? Theme.Role.reward : .white.opacity(0.7))
+                .font(.system(size: ringSize * 0.34, weight: .semibold))
+                .foregroundStyle(state.claimable ? Theme.Role.reward : .white.opacity(0.8))
         }
         .frame(width: ringSize, height: ringSize)
+        .accessibilityHidden(true)   // the row's own label already names the mission
+    }
+
+    /// Countable progress. Where the target is small enough to count (every "finish 5 runs",
+    /// "score 6 SLICK"), the bar is literally that many segments, so the fraction is readable
+    /// without reading the digits. Where it is not (3,000 m, 20,000 m), it degrades to a
+    /// proportional 12-segment bar — still a straight line you can judge at a glance, which the
+    /// arc never was. `s016_design-system.md:442` prescribes exactly this swap.
+    private var progressBar: some View {
+        let target = state.target
+        let countable = target > 0 && target <= 10 && target == target.rounded()
+        let segments = countable ? Int(target) : 12
+        let fraction = target > 0 ? min(1, state.progress / target) : 0
+        let shown = appeared ? fraction : 0
+        let filled = Int((Double(segments) * shown).rounded(.down))
+        return HStack(spacing: 3) {
+            ForEach(0..<segments, id: \.self) { i in
+                Capsule()
+                    .fill(i < filled
+                          ? (state.claimable ? AnyShapeStyle(Theme.goldGradient) : AnyShapeStyle(tint))
+                          : AnyShapeStyle(Color.white.opacity(0.13)))
+                    .frame(height: 5)
+            }
+        }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.7), value: shown)
-        .accessibilityLabel("Progress")
-        .accessibilityValue("\(Int(state.progress.rounded())) of \(Int(state.target.rounded()))")
+        .accessibilityHidden(true)
     }
 
     /// Achievement ladder pips: paid tiers gold, the CURRENT tier wide + tinted, the rest dim.

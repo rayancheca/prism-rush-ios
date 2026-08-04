@@ -307,6 +307,69 @@ final class MissionsTests: XCTestCase {
         XCTAssertEqual(ProfileStore.MissionBoardSummary.of([]), .allClear)
     }
 
+    // MARK: the daily success state — MissionSectionProgress
+    //
+    // `MissionBoardSummary` reduces all 19 rows to one line, so finishing all three of today's
+    // dailies moved the strip from "19 OPEN" to "16 OPEN". The one goal a daily board sets was
+    // the one thing it could not tell you that you had met.
+
+    func testAFinishedSectionCanSaySoEvenWhileTheRestOfTheBoardIsOpen() {
+        let open = ProfileStore.MissionState(progress: 0, target: 10, reward: 100, claimable: false,
+                                claimed: false, tier: 0, tierCount: 1)
+        let done = ProfileStore.MissionState(progress: 10, target: 10, reward: 100, claimable: false,
+                                claimed: true, tier: 0, tierCount: 1)
+
+        let today = ProfileStore.MissionSectionProgress.of([done, done, done])
+        XCTAssertTrue(today.isComplete, "a section whose rows are all claimed is complete")
+        XCTAssertEqual(today.done, 3)
+
+        // The whole-board summary still reports the other 16 rows as open — that is correct and
+        // is exactly why the section needs its own denominator.
+        XCTAssertEqual(ProfileStore.MissionBoardSummary.of([done, done, done] + Array(repeating: open, count: 16)),
+                       .open(count: 16, coins: 1_600))
+    }
+
+    /// "Complete" must mean collected, not merely finished. A section still holding claimable
+    /// rewards is WAITING — congratulating there would invite a player to walk away from coins
+    /// they have earned and not taken.
+    func testASectionHoldingUnclaimedRewardsIsNotComplete() {
+        let ready = ProfileStore.MissionState(progress: 10, target: 10, reward: 140, claimable: true,
+                                 claimed: false, tier: 0, tierCount: 1)
+        let done = ProfileStore.MissionState(progress: 10, target: 10, reward: 100, claimable: false,
+                                claimed: true, tier: 0, tierCount: 1)
+        let p = ProfileStore.MissionSectionProgress.of([done, done, ready])
+        XCTAssertFalse(p.isComplete, "an uncollected reward means the section is not finished")
+        XCTAssertEqual(p.claimable, 1)
+        XCTAssertEqual(p.done, 2)
+    }
+
+    func testAnEmptySectionIsNeverComplete() {
+        XCTAssertFalse(ProfileStore.MissionSectionProgress.of([]).isComplete,
+                       "a section with no rows must not congratulate")
+    }
+
+    /// End to end against the real board: complete and claim all three of today's slots and the
+    /// TODAY section must report itself finished.
+    func testTodaysSectionReportsCompleteOnceAllThreeSlotsAreClaimed() async {
+        let store = ProfileStore(testing: Profile())
+        let now = utc(2026, 6, 10)
+        let slots = store.dailyMissions(now: now)
+
+        for slot in slots where slot.metric != .chestsOpened {
+            store.applyRunSummary(summary(slot.metric, slot.target), now: now)
+            _ = store.claimMission(slot.id, now: now)
+        }
+        // `chestsOpened` never flows through a run summary, so drive it the way the app does.
+        for slot in slots where slot.metric == .chestsOpened {
+            store.mutate { $0.missionProgress[slot.id] = slot.target }
+            _ = store.claimMission(slot.id, now: now)
+        }
+
+        let today = ProfileStore.MissionSectionProgress
+            .of(store.dailyMissionSlots(now: now).map { store.missionState($0, now: now) })
+        XCTAssertTrue(today.isComplete, "all three dailies claimed → TODAY is complete")
+    }
+
     // MARK: PR-0006 — the board is readable without writing the profile
     //
     // `MissionsView.body` and the hub badge (`MenuView.swift:345`, inside a TimelineView) both
