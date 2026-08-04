@@ -4,7 +4,42 @@
 > wins** and the other file gets fixed. That includes `state.md` and `README.md` at the repo root,
 > which are the project's human-facing history, not the agent's source of truth.
 
-- **Last written by:** session 016 (2026-08-03). **THE OWNER REWROTE THE PROGRAM'S CONSTRAINTS
+- **Last written by:** session 017 (2026-08-04) — **PASS 017: MISSIONS. All four of the owner's
+  complaints are answered, and the coin ledger was NOT touched.** Commits `1f1c5ab`, `5924198`,
+  `91379cd`, `27889ea`, all pushed. Recovery tag `pre-s017` = `8af1814`. Decisions **D-052, D-053**.
+  **274 SPM + 293 Xcode tests green.** `layoutVersion` still **12**; the v13 pin is still UNSPENT.
+- **D-052 — MISSIONS DO NOT PAY MYSTERY BOXES, and the coin curve was not changed.** The pass's own
+  headline proposal (`s017_missions-plan.md §1.5`) was refuted on its own arithmetic by a hostile
+  verifier: 74 % of a box is literally coins and a *granted* box has no 300-coin cost, so the mix
+  takes the board **663 → 1,349 coin-equiv/day** and the catalogue clock **26.8 → 22.0 days** — the
+  exact acceleration the plan's own thesis calls the root defect. Independently,
+  `ProfileStore.swift:619` (`guard state.reward > 0`) makes a box-only mission **silently
+  unclaimable**. Re-pricing the board trades against coin-IAP revenue and is **Rayan's call**; the
+  numbers are in `s017_missions-economy.md` and D-052.
+- **D-053 — the daily success state now exists.** `MissionBoardSummary` reduces all 19 rows to one
+  line, so finishing all three dailies moved the strip from "19 OPEN" to "16 OPEN". The one goal a
+  daily board sets was the one thing it could never say you had met. New `MissionSectionProgress`
+  is per-section, pure, Linux-testable, and `isComplete` means COLLECTED, not merely finished.
+- **SHIPPED THIS PASS:** PR-0006 (the board wrote to disk + iCloud from inside `body`; the refresh
+  MOVED to `.task` and the read side now applies the rollover rule), PR-0473 (mission claims fire
+  `RewardBurstView` with a bespoke medallion; CLAIM ALL = ONE burst carrying the total), PR-0474
+  (countable segmented progress replacing an arc that was invisible below ~10 %; section standings;
+  two colliding glyphs fixed), PR-0475 (game over states what the run did to today's board).
+- **FOUND AND FIXED A PRE-EXISTING RED TEST:** `testDailyAndChestRewards` had been failing since
+  S-016 shipped `RewardBurstView` without re-running the XCUITest suite. Confirmed by stashing and
+  running at `pre-s017` — it fails identically there. **S-016's "iOS build green" was not a test
+  run.** Run `xcodebuild test`, not just `./Tools/build.sh`.
+- **THE REVIEW FLEET HIT THE ACCOUNT'S WEEKLY LIMIT.** 7 investigations + **6 hostile
+  verifications** are on disk (`docs/agent/audits/scratch/s017_*.md`) — every verifier returned
+  PARTIALLY REFUTED. **All four judges and the synthesizer died, so there is no `s017_RULING.md`**;
+  S-017 ruled from the verified material instead. `s017_missions-references.md` exists but was
+  never hostile-verified.
+- **CHECK THE DIRECTORY BEFORE RE-RUNNING A DEAD WORKFLOW.** The S-016 handoff said one
+  investigation survived; **five were on disk.** Agents write their files before returning.
+
+> The bullets from here to the session-015 divider are **session 016's**.
+
+- **Written by:** session 016 (2026-08-03). **THE OWNER REWROTE THE PROGRAM'S CONSTRAINTS
   MID-SESSION, THREE TIMES.** Verbatim and decomposed into M1–M12 in
   `docs/agent/audits/scratch/s016_mandate.md` — that file governs. Commits `fb7a833`, `f441348`.
   Recovery tag `pre-s016`. Decisions **D-046 … D-051**. 266 SPM tests green, iOS build green,

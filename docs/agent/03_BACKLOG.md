@@ -103,7 +103,7 @@ format before work starts.** Filed as `PR-0001`.
 ## PR-0006 · SEV1 · Reading the rewards bar mutates and saves the profile from inside `body`
 - Area:        Meta/ProfileStore, UI/MenuView (was UI/RewardsBar, deleted in S-005)
 - Found by:    S-001 (survey: meta-iap)
-- Status:      OPEN
+- Status:      DONE(S-017)
 - Symptom:     Potential "modifying state during view update" behaviour, and an unpredictable extra disk + iCloud write on a UTC rollover while the hub is on screen.
 - Repro:       Be on the hub across a UTC midnight with the rewards bar visible.
 - Why:         `MenuView.swift` navRail calls `ProfileStore.unclaimedCount(now:)` (was `RewardsBar.swift:23`); that path (`ProfileStore.swift:558`) can reach `refreshDailyMissions` → `mutate` → `save()` + `cloud.synchronize()`. A `body` evaluation writes an `@Observable`.
@@ -111,6 +111,14 @@ format before work starts.** Filed as `PR-0001`.
 - Fix sketch:  Split the query into a pure read used by `body` and an explicit refresh driven by `.task`/`.onAppear`/a timer. Never let a `body`-reachable call mutate.
 - Blast radius: `UI/MenuView.swift`, `Meta/ProfileStore.swift`.
 - Verification: Grep every `body`-reachable `ProfileStore` call for a `mutate` path; add a comment marking the read-only entry points.
+- RESOLVED (S-017, `1f1c5ab`): the blast radius was WIDER than filed — `MissionsView.swift:41,43`
+  hit the same path and that was recorded nowhere. Fixed by making the READ side apply the
+  rollover rule instead of deleting the refresh (both surfaces must survive a UTC rollover that
+  lands while they are on screen): `dailyMissionSlots`/`weeklyMissionSlots` are pure,
+  `missionState` reports a stale daily/weekly as zero-progress-and-unclaimed, `unclaimedCount` is
+  pure outright, and the real wipe happens once on `.task`. Four tests pin it, including one that
+  a too-broad staleness rule would fail (per-run feats and achievement ladders are lifetime state
+  and must NOT reset).
 
 ## PR-0007 · SEV1 · `ProcessInfo.systemUptime` is a required-reason API and is not declared in the privacy manifest
 - Area:        Audio/SynthEngine, Support/PrivacyInfo.xcprivacy
@@ -2015,3 +2023,60 @@ undo a deliberate, documented owner decision. Read the "Why" field before treati
 - **Status:** `OPEN` · carried from S-009 (`s009c_SPEC.md` §3), owner-requested
 - **Much cheaper after S-012:** a species is now a different THROW TABLE
   (`WardenEncounter.script(rank:)` + `Tuning.wardenThrowKind`), not a different attack system.
+
+
+## PR-0473 · SEV2 · Missions did not use the app's own reward moment
+- Area:        UI/MissionsView, UI/RewardBurstView, UI/GameView
+- Found by:    S-017 (owner complaint: "not rewarding at all")
+- Status:      DONE(S-017)
+- Symptom:     Claiming a mission showed a 13 pt "+N" that rose 38 pt over 0.8 s and faded, while
+               the daily bonus and free chest got a full ceremony (D-049).
+- Why:         `RewardBurstView` shipped in S-016 with exactly two callers (`GameView.swift:579`,
+               `:585`). The mission board was the one reward surface in the app that did not use it.
+- Fix:         `RewardBurst.Kind` += `.mission(title:)` / `.missionSet(count:)`, a bespoke medallion
+               centerpiece (a chest is a container you open; a mission is a goal you met) stamped
+               with the mission's own glyph, riding the same `phase`/`lid` clock so the existing
+               audio timeline stays in sync. CLAIM ALL = ONE burst carrying the total, reporting
+               what was actually PAID rather than what the button advertised.
+- Verification: simulator, both paths (8,000 → 8,300 → 9,100); 293 Xcode tests.
+
+## PR-0474 · SEV2 · Mission progress was unreadable and a finished section could not say so
+- Area:        UI/MissionsView, Meta/ProfileStore
+- Found by:    S-017 (owner complaints: "its ugly", "its not easy to understand")
+- Status:      DONE(S-017)
+- Symptom:     (a) Every card drew a `.trim` arc — a shape you cannot read a fraction off, and
+               below ~10% visually identical to the plain circle it sits on, so a fresh board
+               (19 rows at 0/N) was nineteen rows of decoration. (b) Claiming all three dailies
+               moved the summary strip from "19 OPEN" to "16 OPEN": finishing today's set was not
+               a state the board could represent. (c) `sparkles` was drawn by both SLICK missions
+               AND the Limbo Legend ladder; `multiply` rendered a bare ✕ that reads as CANCEL.
+- Fix:         Countable segmented progress bar (literal segments where the target is ≤ 10, a
+               proportional 12-segment bar otherwise); `MissionSectionProgress` per section
+               (D-053); two glyphs replaced.
+- Verification: simulator against a true fresh install; 274 SPM + 293 Xcode tests.
+
+## PR-0475 · SEV2 · Game over said nothing about missions
+- Area:        UI/GameOverView
+- Found by:    S-017 (owner complaint: "does nothing")
+- Status:      DONE(S-017)
+- Symptom:     `grep -i mission PrismRush/UI/GameOverView.swift` → nothing. The screen that knows
+               exactly which missions the run advanced never mentioned them, making the board a
+               destination you had to remember to visit. Decree 4.
+- Fix:         A TODAY'S MISSIONS row between FULL STATS and CONTINUE; gold when claimable. Hidden
+               on challenge runs (Daily Rush does not advance the daily board, so an unchanged 0/3
+               would read as a bug rather than as the rule).
+- Verification: simulator, real autoplay death — "TODAY'S MISSIONS · 2/3 ›".
+
+## PR-0476 · SEV3 · A mission paying 0 coins is silently unclaimable
+- Area:        Meta/ProfileStore
+- Found by:    S-017 (hostile verifier, while costing the rejected mystery-box proposal)
+- Status:      OPEN
+- Symptom:     `ProfileStore.swift:619` — `guard state.claimable, state.reward > 0 else { return nil }`.
+               Any future mission whose reward is not coins (a box, a cosmetic, a shard) is
+               unclaimable, silently, with no diagnostic.
+- Why:         `reward` is an `Int` of coins and doubles as the "is this real" test.
+- Impact:      Latent. Nothing today pays 0. It is a tripwire for the next session that tries to
+               make missions pay something other than coins — D-052 rejected boxes on economics,
+               NOT on this, and this would have bitten independently.
+- Fix sketch:  Separate "has a reward" from "the reward is a positive coin count" before any
+               non-coin reward kind is introduced.

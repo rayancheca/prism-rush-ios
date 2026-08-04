@@ -1361,3 +1361,60 @@ places by `s016_verify_perf.md` — **read both**.
 Nothing has ever been instrumented: zero signposts and zero performance tests exist repo-wide. Land
 the instrumentation before the next fix, or the asset import from D-046 will get blamed for a
 stutter that predates it.
+
+---
+
+## D-052
+**MISSIONS DO NOT PAY MYSTERY BOXES. The pass's own load-bearing proposal was refuted on its own
+arithmetic.** (S-017.)
+
+`s017_missions-plan.md §1.5` called it "the load-bearing design claim of this plan": dailies pay a
+Mystery Box, weeklies pay coins + a box. The reasoning was that a box converts coins into *variance
+and ceremony* rather than adding to a pile that is already too big, and that `openMysteryBox`
+already exists as pure meta (`ProfileStore.swift:135-144`).
+
+An independent hostile verifier re-derived it and killed it
+(`s017_verify_missions-plan.md §B1`). **74 % of a Mystery Box is literally coins**
+(`ShopValue.swift:145,146,149,150` = 42 + 22 + 7.5 + 2.5 %) and a *granted* box has no 300-coin
+cost, so its full EV is net faucet:
+
+| | board coin-equiv/day | player income/day | days to the 83,500 catalogue |
+|---|---|---|---|
+| today | 663 | 3,118 | **26.8** |
+| the proposal (EV 300.5) | **1,349** | 3,803 | **22.0** |
+
+The plan's own §0 thesis is *"raising mission rewards would make every one of the four complaints
+worse — it accelerates the 26.8 days."* The proposal is a **+161 % raise per daily slot**. It fails
+its own test. Swapping a 115-coin daily for a 300.5-EV box is not converting coins into variance,
+it is a raise wearing a costume.
+
+Two independent supports for the same verdict:
+- `ProfileStore.swift:619` — `guard state.claimable, state.reward > 0 else { return nil }`. A
+  mission paying **only** a box (0 coins) is silently unclaimable. The proposal never opened it.
+- Shipping a box mission would have forced the SEV1 odds fix along with it (the box displays a 3 %
+  jackpot and rolls 2.5 %) — real, still open, but not this pass's to carry once the box is out.
+
+**Also rejected: any change to the coin curve.** The handoff asked for the numbers to be brought to
+Rayan, and they are (above, and `s017_missions-economy.md`). Re-pricing the board trades directly
+against coin-IAP revenue and is his call, not an autonomous one. The pass therefore answers all
+four complaints **without touching the ledger** — the faucet is byte-for-byte unchanged at 663/day.
+
+## D-053
+**A SECTION KNOWS ITS OWN DENOMINATOR — the daily success state now exists.** (S-017.)
+
+`MissionBoardSummary.of` (`ProfileStore.swift`) reduces all 19 rows to one line over a single flat
+pool, so a player who finished all three of today's dailies watched the strip go from "19 OPEN" to
+"16 OPEN". **Finishing today's set was not a state the board could represent.** `.allClear` requires
+all 18 achievement tiers, all 6 feats and both boards — unreachable in practice.
+
+The hostile verifier called this "the strongest finding in the report"
+(`s017_verify_missions-craft.md §1`, C1) and confirmed it mechanically. It is the core of "missions
+does nothing": the one goal a daily board actually sets was the one thing it never acknowledged.
+
+New `ProfileStore.MissionSectionProgress` — pure, in the Linux-testable layer, `total` / `done` /
+`claimable` per section. `isComplete` deliberately requires **collected**, not merely finished: a
+section still holding claimable coins is *waiting*, and congratulating there would invite a player
+to walk away from rewards they earned. Pinned by four tests.
+
+Kept `MissionBoardSummary` as-is. It is pinned by `MissionsTests` and is correct at what it does —
+it is a *board* summary, and the defect was that nothing else existed, not that it was wrong.

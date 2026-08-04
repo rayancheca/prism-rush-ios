@@ -1,9 +1,9 @@
-# HANDOFF → Session 017 · **PASS 017: MISSIONS**
+# HANDOFF → Session 018 · **PASS 018: THE CHARACTER PREVIEW SEAM + ASSET PIPELINE**
 
 ## Paste this to start the next session
 
 ```
-You are session 017 of a long-running program to finish and ship Prism Rush, a neon three-lane
+You are session 018 of a long-running program to finish and ship Prism Rush, a neon three-lane
 endless runner for iPhone (Swift 6, SwiftUI, RealityKit, zero dependencies).
 
 Read docs/agent/01_RULES.md, then docs/agent/02_STATE.md, then this file in full.
@@ -11,217 +11,65 @@ Read docs/agent/01_RULES.md, then docs/agent/02_STATE.md, then this file in full
 You may and should change code. Rayan's standing instruction is "never be limited by arbitrary
 rules, just work however you think is best." Do not ask permission to fix something you can verify.
 
-## YOUR ONE JOB: REBUILD THE MISSIONS SURFACE. Do not touch anything else.
+## YOUR ONE JOB: THE CHARACTER PREVIEW SEAM, THEN THE ASSET PIPELINE.
 
-This is a BOOKED PASS, not a suggestion. Rayan asked for it directly and then caught S-016 for
-reserving it without scheduling it. The pass order is 017 missions → 018 character preview seam +
-asset pipeline → 019 the new character art. Do not start 018's work here.
+This is the booked pass. Order is 017 missions (DONE, S-017) → 018 preview seam + assets → 019 the
+new character art. Do not start 019's work here; 018 exists precisely so 019 does not cost 24x.
 
-His complaint, verbatim (2026-08-03):
+**Every character is currently built TWICE** — a 3D rig and a hand-drawn 2D copy, matched by hand,
+with nothing testing that they agree. D-050 ordered new art for ALL 24 characters. Landing 24 new
+assets on top of a doubled, untested seam multiplies the problem by 24. Fix the seam first.
 
-  > add into memory that we need a dedicated session to redo the mission section of the app. its
-  > ugly. does nothing. its not easy to understand. not rewarding at all. need a million review
-  > bots. judge, think , test implement
-
-**Those are FOUR different defects with FOUR different fixes. Do not collapse them into "make the
-screen prettier" — that is the failure mode this pass exists to avoid.**
-
-  ugly              → visual craft
-  does nothing      → missions don't visibly affect anything the player cares about
-  not easy to       → you cannot tell what a mission asks or how close you are
-    understand
-  not rewarding     → TWO defects: the reward is not FELT (cheap, zero risk) and it is not
-                      WORTH WANTING (owner-priced). See the economic reading below — the
-                      answer is almost certainly NOT "pay more coins".
+**REVIEW QUESTION 2 IS STILL OPEN AND IT SHAPES THIS PASS:** should menu previews become live
+renders of the actual rig? Rayan has not answered across three sessions. It is the highest-value
+open question in the program. **Do not block on it** — Rayan is autonomous-mode by standing
+instruction ("Never ask the user clarifying questions. Make the best decision available and
+document it in state.md. Keep building"). Decide, document it as a decision, build it reversibly,
+and put the numbers in front of him. That is what S-017 did with the mystery-box question (D-052)
+and it worked.
 
 ## READ THESE BEFORE TOUCHING CODE
 
-  docs/agent/audits/scratch/s016_coins-economy.md   ← the whole economy, measured. Non-negotiable.
-  docs/agent/audits/scratch/s016_design-system.md   ← the visual system + 10 ranked craft findings
-  docs/agent/audits/scratch/s017_missions-plan.md   ← THE PLAN SKELETON. Read §0 and §1 first.
-
-## THE REST OF THE INVESTIGATION IS WRITTEN BUT UNRUN — RUN IT, DON'T RE-DERIVE IT
-
-**ALL SEVEN LANDED — ~5,000 lines across ten files, three adversarially verified.** They are in
-`docs/agent/audits/scratch/s017_*.md` and they are the bulk of this pass's thinking. **Do not
-re-derive any of it.** The brief that produced them is committed at
-`Tools/workflows/s017_missions.js` if you ever want to re-run or extend it.
-
-    s017_missions-plan.md          the plan skeleton — step order, fences, verification. START HERE.
-    s017_missions-inventory.md     all 28 catalogue entries, the roll/reset/claim lifecycle, 4 NEW defects
-    s017_missions-does-nothing.md  what a mission actually causes. The consequence trace.
-    s017_missions-economy.md       the reward ledger
-    s017_missions-craft.md         the visual + IA audit, with a before/after spec
-    s017_missions-seam.md          the code seam, migration and risk register
-    s017_missions-references.md    what shipped games do
-    s017_verify_*.md               three hostile readers. READ THESE WITH THEIR TARGETS —
-                                   they refuted real things, including the inventory doc's thesis.
-
-Everything below is the distilled version. Where it and a scratch file disagree, open the file.
-
-## WHAT S-016 ALREADY PROVED BY LOOKING (screenshots in docs/agent/scratch/s016/missions/)
-
-  1. **Three different progress idioms on ONE screen, and the rows you look at most get the worst.**
-     Daily and weekly missions show progress as a bare text fraction — "0/6", "0/5", "0/3.0k".
-     No bar. No ring. Achievements on the SAME screen get a segmented tier bar AND a progress arc
-     on the icon. So the machinery for legible progress already exists and is not used where it
-     matters.
-  2. **Icons are generic SF Symbols and they collide.** "Score 6 SLICK bonuses" and "Score 35 SLICK
-     bonuses" and "Limbo Legend" all use the same sparkle. "Hit a x5 multiplier in one run" uses a
-     glyph that reads as a close/cancel X.
-  3. **Nine rows, identical visual weight.** A +140 daily and a +900 weekly are the same card. There
-     is no hierarchy, no "you're close to this one", no sense of a set being completed.
-  4. **The header already says "19 OPEN · UP TO 4,380 COINS"** — the number is right there and it
-     is not small. Which points hard at the real problem below: the board's payout is not the
-     defect.
-
-## WHAT THE AGENTS FOUND THAT YOU WOULD NEVER GUESS
-
-  * **`GameView` calls the mission API ZERO times.** Not once. No in-run FX, nothing on the death
-    panel, two entry points in the entire app. `ClaimRibbon.swift` states the intent outright:
-    missions is "a board you visit". **That is "does nothing", stated by the architecture.**
-  * **The whole recurring board is worth 8 minutes 29 seconds of running per day** (663.5 coins at
-    the measured 78.3 coins/min). And **the daily-login button at streak 7 pays 1,000 coins for ONE
-    TAP — 2.9× the entire daily board.** The thing that requires no skill out-pays the thing that
-    does, by 3×.
-  * **The harder you play, the less missions matter**: 21.3 % / 15.5 % / 10.0 % of income at
-    15 / 30 / 60 min per day. The system is regressive against engagement.
-  * **The one thing missions do that running cannot: unlock three characters.** That is the only
-    non-coin consequence in the entire system, and nothing on the board says so.
-  * **A one-step clock rollback exposes a claimable off-board slot on 98.7 % of days and 97.0 % of
-    weeks** (verifier, re-derived from the SplitMix64 draw). `testWeeklyClockRollbackBlocked` misses
-    it — it asserts the stored date and never the returned board. **This is an exploit, not a nit.**
-  * **Claiming across UTC midnight silently no-ops.** Single-claim uses live `Date()`, CLAIM ALL uses
-    the rendered `now`; the documented fix was applied to one and not the other. Decree 3.
-  * **CLAIM ALL pays exactly one tier per achievement ladder and never says so** — and an XCUITest
-    depends on that behaviour.
-  * **PR-0006 (mutating the profile from inside `body`) is confirmed and worse than filed** — four
-    more sites in `MissionsView.body`, each reaching `save()` + `cloud.synchronize()`, all inside a
-    60 s `TimelineView`.
-  * **9 of 15 pool entries bank progress every run that can never be claimed and is wiped at reset.**
-    Free material for a carry-over board.
-  * **No test ever builds the real 19-card board and asserts what the summary strip says**, and the
-    one "disjointness" assertion that looks like coverage is vacuous — it cannot fail. `Package.swift`
-    compiles no `UI/`, so all 576 lines of `MissionsView.swift` have zero unit coverage.
-
-## THE ECONOMIC READING — the spine of the pass, and it is NOT what you would guess
-
-**One agent survived the rate limit and its finding overturns the obvious reading. Read
-`docs/agent/audits/scratch/s017_missions-plan.md` §0 and §1 before anything else.**
-
-Measured from `MissionCatalog.swift` literals against `s016_coins-economy.md`:
-
-  3 daily slots, mean 115      →   345 coins/day
-  3 weekly slots, amortised    →   318 coins/day
-                                  ------------
-  recurring board              →   663 coins/day  =  34.1 % of the whole meta faucet
-                                                  =  21.3 % of EVERYTHING a 15-min/day player earns
-  one-time (6 feats + 7 ladders) → 12,320 coins   =  83.7 % of all one-time meta income
-
-> **The owner looked at a system paying 21 % of his income and said "does nothing."**
-
-That sentence is the thesis. It **rules out** "the numbers are too small", and it means
-**raising mission rewards would make all four complaints worse** — it accelerates a catalogue that
-is already free in 26.8 days, and it makes an invisible claim moment carry a bigger number.
-*(An earlier draft of this handoff said missions were 4.5 % of daily earn and told you to bring
-Rayan a bigger reward curve. That was wrong — it compared one +140 daily against the whole day.
-Do not act on it.)*
-
-**The defect is downstream of the source.** The board pays a currency whose sink is finite and
-nearly free, and it pays it through a 13 pt "+N" that rises 38 pt over 0.8 s and fades
-(`MissionsView.swift:548-576`).
-
-### The corrected principle — not "economy before pixels"
-
-> **Decide the reward LEDGER before the first line of code. Then build in whatever order keeps the
-> app green, and never rebuild a component twice.**
-
-The binding constraint is not that economy outranks craft — it is that **a mission card cannot be
-drawn until you know what a mission pays.** A card rendering a coin amount and a card rendering a
-box object are different components.
-
-### "Not rewarding" is TWO defects with a 20× cost difference — do not collapse them
-
-- **(4a) the reward is not FELT.** S-016 shipped `RewardBurstView` (D-049) — scrim, hinging lid,
-  confetti, a count rolling from zero, three-layer audio — and wired it to exactly two callers:
-  `GameView.swift:579` (daily) and `:585` (chest). **Missions were not one of them.** The mission
-  board is the one reward surface in the app that does not use the app's own reward moment.
-  **Cost: one call site plus a `RewardBurst.kind` case. Economy risk: zero.** Do this early; it is a
-  same-afternoon, immediately visible win, and collapsing it into (4b) queues it behind an owner
-  ruling for no reason.
-- **(4b) the reward is not WORTH WANTING.** Coins into a finite sink. This one the owner must price.
-
-### The move that makes the consequence half fit in ONE session
-
-**A mission that pays a MYSTERY BOX instead of coins.** `openMysteryBox` already exists, is pure
-meta (`ProfileStore.swift:135-144`), and never touches the Core seeded RNG. A free-on-a-timer grant
-is ~20 lines mirroring `chestReady`/`openFreeChest` (`ProfileStore.swift:328-331`, `:339-348`) — a
-shape this codebase already proves.
-
-That converts the board from the fourth-biggest coin faucet into **the game's primary box faucet**:
-it answers "does nothing" (the reward becomes a thing with variance and a ceremony, not a number
-added to a pile that is already too big), it answers M7 *"getting boxes should be more prominent"*
-on a surface the owner was going to open anyway, and it costs a `Profile` field and a reward-kind
-enum rather than a new currency. **This is the load-bearing design claim of the plan — put it to
-Rayan as question 1.** If he rejects it, cut those steps and the pass becomes craft + moment only,
-which still answers three of the four complaints. The plan is built to degrade that way.
-
-**If that ships, one thing becomes blocking:** the Mystery Box **displays odds it does not roll** —
-3 % jackpot shown, 2.5 % rolled (`ShopValue.swift:157-158` vs `:149-150`), with
-`grep -rn "mysteryOdds" Tests/` → NOT FOUND. Guideline 3.1.1 requires disclosed odds to be the real
-odds and the error favours the house. Fix it and pin it in the same pass.
-
-### "Ugly" and "not easy to understand" are ONE fix, and it is visual work
-
-19 rows in one scroll carrying **four different reset semantics** — never / UTC day / UTC week /
-lifetime — signalled by **four bespoke tints declared in that one file** (`MissionsView.swift:26-29`),
-more hues than the rest of the app combined. Progress is a `.trim` arc (`:404-422`) — a shape you
-cannot count. On this screen the pixels **are** the information architecture, so deferring them as
-"just craft" mis-prices them.
-
-## WHAT THE OWNER MUST RULE ON
-
-1. **Do missions pay boxes?** (the load-bearing claim above)
-2. **Anything that changes the coin ledger** — it trades against coin IAP revenue. Bring numbers,
-   never ship a curve as if it were a bug fix. But note the finding above: the answer is probably
-   *not* "pay more coins".
+  docs/agent/audits/scratch/s016_characters.md      <- the 24-character inventory
+  docs/agent/audits/scratch/s016_assets.md          <- the asset mandate + memory budget (D-046)
+  docs/agent/audits/scratch/s016_design-system.md   <- the visual system + 10 ranked craft findings
+  docs/agent/audits/scratch/s016_renderer.md        <- the render seam
+  docs/agent/sessions/SESSION_017.md                <- the traps list at the bottom is load-bearing
 
 ## HARD CONSTRAINTS
 
-  - **Decree 5 still stands and was NOT revoked**: no dark patterns, no fake urgency, advertised
-    bonuses always delivered. Expiring missions and streak pressure are legitimate ONLY if the
-    deadline is real and enforced in code. Sort anything borderline into ship / owner-must-rule /
-    needs-a-revocation, the way s016_coins-economy.md does.
-  - **Decree 3**: no broken-looking states for expected situations. PR-0304 is filed — the board
-    says "ALL CLEAR" on an 0/N first launch. A brand-new player's first view of this screen is a
-    wall of zeros; that is the state to design FIRST, not last.
-  - **Iron rule 7**: any new `Profile` field is `decodeIfPresent ?? default`. Old saves must never
-    wipe. Pinned by decode tests.
-  - **G3**: never `@State` a shared `@Observable`; never snapshot `store.profile` into a `let` at the
-    top of `body`. There is a filed defect saying mission claiming mutates and persists the profile
-    from inside `body` — verify it and fix it while you are in there.
-  - **Determinism**: a mission that changes what spawns costs a `DailyChallenge.layoutVersion` bump
-    (12 → 13, pre-armed at `0x9E49_3424_C18A_59C5`) AND a solvability-bot re-run. "Collect N gems in
-    a run" is free; "spawn a special pickup" is not. Prefer free ones.
+  - **Decree 1 — a character NEVER changes identity, in space OR in time.** No `followsWorld`, no
+    time-varying hue. Prism wears a STATIC rainbow (D-011) and a test pins that no clock is in the
+    resolution path. New art must not reintroduce either.
+  - **Decree 2 — previews never lie.** This pass IS decree 2. Menu hero, select swatches, shop
+    cards and tease renders must match the in-game character.
+  - **D-046 revoked "zero binary assets"** — real meshes/textures/models are wanted now. Two things
+    survive and are not the owner's to waive: (a) we must have the right to ship it — AI-generated
+    or CC0/public-domain only; "copy subway surfers" means its design language, never its art,
+    names or trademarks; (b) **the memory budget is load-bearing** — "the app becomes slow at
+    points. this can never happen." Charge every asset against a stated budget.
+  - **Iron rule 7** — any new `Profile` field is `decodeIfPresent ?? default`.
+  - **G3** — never `@State` a shared `@Observable`; never snapshot `store.profile` into a `let` at
+    the top of `body`.
+  - **Determinism** — this pass should not touch the spawn path at all. `layoutVersion` stays at
+    **12**; the v13 pin `0x9E49_3424_C18A_59C5` is still UNSPENT.
   - **Never make a gate pass by weakening it.** No deleted assertions, no widened bands.
 
-## REUSE, DON'T REINVENT
-
-S-016 shipped `PrismRush/UI/RewardBurstView.swift` (D-049) — a real reward moment with a scrim, a
-chest whose lid hinges open, confetti, a rolling count and a progress ladder. **Missions do not use
-it.** Claiming a mission should almost certainly fire that same burst. That is the cheapest possible
-fix for "not rewarding" and it is already built and verified.
-
-## VERIFICATION — not advisory
+## VERIFICATION — not advisory, and S-016 got this wrong
 
 `swift test` compiles ONLY Core/, seven Meta/ files and Audio/Synth.swift. It does NOT compile UI/,
-Render/, IAP/, StoreKit or GameKit, so a green SPM run says NOTHING about this screen. Only
-`./Tools/build.sh` plus the simulator does. SourceKit here resolves against macOS — "Cannot find
-'Theme' in scope" and "No such module 'UIKit'" are NOISE.
+Render/, IAP/, StoreKit or GameKit. **`./Tools/build.sh` is a COMPILE, not a test run.** S-016
+reported "iOS build green" and shipped a red XCUITest that sat undiscovered until S-017 found it.
 
-Run the app. Screenshot every state: first-launch 0/N board, partial progress, one complete and
-claimable, all claimed, post-reset. Paste real command output into the session log. No output, no
-credit.
+    ./Tools/build.sh                                          # compiles UI/ and Render/
+    swift test -c release                                     # 274 tests
+    xcodebuild test -project PrismRush.xcodeproj -scheme PrismRush \
+      -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' CODE_SIGNING_ALLOWED=NO
+                                                              # 293 tests — RUN THIS ONE
+
+SourceKit in this checkout resolves against macOS: "Cannot find 'Theme' in scope" and "No such
+module 'UIKit'" are NOISE. Run the app and open the screenshots. A captured PNG nobody read is not
+evidence.
 
 FIRST COMMAND. docs/agent/scratch/ and docs/agent/audits/scratch/ are gitignored, hold ~1.3 GB, and
 git does NOT move them between worktrees. No-op if you already have them:
@@ -234,7 +82,9 @@ git does NOT move them between worktrees. No-op if you already have them:
     [ -d "$s/audits/scratch" ] && mkdir -p docs/agent/audits/scratch && cp -Rn "$s/audits/scratch/." docs/agent/audits/scratch/ 2>/dev/null
   done; du -sh docs/agent/scratch docs/agent/audits/scratch
 
-Tag `git tag pre-s017` before you start. PUSH TO GITHUB at the end — standing instruction.
+Tag `git tag pre-s018` before you start — VERIFY IT DOES NOT EXIST FIRST (`git rev-list -n1
+pre-s018`). The S-017 plan hard-coded a stale claim that its own tag was absent; following it would
+have moved the recovery point behind four commits. PUSH TO GITHUB at the end — standing instruction.
 
 Report back in three lines.
 This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/projects/prism-rush-ios/HANDOFF.md
@@ -242,120 +92,100 @@ This file's absolute path: /Users/rayankarimcheca/Desktop/ClaudeProjects/project
 
 ---
 
-# The pass schedule
+# What session 017 did — PASS 017: MISSIONS
 
-Rayan's standing process, given 2026-08-03: **every idea he gives gets captured verbatim, thought
-about by many agents, turned into a real plan, and then BOOKED as a numbered pass — ordered by
-importance.** A "reserved for its own session" note is a fence, not a booking; he caught S-016 doing
-exactly that to missions.
+Four commits, all pushed: `1f1c5ab`, `5924198`, `91379cd`, `27889ea`. **274 SPM + 293 Xcode tests
+green.** Decisions **D-052, D-053**. Recovery tag `pre-s017` = `8af1814`. `layoutVersion` untouched
+at **12**, v13 pin still unspent.
 
-| Pass | Surface | Why here |
+The owner's complaint was four defects, not one: **ugly · does nothing · not easy to understand ·
+not rewarding at all.** All four are answered, and **the coin ledger was not touched.**
+
+## The ruling that shaped the pass (D-052)
+
+The inherited plan's self-described "load-bearing design claim" was that **missions should pay
+Mystery Boxes**. A hostile verifier re-derived it in Python and killed it:
+
+- **74 % of a Mystery Box is literally coins**, and a *granted* box has no 300-coin cost, so its
+  full EV (300.5) is net faucet.
+- The board goes **663 → 1,349 coin-equiv/day**; the catalogue clock **26.8 → 22.0 days**.
+- The plan's own thesis says raising mission rewards *"makes every one of the four complaints
+  worse"*. The proposal is a **+161 % raise per daily slot** — a raise wearing a costume.
+- Independently: `ProfileStore.swift:619` is `guard state.claimable, state.reward > 0`, so a
+  mission paying only a box is **silently unclaimable**. Nobody had opened that line.
+
+So the pass answers all four complaints **without touching the ledger**. The faucet is unchanged.
+
+## What shipped
+
+| | What | Complaint answered |
 |---|---|---|
-| **017** | **Missions — full rebuild** | His most recent complaint, four separate defects, and completely independent: nothing blocks it, nothing waits on it. |
-| **018** | Character preview seam + asset pipeline + perf instrumentation | Coupled, and both are **prerequisites** for the art he ordered. Every character is currently built twice (3D rig + hand-drawn 2D copy, matched by hand, untested); "new art for all 24" multiplies that seam by 24 unless it is fixed first. |
-| **019** | The new character art itself | Blocked on 018. Earlier means building 24 assets twice. |
-| **020+** | Warden R1/R2 (see D-047), in-run mystery boxes, the three approved monetization mechanics, the magnet + pickup meshes | All have written designs; none is blocking. |
+| **PR-0006** | The board wrote to disk **and iCloud** from inside `body` (`MissionsView` → `refreshDailyMissions` → `mutate` → `save()` + `cloud.synchronize()`), and the hub badge did it from a `TimelineView`. The refresh **moved** to `.task`; the read side now applies the rollover rule itself, so a UTC rollover still displays correctly with zero writes. | correctness — the backlog had filed only the *badge* half |
+| **PR-0473** | **A claimed mission is now a moment.** S-016 shipped `RewardBurstView` and wired it to two callers; missions were not one of them. Mission claims now fire it, with a bespoke **medallion** (a chest is a container you open; a mission is a goal you met) stamped with the mission's own glyph. CLAIM ALL = **one** burst carrying the total. | **not rewarding** (4a — not FELT) |
+| **PR-0474** | The `.trim` arc was **invisible below ~10 %**, so a fresh board was 19 rows of decoration. Replaced with a **countable segmented bar**. Each section gained its own standing (`0/3` / `2 READY` / `ALL DONE`) — D-053. Two colliding glyphs fixed. | **ugly + not easy to understand** |
+| **PR-0475** | Game over now says **TODAY'S MISSIONS · 2/3 ›**. `grep -i mission GameOverView.swift` previously returned nothing. | **does nothing** (decree 4) |
 
----
+## The bug S-016 left behind
 
-# What session 016 did
+**`testDailyAndChestRewards` had been red since S-016** and nobody knew, because S-016 reported
+"iOS build green" — which is a *compile*, not a test run. The `RewardBurstView` scrim lands between
+the rewards rail's two taps, so the second tap dismissed the burst instead of opening the chest.
+Confirmed by stashing and running at `pre-s017`: it fails identically there. Fixed, and both tests
+now **assert the burst fires** — they gained assertions rather than losing them.
 
-Three commits: `fb7a833`, `f441348`, `ba9655d`. **266 SPM tests green, iOS build green**,
-`DailyChallenge.layoutVersion` untouched at **12** (v13 pre-armed, unspent). Decisions
-**D-046 … D-051**. Recovery tag `pre-s016`. Pushed to GitHub.
+## The fleet, and what is on disk
 
-Opened on the S-015 Warden handoff and was **redirected four times** by the owner mid-flight.
-27 agents ran across two workflows; **21 investigation files are on disk** at
-`docs/agent/audits/scratch/s016_*.md`, nine adversarially verified. Do not re-derive them.
+S-016's handoff said one investigation survived the rate limit. **Five were on disk** — agents write
+their files before returning. I launched 14 more agents; **the account hit its WEEKLY limit
+mid-run**, so the two missing digs and six hostile verifiers landed but **all four judges and the
+synthesizer died. There is no `s017_RULING.md`** — S-017 ruled from the verified material instead.
 
-## Shipped and verified on the simulator
-
-| | What | Decision |
-|---|---|---|
-| **M11** | **A reward is a moment, not a sentence.** Both reward paths were `showToast(...)` + one chime — fourteen lines covering the daily bonus AND the free chest. Now `RewardBurstView`: near-opaque scrim, ray fan, a chest whose lid hinges back off the body, confetti thrown upward under gravity, a count that rolls from zero, and the seven-rung daily ladder with today ringed. Three-layer audio on the same clock as the motion. Verified on both paths: +100 daily (2,200 → 2,300) and +185 chest (2,300 → 2,485). | D-049 |
-| **M5 (partial)** | **The simulation ran at full rate behind every opaque meta sheet.** `GameCore.snapshot` is the only observed property on an `@Observable` and `advance()` rewrote it every frame in every mode — Observation fires on writes, not changes — so the whole SwiftUI root invalidated 60–120×/s while the player scrolled a list. One guard, mirroring the existing `paused` early-out. **A/B measured, 36 samples each: 23.9% → 19.7% CPU** on the characters sheet. | D-051 |
-| **M2** | **"Zero binary assets" revoked and tombstoned**, with the memory budget and licensing floor that replace it. | D-046 |
-
-## Delivered to the owner
-
-**The review artefact** — <https://claude.ai/code/artifact/1217ced6-2d10-406a-a787-4d730f60b964> —
-the game photographed this session beside the proposed revision, ten ranked craft findings, every
-monetization mechanic sorted against decree 5, the honest performance report, and five questions.
-**He answered four (D-050). Question 2 is still open and is now the highest-value question in the
-program.**
-
-## Root-caused, NOT fixed
-
-- **R1 + R2 — the Warden fix as designed breaks determinism (D-047).** Gating obstacle suppression on
-  encounter liveness makes the fight's end distance player-dependent, so the deck stops being a pure
-  function of the seed — iron rule 2's headline AND the Daily Challenge's shipped promise. Two
-  independent agents found it. **The dead air *is* the containment margin.** Three properties —
-  containment, no dead air, determinism — pick two. **D-048** settles the separable half: arena
-  offset **200 m**, with `wardenMaxSeconds` and `wardenArenaLength` both untouched, via an option
-  neither S-015 doc had (capture `arenaStart` at arm time instead of re-deriving from
-  `floor(d/800)`). Both prior budget figures — 41.6 m and 11.6 m — were wrong as general ceilings;
-  the real one is 740 m.
-- **`Tuning.swift:793-798` has an arithmetic error in the unsafe direction.** It advertises the
-  `wardenMaxSeconds` ceiling as 18.1 s; the real pinned ceiling is **17.822 s**. A session raising
-  `T` to 18.0 on that comment's advice turns `WardenTests:628` red with no idea why.
-- **The Mystery Box displays odds it does not roll.** Jackpot shown 3%, actually 2.5%; the 600-coin
-  band shown 7%, actually 7.5% (`ShopValue.swift:157-158` vs `:149-150`). **Guideline 3.1.1 requires
-  disclosed odds to be the real odds, and the error is in the house's favour. This is a shipping
-  blocker** and nothing in `Tests/` pins the display table against the roll function.
-- **The magnet is a cyan donut**, and fixing the mesh alone would be wasted work — every pickup spins
-  at ~4.7 rev/s and goes edge-on ~9.5 times a second. Spin and mesh must change together.
-- **The Mystery Box is `Image(systemName: "gift.fill")`** — the highest-margin object in the game.
-- **Gold means six things** and collides with the obstacle colour on warm worlds, so a lethal bar and
-  a collectible gem are nearly the same hue there. Seen on screen in Ashfall.
-
-# Things you would otherwise rediscover the hard way
-
-- **`PR_AUTOPLAY` leaves the app on the SPLASH.** The run advances *behind* it, so a screenshot burst
-  measures a splash overlay, not gameplay. Tap (201, 437) in the 402×874 point space first. Cost me
-  a full measurement pass.
-- **Do not hand-edit the profile plist to re-arm a reward.** A `plistlib` + `json.dumps` round-trip
-  wiped the sim profile back to first-run. Uninstall/reinstall is the honest reset; `simctl install`
-  alone KEEPS the profile.
-- **A zsh glob matching nothing aborts the whole script** (`rm -f dir/*.png` with no PNGs). Use
-  `find … -delete`, or run the script under `bash`.
-- **Foreground `sleep` is blocked by the harness.** Use `run_in_background: true`.
-- **The A/B that proves a perf fix is cheap and worth it:** copy the file, strip the change with a
-  python slice, rebuild, measure, restore. Three minutes, and it turns "should be faster" into
-  "23.9% → 19.7%".
-- Inherited and still true: `Tools/build.sh` writes to `.dd/Build/Products/`, NOT
-  `~/Library/Developer/Xcode/DerivedData` (both exist; the latter is stale). `while core.warden !=
-  nil` does not terminate after a Warden kill — add `&& core.mode == .play`.
+**7 investigations + 6 hostile verifications** are at `docs/agent/audits/scratch/s017_*.md`. Every
+verifier returned PARTIALLY REFUTED. `s017_missions-references.md` was never hostile-verified.
 
 # Rayan action items
 
-1. **Review question 2 — the only one you didn't answer, and your "new art for all 24" ruling made it
-   the biggest decision in the project.** Should menu previews become live renders of the actual rig?
-   "Later" is a fine answer; silence means 24 new assets land in a world where every character is
-   drawn twice and nothing tests that they match. **Pass 018 is blocked on this.**
-2. **The mission reward curve is a revenue decision only you can make.** Missions are 4.5% of a day's
-   income against a baseline that hands you 62% of it for free. Raising missions devalues the coin
-   IAPs; lowering the baseline makes the game stingier. Pass 017 will bring you the numbers.
-3. **Play the new reward.** Claim the daily bonus, open a free chest. Judge the **feel** and the
-   **sound** — the audio is composed from existing SFX because nobody here can hear one.
-   `.newBestFanfare` may be the wrong colour for a daily bonus.
-4. **THE AUDIO BLOCKER, six sessions old, only you can clear it.** A landed Warden hazard plays
+1. **Review question 2 — still unanswered after three sessions, and it shapes pass 018.** Should
+   menu previews become live renders of the actual rig? Your "new art for all 24" ruling made this
+   the biggest decision in the project. "Later" is a fine answer; silence means 24 new assets land
+   in a world where every character is drawn twice and nothing tests that the two agree.
+2. **The mission reward curve is yours and the numbers are now measured.** The board pays 663
+   coins/day = **34 % of the whole meta faucet** and **21 % of everything a 15-min/day player
+   earns**. S-017 deliberately did NOT change it — raising it accelerates a catalogue that is
+   already free in 26.8 days, and it trades against coin-IAP revenue. If you want it moved, say
+   which direction; `s017_missions-economy.md` has the variants costed.
+3. **Play the missions board and the claim.** Claim one mission, then use CLAIM ALL. Judge the
+   **feel** and the **sound** — the audio is composed from existing SFX because nobody here can
+   hear one, and `.newBestFanfare` may be the wrong colour for a mission claim.
+4. **THE AUDIO BLOCKER, seven sessions old, only you can clear it.** A landed Warden hazard plays
    `.shieldBreak` — the same buffer as a wall clip, a shield break, an armour break and a blast.
-   One buffer, five meanings, three opposite in valence. Costed design in `s014_audio.md`. Either
-   listen and direct, or say "ship your best guess and I'll judge it".
-5. **The Mystery Box odds mismatch is a shipping blocker** and the error favours the house. It needs
-   fixing before submission regardless of which pass picks it up.
-6. **One trace on your actual phone for the slowdown.** Everything measured was on the simulator,
+   One buffer, five meanings, three opposite in valence. Costed in `s014_audio.md`. Either listen
+   and direct, or say "ship your best guess and I'll judge it".
+5. **The Mystery Box odds mismatch is still a shipping blocker.** It displays a **3 %** jackpot and
+   rolls **2.5 %** (`ShopValue.swift:157-158` vs `:149-150`); `grep -rn "mysteryOdds" Tests/` finds
+   nothing. Guideline 3.1.1 requires disclosed odds to be real, **and the error favours the house.**
+   S-017 fenced it out once the box proposal died (D-052) — it needs an owner-blessed home.
+   `ShopView.swift:547`/`:560` also both say "1,200-coin jackpot" against a real 1,400, and `:560`
+   is the VoiceOver string.
+6. **One trace on your actual phone for the slowdown.** Everything measured is on the simulator,
    which is a Mac and far faster than your 16 Pro Max.
-7. Carried, never confirmed by a human: the stumble (seven sessions), the slide SFX (S-006), the hub
-   redesign (PR-0452), and the `Double Coins` App Store Connect description
-   (`Every run pays 2x coins. Forever.`).
+7. Carried, never confirmed by a human: the stumble (eight sessions), the slide SFX (S-006), the hub
+   redesign (PR-0452), and the `Double Coins` App Store Connect description.
 
 # Open questions for Rayan
 
-- **Review question 2** — live rig previews. Blocks pass 018.
-- **The mission reward curve** — pass 017 will put numbers in front of you.
-- **PR-0040** — boss-fight music is a different axis from the per-world-bed decree and would not
-  violate it. Needs a yes/no.
+- **Review question 2** — live rig previews. Shapes pass 018.
+- **The mission reward curve** — measured now; direction is yours.
+- **PR-0040** — boss-fight music is a different axis from the per-world-bed decree. Yes/no.
 - **PR-0010** — `Store/metadata.md` sells a three-world game; the binary ships twelve families.
 - **PR-0254** — should a run that used a paid *revive* be leaderboard-eligible? (D-050 ruled the
-  *checkpoint* half — the forfeit stays — but the revive half is still open.)
+  *checkpoint* half; the revive half is still open.)
+
+# The pass schedule
+
+| Pass | Surface | Why here |
+|---|---|---|
+| ~~017~~ | ~~Missions — full rebuild~~ | **DONE (S-017).** All four complaints answered, ledger untouched. |
+| **018** | **Character preview seam + asset pipeline + perf instrumentation** | Coupled, and both are **prerequisites** for the art Rayan ordered. Every character is built twice today. |
+| **019** | The new character art itself | Blocked on 018. Earlier means building 24 assets twice. |
+| **020+** | Warden R1/R2 (D-047), in-run mystery boxes, the three approved monetization mechanics, the magnet + pickup meshes, the Mystery Box odds blocker | All have written designs; none is blocking. |
