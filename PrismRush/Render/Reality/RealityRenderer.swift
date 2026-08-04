@@ -1184,7 +1184,7 @@ final class RealityRenderer: RendererPort {
     /// reproduce the shipped 0.62 / 1.06 exactly; the crystal gains §4.1's real 3D elongation.
     private func buildCharacter() {
         let bodyMesh: MeshResource
-        var bodyY: Float = 0.66
+        let bodyY = CharacterGeometry.bodyCentreY(skinBodyShape)
         let bodyR = CharacterGeometry.sphereRadius
         switch skinBodyShape {
         case .sphere:
@@ -1202,7 +1202,6 @@ final class RealityRenderer: RendererPort {
             bodyMesh = ProceduralMesh.octahedron(rx: bodyR * CharacterGeometry.crystalHalfWidthRatio,
                                                  ry: bodyR * CharacterGeometry.crystalHalfHeightRatio,
                                                  rz: bodyR * CharacterGeometry.crystalHalfWidthRatio)
-            bodyY = 0.72
         }
         // Seed materials from the stored skin hexes (not fixed cyan/magenta) so even the
         // pre-first-`applyCharacterColors` frame shows the equipped identity (AUDIT D2-1).
@@ -1284,7 +1283,16 @@ final class RealityRenderer: RendererPort {
     private func buildCrest() {
         guard skinCrest != .none else { return }
         let mat = UnlitMaterial(color: uiHex(skinCrestHex))
-        let crestY: Float = skinBodyShape == .crystal ? 1.30 : 1.18
+        // v2.5: every number below is now READ from `CharacterGeometry` rather than typed here.
+        // S-018 derived the spec FROM these literals but never wired them back, so the spec was the
+        // source of truth for the swatch and for `extent(for:)` and NOT for the rig — which meant
+        // authoring a bigger ear in the spec would have grown the preview and left the run alone,
+        // re-creating the exact over-promise S-018 was spent deleting. `R * <spec constant>`
+        // reproduces every shipped literal to within 6e-17 world units, so this commit is a no-op
+        // by construction; what it buys is that the NEXT change to a crest is a one-line edit in
+        // one file instead of three edits that a green suite would not notice you half-finishing.
+        let R = CharacterGeometry.sphereRadius
+        let crestY = CharacterGeometry.crestWorldY(skinBodyShape)
 
         func spike(_ halfBase: Float, _ height: Float, at p: SIMD3<Float>,
                    lean: Float = 0, flatZ: Float = 1) -> ModelEntity {
@@ -1307,29 +1315,37 @@ final class RealityRenderer: RendererPort {
         case .none:
             break
         case .ears:                                            // upright cat ears flanking the antenna
+            let e = CharacterGeometry.Ears.self
             for s in [Float(-1), 1] {
-                crestParts.append(spike(0.11, 0.36, at: SIMD3<Float>(s * 0.26, crestY, 0),
-                                        lean: -s * 0.18, flatZ: 0.5))
+                crestParts.append(spike(R * e.halfBase, R * e.height,
+                                        at: SIMD3<Float>(s * R * e.offsetX, crestY, 0),
+                                        lean: -s * e.lean, flatZ: e.flatZ))
             }
         case .floppy:                                          // drooping dog/bunny ears at the sides
             // v2.4 / D4: hangs off `crestY` like every other crest. It used to hard-code world
             // y 0.92, so a crystal body — whose crown sits 0.12 higher — wore its ears halfway
             // down its face. The sphere's shipped position is reproduced exactly.
-            let earY = crestY - CharacterGeometry.sphereRadius * CharacterGeometry.Floppy.dropBelowAnchor
+            let f = CharacterGeometry.Floppy.self
+            let earY = crestY - R * f.dropBelowAnchor
             for s in [Float(-1), 1] {
-                let ear = ModelEntity(mesh: .generateSphere(radius: 0.17), materials: [mat])
-                ear.position = SIMD3<Float>(s * 0.52, earY, 0)
-                ear.scale = SIMD3<Float>(0.7, 1.3, 0.5)
+                let ear = ModelEntity(mesh: .generateSphere(radius: R * f.meshRadius), materials: [mat])
+                ear.position = SIMD3<Float>(s * R * f.offsetX, earY, 0)
+                ear.scale = SIMD3<Float>(f.scaleX, f.scaleY, f.scaleZ)
                 crestParts.append(ear)
             }
         case .fin:                                             // sawtooth dorsal mohawk, tallest mid
-            for (x, h) in [(Float(-0.20), Float(0.24)), (0, 0.42), (0.20, 0.28)] {
-                crestParts.append(spike(0.11, h, at: SIMD3<Float>(x, crestY, 0), flatZ: 0.4))
+            let f = CharacterGeometry.Fin.self
+            for (i, h) in f.heights.enumerated() {
+                let x = Float(i - 1) * R * f.spacing            // −spacing, 0, +spacing
+                crestParts.append(spike(R * f.halfBase, R * h,
+                                        at: SIMD3<Float>(x, crestY, 0), flatZ: f.flatZ))
             }
         case .horns:                                           // two horns sweeping up and out
+            let h = CharacterGeometry.Horns.self
             for s in [Float(-1), 1] {
-                crestParts.append(spike(0.10, 0.42, at: SIMD3<Float>(s * 0.22, crestY, 0),
-                                        lean: -s * 0.5, flatZ: 0.6))
+                crestParts.append(spike(R * h.halfBase, R * h.length,
+                                        at: SIMD3<Float>(s * R * h.offsetX, crestY, 0),
+                                        lean: -s * h.lean, flatZ: h.flatZ))
             }
         case .crown:                                           // a ring of points — royalty
             // v2.4 / D2: the ring is PHASED so the head-on silhouette is mirror-symmetric with a
@@ -1337,15 +1353,21 @@ final class RealityRenderer: RendererPort {
             // -0.243, -0.243, +0.093} — lopsided from the one angle the player ever sees it from,
             // and lopsided in a way the 2-D preview never reproduced because it drew an evenly
             // spaced row instead.
-            let n = CharacterGeometry.Crown.spikeCount
-            crestParts.append(horizontalTorus(0.30, 0.045, at: SIMD3<Float>(0, crestY, 0)))
+            let c = CharacterGeometry.Crown.self
+            let n = c.spikeCount
+            let ring = R * c.ringRadius
+            crestParts.append(horizontalTorus(ring, R * c.ringTube, at: SIMD3<Float>(0, crestY, 0)))
             for i in 0..<n {
                 let ang = .pi / 2 + Float(i) / Float(n) * 2 * .pi
-                crestParts.append(spike(0.06, 0.18,
-                                        at: SIMD3<Float>(cos(ang) * 0.30, crestY + 0.02, sin(ang) * 0.30)))
+                crestParts.append(spike(R * c.spikeHalfBase, R * c.spikeHeight,
+                                        at: SIMD3<Float>(cos(ang) * ring,
+                                                         crestY + R * c.spikeLift,
+                                                         sin(ang) * ring)))
             }
         case .halo:                                            // a ring floating above the head
-            crestParts.append(horizontalTorus(0.34, 0.05, at: SIMD3<Float>(0, crestY + 0.55, 0)))
+            let h = CharacterGeometry.Halo.self
+            crestParts.append(horizontalTorus(R * h.radius, R * h.tube,
+                                              at: SIMD3<Float>(0, crestY + R * h.float, 0)))
         }
         for part in crestParts { playerRig.addChild(part) }
     }
@@ -1355,20 +1377,26 @@ final class RealityRenderer: RendererPort {
     /// advantage (characters stay cosmetic by decree). Mirrors the swatch's orbiting aura.
     private func buildAura() {
         guard skinHasAura else { return }
-        let ring = ModelEntity(mesh: ProceduralMesh.torus(major: 0.95, minor: 0.05,
+        // v2.5: read from the spec, like `buildCrest`. Reproduces the shipped 0.95/0.05/0.7/0.09.
+        let R = CharacterGeometry.sphereRadius
+        let a = CharacterGeometry.Aura.self
+        let major = R * a.majorRadius
+        let ring = ModelEntity(mesh: ProceduralMesh.torus(major: major, minor: R * a.tube,
                                                           majorSeg: 32, minorSeg: 8),
                                materials: [UnlitMaterial(color: skinTrailColor)])
-        ring.position = SIMD3<Float>(0, 0.7, 0)
+        ring.position = SIMD3<Float>(0, CharacterGeometry.bodyCentreY(skinBodyShape) + R * a.centreY, 0)
         ring.orientation = Self.auraTilt
-        let node = ModelEntity(mesh: .generateSphere(radius: 0.09), materials: [UnlitMaterial(color: cWhite)])
-        node.position = SIMD3<Float>(0.95, 0, 0)   // on the ring (local plane) → orbits as the ring spins
+        let node = ModelEntity(mesh: .generateSphere(radius: R * a.nodeRadius),
+                               materials: [UnlitMaterial(color: cWhite)])
+        node.position = SIMD3<Float>(major, 0, 0)   // on the ring (local plane) → orbits as it spins
         ring.addChild(node)
         playerRig.addChild(ring)
         auraRing = ring
     }
 
     /// The aura ring's rest tilt: nearly horizontal (orbit), tipped ~22° toward the chase camera.
-    private static let auraTilt = simd_quatf(angle: .pi / 2 - 0.38, axis: SIMD3<Float>(1, 0, 0))
+    private static let auraTilt = simd_quatf(angle: .pi / 2 - CharacterGeometry.Aura.tilt,
+                                             axis: SIMD3<Float>(1, 0, 0))
 
     private func makeEntity(_ kind: EntityKind) -> Entity {
         switch kind {

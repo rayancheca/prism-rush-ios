@@ -73,6 +73,32 @@ enum CharacterGeometry {
         }
     }
 
+    /// The rig's body-centre height above the deck, in WORLD units, per shape.
+    ///
+    /// This was the hidden third number behind every conversion in this file: `crestAnchor` and
+    /// `antennaSocketDepth` are both differences measured against it, and until v2.5 it existed only
+    /// as two literals inside `RealityRenderer.buildCharacter` (`bodyY = 0.66`, reassigned to `0.72`
+    /// for the crystal). Recording it here is what lets the rig compute a crest's world height from
+    /// the spec instead of from a parallel literal.
+    ///
+    /// These are AUTHORED, not derived — the three shapes do not share a rule. Their lowest points
+    /// sit at 0.040 (sphere), 0.130 (cube) and 0.007 (crystal) above the deck. A new body shape must
+    /// therefore choose a value here rather than inherit one, which is why this is an exhaustive
+    /// `switch` and not the ternary it replaced.
+    static func bodyCentreY(_ shape: Skin.BodyShape) -> Float {
+        switch shape {
+        case .sphere:  return 0.66
+        case .cube:    return 0.66
+        case .crystal: return 0.72
+        }
+    }
+
+    /// Where a crest sits in WORLD units — the rig's `crestY`, derived rather than re-typed.
+    /// Reproduces the shipped 1.18 (sphere/cube) and 1.30 (crystal) exactly.
+    static func crestWorldY(_ shape: Skin.BodyShape) -> Float {
+        bodyCentreY(shape) + sphereRadius * crestAnchor(shape)
+    }
+
     // MARK: - Anchors
 
     /// Where a crest roots, in bodyR above the body centre.
@@ -80,8 +106,17 @@ enum CharacterGeometry {
     /// Rig: `crestY` 1.18 with the body at 0.66 → (1.18 − 0.66) / 0.62. The crystal's rig value
     /// (1.30 against a body centre of 0.72) works out to 0.9355, and the swatch drew 1.02 — a
     /// 9 % gap nobody could see because both were cropped.
+    /// **Exhaustive on purpose.** This was a `shape == .crystal ? … : …` ternary until v2.5, which
+    /// meant it COMPILED for a new body shape and silently handed it the sphere's anchor — on a body
+    /// taller than a sphere that roots the crest *inside the head*, with no test failing and both
+    /// layers agreeing about the wrong number. A `switch` makes a new shape a build error here,
+    /// where the decision belongs.
     static func crestAnchor(_ shape: Skin.BodyShape) -> Float {
-        shape == .crystal ? (1.30 - 0.72) / sphereRadius : (1.18 - 0.66) / sphereRadius
+        switch shape {
+        case .sphere:  return (1.18 - 0.66) / sphereRadius
+        case .cube:    return (1.18 - 0.66) / sphereRadius
+        case .crystal: return (1.30 - 0.72) / sphereRadius
+        }
     }
 
     /// **DEFECT D1, corrected here.** The rig pins the antenna's stem bottom at world y 1.21 for
@@ -115,16 +150,26 @@ enum CharacterGeometry {
 
     /// Upright cat ears flanking the antenna (`RealityRenderer:1299-1303`).
     enum Ears {
-        /// rig `spike(halfBase: 0.11, height: 0.36)` — the swatch drew 0.92 bodyR, **1.58× the rig**.
-        static let height: Float = 0.36 / sphereRadius               // 0.58065
-        static let halfBase: Float = 0.11 / sphereRadius             // 0.17742
+        /// v2.5: 0.36 → 0.56 world (**×1.56**). Was `spike(halfBase: 0.11, height: 0.36)`.
+        /// At 0.90323 bodyR this lands just under the **0.92** the old swatch drew — see the
+        /// section header above for why that is the point rather than a coincidence.
+        static let height: Float = 0.56 / sphereRadius               // 0.90323
+        /// v2.5: 0.11 → 0.16 world (×1.45). A 6.10 pt-wide ear base at the 42 pt rail was thinner
+        /// than the app's smallest type token; widening the base is what stops an ear reading as a
+        /// stray line rather than as a triangle.
+        static let halfBase: Float = 0.16 / sphereRadius             // 0.25806
         static let offsetX: Float = 0.26 / sphereRadius              // 0.41935
         /// Outward lean, radians. Applied as `∓lean` about z, mirrored per side.
         static let lean: Float = 0.18
+        /// Depth squash, as a fraction of the piece's width. **Rig-only** — the swatch is 2-D and
+        /// has no z — but it is still a proportion of the character, so it belongs to the spec
+        /// rather than to `buildCrest`, where it was an unnamed literal until v2.5.
+        static let flatZ: Float = 0.5
         /// The darker inner ear exists only in the swatch today. It is what makes an ear read as
         /// an ear rather than a triangle, so the rig gains it rather than the swatch losing it —
-        /// as a fraction of the outer ear.
-        static let innerScale: Float = 0.55
+        /// as a fraction of the outer ear. v2.5: 0.55 → 0.62, so the inner ear grows slightly
+        /// faster than its shell and does not become a sliver inside a bigger triangle.
+        static let innerScale: Float = 0.62
     }
 
     /// Drooping dog/bunny ears at the sides (`RealityRenderer:1304-1310`).
@@ -133,17 +178,33 @@ enum CharacterGeometry {
         /// hanging off `crestY` like every other crest, so a crystal body wears its ears in the
         /// wrong place. Recorded as a drop BELOW the crest anchor, which is shape-aware for free.
         static let dropBelowAnchor: Float = (1.18 - 0.92) / sphereRadius   // 0.41935
-        static let radiusX: Float = 0.17 * 0.7 / sphereRadius        // 0.19194
-        static let radiusY: Float = 0.17 * 1.3 / sphereRadius        // 0.35645
+        /// v2.5: the ear's mesh radius 0.17 → 0.24 world (**×1.41**), scales unchanged.
+        static let radiusX: Float = 0.24 * 0.7 / sphereRadius        // 0.27097
+        static let radiusY: Float = 0.24 * 1.3 / sphereRadius        // 0.50323
+        /// Seating — unchanged. Moving it outward would detach the ears from the head.
         static let offsetX: Float = 0.52 / sphereRadius              // 0.83871
+        /// The rig builds this ear as a sphere of `meshRadius` scaled per axis, so the two factors
+        /// are recorded separately from the effective radii above. `radiusX == meshRadius * scaleX`
+        /// and `radiusY == meshRadius * scaleY` by construction — pinned in `CharacterParityTests`
+        /// so the two descriptions can never drift apart.
+        static let meshRadius: Float = 0.24 / sphereRadius           // 0.38710
+        static let scaleX: Float = 0.7
+        static let scaleY: Float = 1.3
+        /// Depth squash. Rig-only, like `Ears.flatZ`.
+        static let scaleZ: Float = 0.5
     }
 
     /// Sawtooth dorsal mohawk across the crown (`RealityRenderer:1311-1314`).
     enum Fin {
-        /// Rig spike heights, left → right. The swatch drew [0.60, 1.05, 0.72] — 1.55× throughout.
-        static let heights: [Float] = [0.24 / sphereRadius, 0.42 / sphereRadius, 0.28 / sphereRadius]
-        static let halfBase: Float = 0.11 / sphereRadius             // 0.17742
+        /// Spike heights, left → right. v2.5: [0.24, 0.42, 0.28] → [0.38, 0.65, 0.44] world
+        /// (**×1.55**), which is essentially the [0.60, 1.05, 0.72] bodyR the old swatch drew.
+        static let heights: [Float] = [0.38 / sphereRadius, 0.65 / sphereRadius, 0.44 / sphereRadius]
+        /// v2.5: 0.11 → 0.15 world (×1.36).
+        static let halfBase: Float = 0.15 / sphereRadius             // 0.24194
+        /// Seating — unchanged. Widening it slides the outer teeth off the crown.
         static let spacing: Float = 0.20 / sphereRadius              // 0.32258
+        /// Depth squash. Rig-only, like `Ears.flatZ`.
+        static let flatZ: Float = 0.4
     }
 
     /// Two horns sweeping up and out (`RealityRenderer:1315-1319`).
@@ -153,31 +214,47 @@ enum CharacterGeometry {
     /// **1.370 bodyR — 2.02× as wide**, which at a 56 pt grid card is 19.3 pt of horn that the
     /// in-run character does not have, and most of why five skins clipped their own card.
     enum Horns {
-        static let length: Float = 0.42 / sphereRadius               // 0.67742
-        static let halfBase: Float = 0.10 / sphereRadius             // 0.16129
+        /// v2.5: 0.42 → 0.65 world (**×1.55**). Apex moves 0.680 → 0.920 bodyR — still well under
+        /// the **1.370** the old swatch drew, so the anti-regression guard keeps its teeth.
+        static let length: Float = 0.65 / sphereRadius               // 1.04839
+        /// v2.5: 0.10 → 0.15 world (×1.50).
+        static let halfBase: Float = 0.15 / sphereRadius             // 0.24194
+        /// Seating — unchanged.
         static let offsetX: Float = 0.22 / sphereRadius              // 0.35484
-        /// Outward lean, radians.
+        /// Outward lean, radians. Identity — changing it stops them being horns.
         static let lean: Float = 0.5
+        /// Depth squash. Rig-only, like `Ears.flatZ`.
+        static let flatZ: Float = 0.6
     }
 
     /// A ring of points around the crown (`RealityRenderer:1320-1326`).
     enum Crown {
+        /// Seating — unchanged. The head is only 0.545 bodyR wide at the crest anchor
+        /// (`√(1 − crestAnchor²)`), so growing the ring would float it either side of the skull.
         static let ringRadius: Float = 0.30 / sphereRadius           // 0.48387
-        static let ringTube: Float = 0.045 / sphereRadius            // 0.07258
-        static let spikeHalfBase: Float = 0.06 / sphereRadius        // 0.09677
-        /// Rig spike height. The swatch's centre spike was 0.62 bodyR — **2.14×** — and its
-        /// outer spikes 0.42 — 1.45×. Two different inflation factors on one crest.
-        static let spikeHeight: Float = 0.18 / sphereRadius          // 0.29032
-        static let spikeLift: Float = 0.02 / sphereRadius            // 0.03226
+        /// v2.5: 0.045 → 0.075 world (**×1.67**). The band was 3.05 pt thick at the 42 pt rail.
+        static let ringTube: Float = 0.075 / sphereRadius            // 0.12097
+        /// v2.5: 0.06 → 0.10 world (×1.67).
+        static let spikeHalfBase: Float = 0.10 / sphereRadius        // 0.16129
+        /// v2.5: 0.18 → 0.35 world (**×1.94**, the largest uplift in the file). A 6.10 pt point was
+        /// the epic rarity tell — smaller than the 9 pt price text beneath it. Lands at 0.565 bodyR,
+        /// under the 0.62 the old swatch drew.
+        static let spikeHeight: Float = 0.35 / sphereRadius          // 0.56452
+        /// v2.5: 0.02 → 0.035 world, kept proportional to the spike.
+        static let spikeLift: Float = 0.035 / sphereRadius           // 0.05645
         static let spikeCount = 5
     }
 
     /// A ring floating above the head (`RealityRenderer:1327-1328`).
     enum Halo {
-        /// Height above the crest anchor. The swatch floated it at 0.58 bodyR — 35 % low.
-        static let float: Float = 0.55 / sphereRadius                // 0.88710
-        static let radius: Float = 0.34 / sphereRadius               // 0.54839
-        static let tube: Float = 0.05 / sphereRadius                 // 0.08065
+        /// Height above the crest anchor. v2.5: 0.55 → 0.59 world (×1.07) — lifted only enough to
+        /// clear the thicker ring below it, since a halo that floats too high stops reading as
+        /// *this character's* halo.
+        static let float: Float = 0.59 / sphereRadius                // 0.95161
+        /// v2.5: 0.34 → 0.44 world (×1.29).
+        static let radius: Float = 0.44 / sphereRadius               // 0.70968
+        /// v2.5: 0.05 → 0.09 world (**×1.80**) — a halo is a ring, and a ring reads by its stroke.
+        static let tube: Float = 0.09 / sphereRadius                 // 0.14516
     }
 
     /// The legendary orbit ring (`RealityRenderer:1336-1348`).
